@@ -10,6 +10,8 @@ import type {
   UrlProjectId,
 } from "@yep-anywhere/shared";
 import { getLogger } from "../logging/logger.js";
+import type { IProviderAdapter } from "../providers/adapter.js";
+import { providerRegistry } from "../providers/registry.js";
 import type { MessageQueue } from "../sdk/messageQueue.js";
 import type {
   PermissionMode,
@@ -1364,21 +1366,29 @@ export class Process {
       (id) => id !== requestId,
     );
 
-    // Codex app-server decline decisions do not currently include a rejection
-    // reason in-protocol. Queue the feedback as a follow-up user message.
-    if (response === "deny" && trimmedFeedback && this.provider === "codex") {
-      const queued = this.queueMessage({
-        text: `I denied that request. Instead: ${trimmedFeedback}`,
-      });
-      if (!queued.success) {
-        getLogger().warn(
-          {
-            sessionId: this._sessionId,
-            processId: this.id,
-            error: queued.error,
-          },
-          "Failed to queue Codex deny feedback follow-up message",
-        );
+    // Provider-specific deny feedback behavior:
+    // Some providers (e.g., Codex) do not include rejection reason in-protocol,
+    // so we queue the feedback as a follow-up user message.
+    if (response === "deny" && trimmedFeedback) {
+      const descriptor = providerRegistry.getOrNull(this.provider);
+      const behavior =
+        descriptor && "getDenyFeedbackBehavior" in descriptor
+          ? (descriptor as IProviderAdapter).getDenyFeedbackBehavior()
+          : "silent";
+      if (behavior === "queue-followup") {
+        const queued = this.queueMessage({
+          text: `I denied that request. Instead: ${trimmedFeedback}`,
+        });
+        if (!queued.success) {
+          getLogger().warn(
+            {
+              sessionId: this._sessionId,
+              processId: this.id,
+              error: queued.error,
+            },
+            "Failed to queue deny feedback follow-up message",
+          );
+        }
       }
     }
 

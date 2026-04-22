@@ -2,16 +2,24 @@ import {
   GEMINI_TMP_DIR,
   GeminiSessionScanner,
 } from "../projects/gemini-scanner.js";
+import { geminiACPProvider } from "../sdk/providers/gemini-acp.js";
+import type { AgentProvider } from "../sdk/providers/types.js";
 import { GeminiSessionReader } from "../sessions/gemini-reader.js";
+import { normalizeGeminiSession } from "../sessions/normalization.js";
 import type { ISessionReader } from "../sessions/types.js";
+import type { LoadedSession } from "../sessions/types.js";
 import type { Project } from "../supervisor/types.js";
+import type { Session } from "../supervisor/types.js";
+import type { IProviderAdapter } from "./adapter.js";
 import type {
   FileType,
   ProviderDescriptor,
   ProviderScanner,
 } from "./descriptor.js";
 
-export class GeminiProviderDescriptor implements ProviderDescriptor {
+export class GeminiProviderDescriptor
+  implements ProviderDescriptor, IProviderAdapter
+{
   readonly names = ["gemini", "gemini-acp"];
   readonly group = "gemini";
   private scanner: GeminiSessionScanner;
@@ -68,5 +76,21 @@ export class GeminiProviderDescriptor implements ProviderDescriptor {
       return "session";
     }
     return "other";
+  }
+
+  normalizeSession(loaded: LoadedSession): Session {
+    return normalizeGeminiSession(loaded);
+  }
+
+  getStaleInTurnThresholdMs(): number {
+    return 5 * 60 * 1000; // 5 minutes
+  }
+
+  getDenyFeedbackBehavior(): "queue-followup" | "silent" {
+    return "silent";
+  }
+
+  getAgentProvider(): AgentProvider | null {
+    return geminiACPProvider;
   }
 }

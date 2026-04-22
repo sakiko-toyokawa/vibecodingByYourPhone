@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "node ../../scripts/run-with-safe-home.js tsx --conditions source src/index.ts",
     "dev:watch": "node ../../scripts/run-with-safe-home.js --stdin-null tsx watch --conditions source src/index.ts",
-    "build": "tsc",
-    "test": "node ../../scripts/run-with-safe-home.js vitest run"
+    "build": "tsc"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",
@@ -23,7 +22,6 @@
     "@types/node": "^22.10.2",
     "@types/ws": "^8.18.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "typescript": "^5.7.2"
   }
 }

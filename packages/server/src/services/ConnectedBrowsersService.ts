@@ -9,7 +9,7 @@
  * Each tab creates a separate connection, so one browser profile can have multiple connections.
  */
 
-import type { EventBus } from "../watcher/index.js";
+import type { EventBus, IEventBus } from "../watcher/index.js";
 
 /** Transport type for the connection */
 export type BrowserConnectionTransport = "ws";
@@ -35,7 +35,7 @@ export class ConnectedBrowsersService {
   /** Map from browserProfileId to set of connectionIds */
   private browserProfileConnections = new Map<string, Set<number>>();
 
-  constructor(private eventBus: EventBus) {}
+  constructor(private eventBus: IEventBus) {}
 
   /**
    * Register a new browser tab connection.

@@ -6,6 +6,7 @@ import { decodeProjectId } from "../supervisor/types.js";
 import type {
   BusEvent,
   EventBus,
+  IEventBus,
   ProcessStateEvent,
   ProcessTerminatedEvent,
 } from "../watcher/index.js";
@@ -36,7 +37,7 @@ interface SessionInactiveWebhookPayload {
 }
 
 export interface LifecycleWebhookServiceOptions {
-  eventBus: EventBus;
+  eventBus: IEventBus;
   supervisor: Supervisor;
   serverSettingsService: ServerSettingsService;
 }

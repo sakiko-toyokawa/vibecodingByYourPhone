@@ -1,1 +1,0 @@
-This has **bold**, *italic*, and `code` with a [link](https://example.com).

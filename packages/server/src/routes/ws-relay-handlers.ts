@@ -57,7 +57,7 @@ import {
 } from "../subscriptions.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { UploadManager } from "../uploads/manager.js";
-import type { EventBus, FocusedSessionWatchManager } from "../watcher/index.js";
+import type { EventBus, IEventBus, FocusedSessionWatchManager } from "../watcher/index.js";
 import {
   type WsConnectionPolicy,
   isPolicySrpRequired,
@@ -197,7 +197,7 @@ export interface RelayHandlerDeps {
   /** Supervisor for subscribing to session events */
   supervisor: Supervisor;
   /** Event bus for subscribing to activity events */
-  eventBus: EventBus;
+  eventBus: IEventBus;
   /** Upload manager for handling file uploads */
   uploadManager: UploadManager;
   /** Remote access service for SRP authentication (optional for direct, required for relay) */
@@ -462,7 +462,7 @@ export function handleActivitySubscribe(
   subscriptions: Map<string, () => void>,
   msg: RelaySubscribe,
   send: SendFn,
-  eventBus: EventBus,
+  eventBus: IEventBus,
   connectedBrowsers?: ConnectedBrowsersService,
   browserProfileService?: BrowserProfileService,
 ): void {
@@ -594,7 +594,7 @@ export function handleSubscribe(
   msg: RelaySubscribe,
   send: SendFn,
   supervisor: Supervisor,
-  eventBus: EventBus,
+  eventBus: IEventBus,
   focusedSessionWatchManager?: FocusedSessionWatchManager,
   connectedBrowsers?: ConnectedBrowsersService,
   browserProfileService?: BrowserProfileService,

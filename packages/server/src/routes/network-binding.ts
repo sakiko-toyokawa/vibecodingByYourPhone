@@ -3,13 +3,13 @@ import type {
   NetworkBindingService,
   NetworkInterface,
 } from "../services/NetworkBindingService.js";
-import type { EventBus } from "../watcher/EventBus.js";
+import type { EventBus, IEventBus } from "../watcher/EventBus.js";
 
 export interface NetworkBindingRoutesOptions {
   /** The NetworkBindingService instance */
   networkBindingService: NetworkBindingService;
   /** EventBus for emitting binding change events */
-  eventBus: EventBus;
+  eventBus: IEventBus;
   /** Callback to update localhost port (handles server restart) */
   onLocalhostPortChange: (
     port: number,

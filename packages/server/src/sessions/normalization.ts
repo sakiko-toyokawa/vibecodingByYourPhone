@@ -34,6 +34,8 @@ import {
   normalizeCodexToolOutputWithContext,
   parseCodexToolArguments,
 } from "../codex/normalization.js";
+import type { IProviderAdapter } from "../providers/adapter.js";
+import { providerRegistry } from "../providers/registry.js";
 import type { ContentBlock, Message, Session } from "../supervisor/types.js";
 import { collectVisibleClaudeEntries } from "./claude-messages.js";
 import type { LoadedSession } from "./types.js";
@@ -85,40 +87,57 @@ function normalizeClaudeQueueOperationContent(content: unknown): string {
  * Normalize a UnifiedSession into the generic Session format expected by the frontend.
  */
 export function normalizeSession(loaded: LoadedSession): Session {
-  const { summary, data } = loaded;
-
-  switch (data.provider) {
-    case "claude":
-    case "claude-ollama": {
-      const rawMessages = data.session.messages;
-      const { entries, orphanedToolUses } =
-        collectVisibleClaudeEntries(rawMessages);
-      const messages: Message[] = entries.map((raw, index) =>
-        convertClaudeMessage(raw, index, orphanedToolUses),
-      );
-
-      return {
-        ...summary,
-        messages,
-      };
-    }
-    case "codex":
-    case "codex-oss":
-      return {
-        ...summary,
-        messages: convertCodexEntries(data.session.entries, summary.id),
-      };
-    case "gemini":
-      return {
-        ...summary,
-        messages: convertGeminiMessages(data.session.messages),
-      };
-    case "opencode":
-      return {
-        ...summary,
-        messages: convertOpenCodeEntries(data.session.messages),
-      };
+  const { data } = loaded;
+  const descriptor = providerRegistry.getOrNull(data.provider);
+  if (descriptor && "normalizeSession" in descriptor) {
+    return (descriptor as IProviderAdapter).normalizeSession(loaded);
   }
+  // Defensive fallback for unknown providers
+  throw new Error(`No IProviderAdapter found for provider: ${data.provider}`);
+}
+
+// Export for ProviderDescriptor delegation
+export function normalizeClaudeSession(loaded: LoadedSession): Session {
+  const { summary, data } = loaded;
+  const rawMessages = (data.session as { messages: ClaudeSessionEntry[] })
+    .messages;
+  const { entries, orphanedToolUses } =
+    collectVisibleClaudeEntries(rawMessages);
+  const messages: Message[] = entries.map((raw, index) =>
+    convertClaudeMessage(raw, index, orphanedToolUses),
+  );
+  return { ...summary, messages };
+}
+
+export function normalizeCodexSession(loaded: LoadedSession): Session {
+  const { summary, data } = loaded;
+  return {
+    ...summary,
+    messages: convertCodexEntries(
+      (data.session as { entries: CodexSessionEntry[] }).entries,
+      summary.id,
+    ),
+  };
+}
+
+export function normalizeGeminiSession(loaded: LoadedSession): Session {
+  const { summary, data } = loaded;
+  return {
+    ...summary,
+    messages: convertGeminiMessages(
+      (data.session as { messages: GeminiSessionMessage[] }).messages,
+    ),
+  };
+}
+
+export function normalizeOpenCodeSession(loaded: LoadedSession): Session {
+  const { summary, data } = loaded;
+  return {
+    ...summary,
+    messages: convertOpenCodeEntries(
+      (data.session as { messages: OpenCodeSessionEntry[] }).messages,
+    ),
+  };
 }
 
 // --- Claude Conversion Logic ---

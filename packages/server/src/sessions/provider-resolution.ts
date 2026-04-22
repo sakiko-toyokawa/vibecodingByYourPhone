@@ -43,15 +43,14 @@ function normalizeProviderGroup(
 ): ProviderGroup | null {
   if (!provider) return null;
   const descriptor = providerRegistry.getOrNull(provider);
-  const group = descriptor?.group;
-  if (
-    group === "claude" ||
-    group === "codex" ||
-    group === "gemini" ||
-    group === "opencode"
-  ) {
-    return group;
+  if (descriptor) {
+    return descriptor.group as ProviderGroup;
   }
+  // Fallback when providers not registered (e.g., in tests)
+  if (provider === "claude" || provider === "claude-ollama") return "claude";
+  if (provider === "codex" || provider === "codex-oss") return "codex";
+  if (provider === "gemini" || provider === "gemini-acp") return "gemini";
+  if (provider === "opencode") return "opencode";
   return null;
 }
 
@@ -165,15 +164,35 @@ function getSourceForGroup(
   group: ProviderGroup,
   catalog?: ProviderProjectCatalog,
 ): SessionSource | null {
-  switch (group) {
-    case "claude":
-    case "opencode":
-      return createClaudeSource(project, deps);
-    case "codex":
-      return createCodexSource(project, deps);
-    case "gemini":
-      return createGeminiSource(project, deps, catalog);
+  const descriptor = providerRegistry.list().find((d) => d.group === group);
+
+  if (!descriptor) {
+    // Fallback when providers not registered (e.g., in tests)
+    switch (group) {
+      case "claude":
+      case "opencode":
+        return createClaudeSource(project, deps);
+      case "codex":
+        return createCodexSource(project, deps);
+      case "gemini":
+        return createGeminiSource(project, deps, catalog);
+      default:
+        return null;
+    }
   }
+
+  const isPrimary = normalizeProviderGroup(project.provider) === group;
+
+  if (isPrimary) {
+    return createClaudeSource(project, deps);
+  }
+
+  // Extra sources: use existing helpers to preserve test injection via deps factories
+  return group === "codex"
+    ? createCodexSource(project, deps)
+    : group === "gemini"
+      ? createGeminiSource(project, deps, catalog)
+      : null;
 }
 
 function getSessionSources(

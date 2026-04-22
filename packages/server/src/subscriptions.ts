@@ -18,7 +18,7 @@ import {
 import { getLogger } from "./logging/logger.js";
 import type { Process } from "./supervisor/Process.js";
 import type { ProcessEvent } from "./supervisor/types.js";
-import type { BusEvent, EventBus } from "./watcher/index.js";
+import type { BusEvent, EventBus, IEventBus } from "./watcher/index.js";
 
 export type Emit = (eventType: string, data: unknown) => void;
 
@@ -243,7 +243,7 @@ export function createSessionSubscription(
  * Create an activity subscription that forwards EventBus events via `emit`.
  */
 export function createActivitySubscription(
-  eventBus: EventBus,
+  eventBus: IEventBus,
   emit: Emit,
   options?: SubscriptionOptions,
 ): { cleanup: () => void } {

@@ -16,13 +16,14 @@ import type { InputRequest } from "../supervisor/types.js";
 import type {
   BusEvent,
   EventBus,
+  IEventBus,
   ProcessStateEvent,
 } from "../watcher/EventBus.js";
 import type { PushService } from "./PushService.js";
 import type { DismissPayload, PendingInputPayload } from "./types.js";
 
 export interface PushNotifierOptions {
-  eventBus: EventBus;
+  eventBus: IEventBus;
   pushService: PushService;
   supervisor: Supervisor;
   /** Optional: skip push for connected browser profiles */
@@ -30,7 +31,7 @@ export interface PushNotifierOptions {
 }
 
 export class PushNotifier {
-  private eventBus: EventBus;
+  private eventBus: IEventBus;
   private pushService: PushService;
   private supervisor: Supervisor;
   private connectedBrowsers?: ConnectedBrowsersService;

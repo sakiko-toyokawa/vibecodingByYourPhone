@@ -122,6 +122,8 @@ export interface Config {
   httpsSelfSigned: boolean;
   /** Desktop auth token for Tauri app. Requests with matching X-Desktop-Token header bypass auth. */
   desktopAuthToken?: string;
+  /** Redis URL for Pub/Sub event bus. If unset, uses in-memory EventBus. */
+  redisUrl?: string;
 }
 
 /**
@@ -273,6 +275,7 @@ export function loadConfig(): Config {
     openBrowser: process.env.OPEN_BROWSER === "true",
     httpsSelfSigned: process.env.HTTPS_SELF_SIGNED === "true",
     desktopAuthToken: process.env.DESKTOP_AUTH_TOKEN || undefined,
+    redisUrl: process.env.REDIS_URL || undefined,
   };
 }
 

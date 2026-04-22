@@ -50,13 +50,13 @@ import type {
   TurnStartParams,
   TurnStartResponse,
 } from "./codex-protocol/index.js";
+import { filterEnvForChildProcess } from "./env-filter.js";
 import type {
   AgentProvider,
   AgentSession,
   AuthStatus,
   StartSessionOptions,
 } from "./types.js";
-import { filterEnvForChildProcess } from "./env-filter.js";
 
 const log = getLogger().child({ component: "codex-provider" });
 const execAsync = promisify(exec);

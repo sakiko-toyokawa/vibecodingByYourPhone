@@ -1,2 +1,0 @@
-> This is a blockquote with some important information.
-> It can span multiple lines.

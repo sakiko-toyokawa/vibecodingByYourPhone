@@ -6,6 +6,7 @@ import { serve } from "@hono/node-server";
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { createApp } from "./app.js";
+import { container } from "./container.js";
 import {
   attachUnifiedUpgradeHandler,
   createFrontendProxy,
@@ -25,7 +26,6 @@ import {
   createAcceptRelayConnection,
   createWsRelayRoutes,
 } from "./routes/ws-relay.js";
-import type { ServicesContainer } from "./services-init.js";
 import { ClaudeSessionReader } from "./sessions/reader.js";
 import {
   setDeviceBridgeForShutdown,
@@ -34,7 +34,7 @@ import {
 import { UploadManager } from "./uploads/manager.js";
 import { FocusedSessionWatchManager } from "./watcher/index.js";
 
-export async function startServer(services: ServicesContainer): Promise<{
+export async function startServer(): Promise<{
   onLocalhostPortChange: (
     port: number,
   ) => Promise<{ success: boolean; error?: string; redirectUrl?: string }>;
@@ -42,6 +42,7 @@ export async function startServer(services: ServicesContainer): Promise<{
     config: { host: string; port: number } | null,
   ) => Promise<{ success: boolean; error?: string }>;
 }> {
+  const services = container.cradle;
   const {
     config,
     eventBus,

@@ -1,13 +1,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { EventBus, SourceChangeEvent } from "./EventBus.js";
+import type { EventBus, IEventBus, SourceChangeEvent } from "./EventBus.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export interface SourceWatcherOptions {
   /** EventBus to emit events to */
-  eventBus: EventBus;
+  eventBus: IEventBus;
   /** Debounce delay in ms (default: 500) */
   debounceMs?: number;
 }
@@ -17,7 +17,7 @@ export interface SourceWatcherOptions {
  * Emits source-change events so the UI can notify the user to reload.
  */
 export class SourceWatcher {
-  private eventBus: EventBus;
+  private eventBus: IEventBus;
   private debounceMs: number;
   private watcher: fs.FSWatcher | null = null;
   private debounceTimer: NodeJS.Timeout | null = null;

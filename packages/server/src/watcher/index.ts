@@ -12,6 +12,9 @@ export type {
   BusEvent,
   EventHandler,
 } from "./EventBus.js";
+export type { IEventBus } from "./IEventBus.js";
+export { RedisEventBus } from "./RedisEventBus.js";
+export { createEventBus } from "./createEventBus.js";
 export { FileWatcher } from "./FileWatcher.js";
 export type { FileWatcherOptions } from "./FileWatcher.js";
 export { SourceWatcher } from "./SourceWatcher.js";

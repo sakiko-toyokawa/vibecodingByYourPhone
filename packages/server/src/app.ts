@@ -2,6 +2,11 @@ import type { HttpBindings } from "@hono/node-server";
 import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import { Hono } from "hono";
 import type { AuthService } from "./auth/AuthService.js";
+import {
+  container,
+  createContainerInstance,
+  registerValue,
+} from "./container.js";
 import type { DeviceBridgeService } from "./device/DeviceBridgeService.js";
 import type { FrontendProxy } from "./frontend/index.js";
 import type { SessionIndexService } from "./indexes/index.js";
@@ -164,6 +169,10 @@ export interface AppResult {
 }
 
 export function createApp(options: AppOptions): AppResult {
+  if (!container) {
+    createContainerInstance();
+  }
+
   const app = new Hono<{ Bindings: HttpBindings }>();
 
   // Security middleware: host validation, CORS, custom header requirement
@@ -323,17 +332,20 @@ export function createApp(options: AppOptions): AppResult {
   // Health check needs CORS for Tauri desktop app
   app.use("/health/*", corsMiddleware);
 
+  // Register app-level dependencies in DI container
+  registerValue("scanner", scanner);
+  registerValue("supervisor", supervisor);
+  registerValue("readerFactory", readerFactory);
+  registerValue("codexScanner", codexScanner);
+  registerValue("geminiScanner", geminiScanner);
+  registerValue("codexReaderFactory", codexReaderFactory);
+  registerValue("geminiReaderFactory", geminiReaderFactory);
+  if (externalTracker) {
+    registerValue("externalTracker", externalTracker);
+  }
+
   // Register all API routes
-  registerRoutes(app, options, {
-    scanner,
-    readerFactory,
-    supervisor,
-    externalTracker,
-    codexScanner,
-    geminiScanner,
-    codexReaderFactory,
-    geminiReaderFactory,
-  });
+  registerRoutes(app, options);
 
   // Frontend proxy fallback: proxy all non-API requests to Vite dev server
   if (options.frontendProxy) {

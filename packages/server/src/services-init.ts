@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { AuthService } from "./auth/AuthService.js";
 import { initCodexCorrelationDebugLogger } from "./codex/correlationDebugLogger.js";
 import { loadConfig } from "./config.js";
+import { registerValue } from "./container.js";
 import { DeviceBridgeService } from "./device/DeviceBridgeService.js";
 import { detectAdb } from "./device/adb.js";
 import { SessionIndexService } from "./indexes/index.js";
@@ -18,6 +19,7 @@ import {
 } from "./metadata/index.js";
 import { updateAllowedHosts } from "./middleware/allowed-hosts.js";
 import { NotificationService } from "./notifications/index.js";
+import type { ProjectScanner } from "./projects/scanner.js";
 import { providerRegistry, registerAllProviders } from "./providers/index.js";
 import { PushService, getOrCreateVapidKeys } from "./push/index.js";
 import { RecentsService } from "./recents/index.js";
@@ -39,11 +41,19 @@ import {
   ServerSettingsService,
   SharingService,
 } from "./services/index.js";
-import { EventBus, FileWatcher, SourceWatcher } from "./watcher/index.js";
+import type { CodexSessionReader } from "./sessions/codex-reader.js";
+import type { GeminiSessionReader } from "./sessions/gemini-reader.js";
+import type { ISessionReader } from "./sessions/types.js";
+import type { ExternalSessionTracker } from "./supervisor/ExternalSessionTracker.js";
+import type { Supervisor } from "./supervisor/Supervisor.js";
+import type { Project } from "./supervisor/types.js";
+import { FileWatcher, SourceWatcher } from "./watcher/index.js";
+import type { IEventBus } from "./watcher/IEventBus.js";
+import { createEventBus } from "./watcher/createEventBus.js";
 
 export interface ServicesContainer {
   config: ReturnType<typeof loadConfig>;
-  eventBus: EventBus;
+  eventBus: IEventBus;
   fileWatchers: FileWatcher[];
   sourceWatcher?: SourceWatcher;
   realSdk: RealClaudeSDK;
@@ -65,6 +75,15 @@ export interface ServicesContainer {
   sharingService: SharingService;
   modelInfoService: ModelInfoService;
   deviceBridgeService?: DeviceBridgeService;
+  // App-level dependencies registered in createApp
+  scanner?: ProjectScanner;
+  readerFactory?: (project: Project) => ISessionReader;
+  supervisor?: Supervisor;
+  externalTracker?: ExternalSessionTracker;
+  codexScanner?: import("./projects/codex-scanner.js").CodexSessionScanner;
+  geminiScanner?: import("./projects/gemini-scanner.js").GeminiSessionScanner;
+  codexReaderFactory?: (projectPath: string) => CodexSessionReader;
+  geminiReaderFactory?: (projectPath: string) => GeminiSessionReader;
 }
 
 function parseCodexVersion(raw: string | undefined): string | null {
@@ -176,7 +195,7 @@ export async function initializeServices(): Promise<ServicesContainer> {
   const realSdk = new RealClaudeSDK();
 
   // Create EventBus and FileWatchers for all provider directories
-  const eventBus = new EventBus();
+  const eventBus = createEventBus({ redisUrl: config.redisUrl });
   const fileWatchers: FileWatcher[] = [];
 
   // Register providers early so FileWatcher can use their descriptors
@@ -338,7 +357,7 @@ export async function initializeServices(): Promise<ServicesContainer> {
     );
   }
 
-  return {
+  const services: ServicesContainer = {
     config,
     eventBus,
     fileWatchers,
@@ -363,4 +382,16 @@ export async function initializeServices(): Promise<ServicesContainer> {
     modelInfoService,
     deviceBridgeService,
   };
+
+  // Register all services in the DI container
+  for (const [key, value] of Object.entries(services)) {
+    if (value !== undefined) {
+      registerValue(
+        key as keyof ServicesContainer,
+        value as ServicesContainer[keyof ServicesContainer],
+      );
+    }
+  }
+
+  return services;
 }

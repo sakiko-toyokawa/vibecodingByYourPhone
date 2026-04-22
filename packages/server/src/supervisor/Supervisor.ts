@@ -9,6 +9,8 @@ import {
 } from "@yep-anywhere/shared";
 import type { AgentActivity, PendingInputType } from "@yep-anywhere/shared";
 import { getLogger } from "../logging/logger.js";
+import type { IProviderAdapter } from "../providers/adapter.js";
+import { providerRegistry } from "../providers/registry.js";
 import { getProvider } from "../sdk/providers/index.js";
 import type { AgentProvider } from "../sdk/providers/types.js";
 import type {
@@ -28,6 +30,7 @@ import type {
   WorkerActivityEvent,
 } from "../watcher/EventBus.js";
 import { Process, type ProcessConstructorOptions } from "./Process.js";
+import { ProcessPool } from "./ProcessPool.js";
 import {
   type QueuedRequest,
   type QueuedRequestInfo,
@@ -53,15 +56,12 @@ const TERMINATED_RETENTION_MS = 10 * 60 * 1000;
 /** How often to check for stale processes (60 seconds) */
 const STALE_CHECK_INTERVAL_MS = 60 * 1000;
 
-/** Default in-turn stale threshold for providers with frequent heartbeat/tool events. */
-const DEFAULT_STALE_IN_TURN_THRESHOLD_MS = 5 * 60 * 1000;
-/** Codex sessions can be silent for long periods during backend retries/reconnects. */
-const CODEX_STALE_IN_TURN_THRESHOLD_MS = 60 * 60 * 1000;
-
 function getStaleInTurnThresholdMs(provider: ProviderName): number {
-  return provider === "codex" || provider === "codex-oss"
-    ? CODEX_STALE_IN_TURN_THRESHOLD_MS
-    : DEFAULT_STALE_IN_TURN_THRESHOLD_MS;
+  const descriptor = providerRegistry.getOrNull(provider);
+  if (descriptor && "getStaleInTurnThresholdMs" in descriptor) {
+    return (descriptor as IProviderAdapter).getStaleInTurnThresholdMs();
+  }
+  return 5 * 60 * 1000; // fallback default
 }
 
 /**
@@ -132,7 +132,7 @@ export interface SupervisorOptions {
 }
 
 export class Supervisor {
-  private processes: Map<string, Process> = new Map();
+  private processPool: ProcessPool;
   private sessionToProcess: Map<string, string> = new Map(); // sessionId -> processId
   private everOwnedSessions: Set<string> = new Set(); // Sessions we've ever owned (for orphan detection)
   private terminatedProcesses: ProcessInfo[] = []; // Recently terminated processes
@@ -142,8 +142,6 @@ export class Supervisor {
   private idleTimeoutMs?: number;
   private defaultPermissionMode: PermissionMode;
   private eventBus?: EventBus;
-  private maxWorkers: number;
-  private idlePreemptThresholdMs: number;
   private workerQueue: WorkerQueue;
   private onSessionExecutor?: OnSessionExecutorCallback;
   private onSessionSummary?: OnSessionSummaryCallback;
@@ -156,9 +154,11 @@ export class Supervisor {
     this.idleTimeoutMs = options.idleTimeoutMs;
     this.defaultPermissionMode = options.defaultPermissionMode ?? "default";
     this.eventBus = options.eventBus;
-    this.maxWorkers = options.maxWorkers ?? 0; // 0 = unlimited
-    this.idlePreemptThresholdMs =
-      options.idlePreemptThresholdMs ?? DEFAULT_IDLE_PREEMPT_THRESHOLD_MS;
+    this.processPool = new ProcessPool({
+      maxWorkers: options.maxWorkers ?? 0,
+      idlePreemptThresholdMs:
+        options.idlePreemptThresholdMs ?? DEFAULT_IDLE_PREEMPT_THRESHOLD_MS,
+    });
     this.workerQueue = new WorkerQueue({
       eventBus: options.eventBus,
       maxQueueSize: options.maxQueueSize,
@@ -773,7 +773,7 @@ export class Supervisor {
     // Check if already have a process for this session
     const existingProcessId = this.sessionToProcess.get(sessionId);
     if (existingProcessId) {
-      const existingProcess = this.processes.get(existingProcessId);
+      const existingProcess = this.processPool.get(existingProcessId);
       if (existingProcess) {
         // Check if process is terminated - if so, start a fresh one
         if (existingProcess.isTerminated) {
@@ -938,13 +938,13 @@ export class Supervisor {
   }
 
   getProcess(processId: string): Process | undefined {
-    return this.processes.get(processId);
+    return this.processPool.get(processId);
   }
 
   getProcessForSession(sessionId: string): Process | undefined {
     const processId = this.sessionToProcess.get(sessionId);
     if (!processId) return undefined;
-    return this.processes.get(processId);
+    return this.processPool.get(processId);
   }
 
   /**
@@ -1055,7 +1055,7 @@ export class Supervisor {
   }
 
   getAllProcesses(): Process[] {
-    return Array.from(this.processes.values());
+    return this.processPool.getAll();
   }
 
   getProcessInfoList(): ProcessInfo[] {
@@ -1072,7 +1072,7 @@ export class Supervisor {
   }
 
   async abortProcess(processId: string): Promise<boolean> {
-    const process = this.processes.get(processId);
+    const process = this.processPool.get(processId);
     if (!process) return false;
 
     const log = getLogger();
@@ -1105,7 +1105,7 @@ export class Supervisor {
   async interruptProcess(
     processId: string,
   ): Promise<{ success: boolean; supported: boolean }> {
-    const process = this.processes.get(processId);
+    const process = this.processPool.get(processId);
     if (!process) return { success: false, supported: false };
 
     // Check if the process supports interrupt
@@ -1156,7 +1156,7 @@ export class Supervisor {
       `Session registered: ${process.sessionId} (process: ${process.id})`,
     );
 
-    this.processes.set(process.id, process);
+    this.processPool.register(process);
     this.sessionToProcess.set(process.sessionId, process.id);
     this.everOwnedSessions.add(process.sessionId);
 
@@ -1305,7 +1305,7 @@ export class Supervisor {
   }
 
   private unregisterProcess(process: Process): void {
-    if (!this.processes.has(process.id)) {
+    if (!this.processPool.has(process.id)) {
       return;
     }
 
@@ -1333,7 +1333,7 @@ export class Supervisor {
     }
     this.addTerminatedProcess(terminatedInfo);
 
-    this.processes.delete(process.id);
+    this.processPool.unregister(process.id);
 
     // Delete all session ID mappings that point to this process
     // This handles both temp and real session IDs
@@ -1544,13 +1544,13 @@ export class Supervisor {
   private emitWorkerActivity(): void {
     if (!this.eventBus) return;
 
-    const hasActiveWork = Array.from(this.processes.values()).some(
+    const hasActiveWork = this.processPool.getAll().some(
       (p) => p.state.type === "in-turn" || p.state.type === "waiting-input",
     );
 
     const event: WorkerActivityEvent = {
       type: "worker-activity-changed",
-      activeWorkers: this.processes.size,
+      activeWorkers: this.processPool.size,
       queueLength: this.workerQueue.length,
       hasActiveWork,
       timestamp: new Date().toISOString(),
@@ -1572,7 +1572,7 @@ export class Supervisor {
   private terminateStaleProcesses(): void {
     const now = Date.now();
 
-    for (const process of this.processes.values()) {
+    for (const process of this.processPool.getAll()) {
       if (process.state.type !== "in-turn") continue;
       if (process.isHeld) continue;
 
@@ -1638,8 +1638,7 @@ export class Supervisor {
    * Check if we're at worker capacity.
    */
   private isAtCapacity(): boolean {
-    if (this.maxWorkers <= 0) return false; // 0 = unlimited
-    return this.processes.size >= this.maxWorkers;
+    return this.processPool.isAtCapacity();
   }
 
   /**
@@ -1648,30 +1647,14 @@ export class Supervisor {
    * Does not preempt workers waiting for input.
    */
   private findPreemptableWorker(): Process | undefined {
-    let oldest: Process | undefined;
-    let oldestIdleTime = 0;
-    const now = Date.now();
-
-    for (const process of this.processes.values()) {
-      // Only preempt idle processes, not waiting-input
-      if (process.state.type !== "idle") continue;
-
-      const idleMs = now - process.state.since.getTime();
-      if (idleMs >= this.idlePreemptThresholdMs && idleMs > oldestIdleTime) {
-        oldest = process;
-        oldestIdleTime = idleMs;
-      }
-    }
-
-    return oldest;
+    return this.processPool.findPreemptable();
   }
 
   /**
    * Preempt an idle worker to make room for a new request.
    */
   private async preemptWorker(process: Process): Promise<void> {
-    await process.abort();
-    this.unregisterProcess(process);
+    await this.processPool.preempt(process);
   }
 
   /**
@@ -1813,8 +1796,8 @@ export class Supervisor {
     queueLength: number;
   } {
     return {
-      activeWorkers: this.processes.size,
-      maxWorkers: this.maxWorkers,
+      activeWorkers: this.processPool.size,
+      maxWorkers: this.processPool.maxWorkers,
       queueLength: this.workerQueue.length,
     };
   }
@@ -1828,11 +1811,11 @@ export class Supervisor {
     queueLength: number;
     hasActiveWork: boolean;
   } {
-    const hasActiveWork = Array.from(this.processes.values()).some(
+    const hasActiveWork = this.processPool.getAll().some(
       (p) => p.state.type === "in-turn" || p.state.type === "waiting-input",
     );
     return {
-      activeWorkers: this.processes.size,
+      activeWorkers: this.processPool.size,
       queueLength: this.workerQueue.length,
       hasActiveWork,
     };

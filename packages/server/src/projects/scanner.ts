@@ -8,6 +8,7 @@ import {
 } from "@yep-anywhere/shared";
 import type { ProjectMetadataService } from "../metadata/index.js";
 import type { Project } from "../supervisor/types.js";
+import { providerRegistry } from "../providers/registry.js";
 import type { EventBus, FileChangeEvent } from "../watcher/index.js";
 import { CODEX_SESSIONS_DIR, CodexSessionScanner } from "./codex-scanner.js";
 import { GEMINI_TMP_DIR, GeminiSessionScanner } from "./gemini-scanner.js";
@@ -197,9 +198,10 @@ export class ProjectScanner {
 
     // Any session file delta can affect project existence/count/lastActivity.
     this.invalidateCache();
-    if (event.provider === "codex") {
+    const group = providerRegistry.getOrNull(event.provider)?.group;
+    if (group === "codex") {
       this.codexScanner?.invalidateCache();
-    } else if (event.provider === "gemini") {
+    } else if (group === "gemini") {
       this.geminiScanner?.invalidateCache();
     }
   }

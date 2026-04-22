@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import type { EventBus, SourceChangeEvent } from "../watcher/index.js";
+import type { EventBus, IEventBus, SourceChangeEvent } from "../watcher/index.js";
 
 export interface DevDeps {
-  eventBus: EventBus;
+  eventBus: IEventBus;
 }
 
 // Track backend dirty state - persists across page refreshes until server restarts

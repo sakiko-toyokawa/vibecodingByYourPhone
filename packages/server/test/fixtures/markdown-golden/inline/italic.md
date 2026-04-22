@@ -1,1 +1,0 @@
-This text has *italic formatting* in the middle.

@@ -1,7 +1,0 @@
-{"type":"thread.started","thread_id":"codex-fixture-002"}
-{"type":"turn.started"}
-{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Preparing to read file**"}}
-{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc \"cat /test/file.txt\"","aggregated_output":"","exit_code":null,"status":"in_progress"}}
-{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc \"cat /test/file.txt\"","aggregated_output":"Hello from the file!","exit_code":0,"status":"completed"}}
-{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"The file contains: Hello from the file!"}}
-{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":50}}

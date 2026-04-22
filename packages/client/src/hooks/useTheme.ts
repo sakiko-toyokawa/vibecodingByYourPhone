@@ -16,9 +16,34 @@ export function getThemeLabel(theme: Theme): string {
   return themeLabels[theme];
 }
 
+function isLightTheme(theme: Theme): boolean {
+  if (theme === "auto") {
+    return window.matchMedia("(prefers-color-scheme: light)").matches;
+  }
+  return theme === "light";
+}
+
+function syncSystemBars(theme: Theme) {
+  const tauri = (window as unknown as Record<string, unknown>)
+    .__TAURI_INTERNALS__ as
+    | {
+        invoke?: (
+          cmd: string,
+          args: Record<string, unknown>,
+        ) => Promise<unknown>;
+      }
+    | undefined;
+  if (tauri?.invoke) {
+    tauri
+      .invoke("set_system_bars", { light: isLightTheme(theme) })
+      .catch(() => {});
+  }
+}
+
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
   root.setAttribute("data-theme", theme);
+  syncSystemBars(theme);
 }
 
 function loadTheme(): Theme {

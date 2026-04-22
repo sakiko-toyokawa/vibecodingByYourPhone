@@ -3,10 +3,10 @@ import type {
   BrowserProfileService,
   ConnectedBrowsersService,
 } from "../services/index.js";
-import type { EventBus } from "../watcher/index.js";
+import type { EventBus, IEventBus } from "../watcher/index.js";
 
 export interface ActivityDeps {
-  eventBus: EventBus;
+  eventBus: IEventBus;
   connectedBrowsers?: ConnectedBrowsersService;
   browserProfileService?: BrowserProfileService;
 }

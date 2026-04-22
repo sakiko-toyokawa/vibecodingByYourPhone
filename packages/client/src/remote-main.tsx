@@ -57,6 +57,26 @@ initializeTabSize();
 // Remove trailing slash for BrowserRouter basename
 const basename = import.meta.env.BASE_URL.replace(/\/$/, "") || undefined;
 
+const rootPath = (basename ? `${basename}/projects` : "/projects").replace(
+  /\/+/g,
+  "/",
+);
+
+(window as unknown as Record<string, unknown>).__TAURI_BACK_PRESSED__ = () => {
+  const current = window.location.pathname.replace(/\/$/, "") || "/";
+  if (current === rootPath || current === (basename || "/")) {
+    if (confirm("Exit app?")) {
+      (
+        window as unknown as {
+          __TAURI_INTERNALS__?: { invoke: (cmd: string) => Promise<unknown> };
+        }
+      ).__TAURI_INTERNALS__?.invoke("exit_app");
+    }
+  } else {
+    window.history.back();
+  }
+};
+
 /**
  * Shared app routes used by both direct mode (ConnectionGate) and
  * relay mode (RelayConnectionGate). Uses relative paths so they resolve

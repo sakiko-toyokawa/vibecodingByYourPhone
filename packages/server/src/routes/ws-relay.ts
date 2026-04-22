@@ -14,7 +14,7 @@ import type {
 } from "../services/index.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { UploadManager } from "../uploads/manager.js";
-import type { EventBus, FocusedSessionWatchManager } from "../watcher/index.js";
+import type { EventBus, IEventBus, FocusedSessionWatchManager } from "../watcher/index.js";
 import {
   deriveWsConnectionPolicy,
   isPolicyTrustedWithoutSrp,
@@ -45,7 +45,7 @@ export interface WsRelayDeps {
   /** Supervisor for subscribing to session events */
   supervisor: Supervisor;
   /** Event bus for subscribing to activity events */
-  eventBus: EventBus;
+  eventBus: IEventBus;
   /** Upload manager for handling file uploads */
   uploadManager: UploadManager;
   /** Remote access service for SRP authentication (optional) */
@@ -74,7 +74,7 @@ export interface AcceptRelayConnectionDeps {
   /** Supervisor for subscribing to session events */
   supervisor: Supervisor;
   /** Event bus for subscribing to activity events */
-  eventBus: EventBus;
+  eventBus: IEventBus;
   /** Upload manager for handling file uploads */
   uploadManager: UploadManager;
   /** Remote access service for SRP authentication */

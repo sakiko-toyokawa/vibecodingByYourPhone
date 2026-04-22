@@ -13,6 +13,7 @@ import type {
   BusEvent,
   EventBus,
   FileChangeEvent,
+  IEventBus,
   SessionAbortedEvent,
   SessionCreatedEvent,
   SessionStatusEvent,
@@ -41,7 +42,7 @@ interface ExternalSessionInfo {
 const DEFAULT_ABORT_GRACE_MS = 30000;
 
 export interface ExternalSessionTrackerOptions {
-  eventBus: EventBus;
+  eventBus: IEventBus;
   supervisor: Supervisor;
   scanner: ProjectScanner;
   /** Time in ms before external status decays to idle (default: 30000) */
@@ -66,7 +67,7 @@ export class ExternalSessionTracker {
   private externalSessions: Map<string, ExternalSessionInfo> = new Map();
   /** Sessions recently aborted by this server - grace period before external detection */
   private recentlyAborted: Map<string, number> = new Map(); // sessionId -> timestamp
-  private eventBus: EventBus;
+  private eventBus: IEventBus;
   private supervisor: Supervisor;
   private scanner: ProjectScanner;
   private decayMs: number;

@@ -6,6 +6,7 @@ import type {
   EventBus,
   FileChangeEvent,
   FileChangeType,
+  IEventBus,
   WatchProvider,
 } from "./EventBus.js";
 
@@ -15,7 +16,7 @@ export interface FileWatcherOptions {
   /** Provider that owns this directory */
   provider: WatchProvider;
   /** EventBus to emit events to */
-  eventBus: EventBus;
+  eventBus: IEventBus;
   /** Debounce delay in ms (default: 200) */
   debounceMs?: number;
   /**
@@ -28,7 +29,7 @@ export interface FileWatcherOptions {
 export class FileWatcher {
   private watchDir: string;
   private provider: WatchProvider;
-  private eventBus: EventBus;
+  private eventBus: IEventBus;
   private debounceMs: number;
   private periodicRescanMs: number;
   private watcher: fs.FSWatcher | null = null;

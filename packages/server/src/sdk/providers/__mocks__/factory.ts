@@ -6,56 +6,18 @@
 
 import type { SDKMessage } from "../../types.js";
 import type { ProviderName } from "../types.js";
-import { MockClaudeOllamaProvider, MockClaudeProvider } from "./claude.js";
-import { MockCodexOSSProvider, MockCodexProvider } from "./codex.js";
-import { MockGeminiProvider } from "./gemini.js";
-import { MockOpenCodeProvider } from "./opencode.js";
 import type {
   MockAgentProvider,
   MockProviderConfig,
   MockScenario,
 } from "./types.js";
 
-/**
- * Create a mock provider by name.
- */
-export function createMockProvider(
-  type: ProviderName,
-  config: MockProviderConfig = {},
-): MockAgentProvider {
-  switch (type) {
-    case "claude":
-      return new MockClaudeProvider(config);
-    case "claude-ollama":
-      return new MockClaudeOllamaProvider(config);
-    case "codex":
-      return new MockCodexProvider(config);
-    case "codex-oss":
-      return new MockCodexOSSProvider(config);
-    case "gemini":
-      return new MockGeminiProvider(config);
-    case "opencode":
-      return new MockOpenCodeProvider(config);
-    default:
-      throw new Error(`Unknown provider type: ${type}`);
-  }
-}
-
-/**
- * Create mock providers for all available provider types.
- */
-export function createAllMockProviders(
-  config: MockProviderConfig = {},
-): Map<ProviderName, MockAgentProvider> {
-  const providers = new Map<ProviderName, MockAgentProvider>();
-  providers.set("claude", new MockClaudeProvider(config));
-  providers.set("claude-ollama", new MockClaudeOllamaProvider(config));
-  providers.set("codex", new MockCodexProvider(config));
-  providers.set("codex-oss", new MockCodexOSSProvider(config));
-  providers.set("gemini", new MockGeminiProvider(config));
-  providers.set("opencode", new MockOpenCodeProvider(config));
-  return providers;
-}
+// Re-export core factory functions from mock-registry (switch/case-free)
+export {
+  createMockProvider,
+  createAllMockProviders,
+  MOCK_PROVIDER_TYPES,
+} from "../../../providers/mock-registry.js";
 
 /**
  * Create a mock provider with pre-configured scenarios.
@@ -64,20 +26,10 @@ export function createMockProviderWithScenarios(
   type: ProviderName,
   scenarios: MockScenario[],
 ): MockAgentProvider {
+  // Use dynamic import to avoid circular dependency at top level
+  const { createMockProvider } = require("../../../providers/mock-registry.js");
   return createMockProvider(type, { scenarios });
 }
-
-/**
- * Provider types available for parameterized testing.
- */
-export const MOCK_PROVIDER_TYPES: ProviderName[] = [
-  "claude",
-  "claude-ollama",
-  "codex",
-  "codex-oss",
-  "gemini",
-  "opencode",
-];
 
 /**
  * Create a standard test scenario that works with any provider.

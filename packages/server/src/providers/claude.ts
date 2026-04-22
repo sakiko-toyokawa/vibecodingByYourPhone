@@ -1,12 +1,20 @@
 import * as path from "node:path";
 import { CLAUDE_PROJECTS_DIR } from "../projects/paths.js";
+import { claudeProvider } from "../sdk/providers/claude.js";
+import type { AgentProvider } from "../sdk/providers/types.js";
 import type { ModelInfoService } from "../services/ModelInfoService.js";
+import { normalizeClaudeSession } from "../sessions/normalization.js";
 import { ClaudeSessionReader } from "../sessions/reader.js";
 import type { ISessionReader } from "../sessions/types.js";
+import type { LoadedSession } from "../sessions/types.js";
 import type { Project } from "../supervisor/types.js";
+import type { Session } from "../supervisor/types.js";
+import type { IProviderAdapter } from "./adapter.js";
 import type { FileType, ProviderDescriptor } from "./descriptor.js";
 
-export class ClaudeProviderDescriptor implements ProviderDescriptor {
+export class ClaudeProviderDescriptor
+  implements ProviderDescriptor, IProviderAdapter
+{
   readonly names = ["claude", "claude-ollama"];
   readonly group = "claude";
 
@@ -55,5 +63,21 @@ export class ClaudeProviderDescriptor implements ProviderDescriptor {
       return "session";
     }
     return "other";
+  }
+
+  normalizeSession(loaded: LoadedSession): Session {
+    return normalizeClaudeSession(loaded);
+  }
+
+  getStaleInTurnThresholdMs(): number {
+    return 5 * 60 * 1000; // 5 minutes
+  }
+
+  getDenyFeedbackBehavior(): "queue-followup" | "silent" {
+    return "silent";
+  }
+
+  getAgentProvider(): AgentProvider | null {
+    return claudeProvider;
   }
 }

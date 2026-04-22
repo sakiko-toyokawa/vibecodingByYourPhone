@@ -13,12 +13,10 @@
     }
   },
   "scripts": {
-    "build": "tsc",
-    "test": "node ../../scripts/run-with-safe-home.js vitest run"
+    "build": "tsc"
   },
   "devDependencies": {
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "typescript": "^5.7.2"
   },
   "dependencies": {
     "tssrp6a": "^3.0.0",

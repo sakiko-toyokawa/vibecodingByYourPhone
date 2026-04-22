@@ -2,6 +2,7 @@ import type { HttpBindings } from "@hono/node-server";
 import type { Hono } from "hono";
 import type { AppOptions } from "../app.js";
 import { createAuthRoutes } from "../auth/routes.js";
+import { container } from "../container.js";
 import { updateAllowedHosts } from "../middleware/allowed-hosts.js";
 import type { CodexSessionScanner } from "../projects/codex-scanner.js";
 import { CODEX_SESSIONS_DIR } from "../projects/codex-scanner.js";
@@ -59,7 +60,6 @@ export interface RouteDependencies {
 export function registerRoutes(
   app: Hono<{ Bindings: HttpBindings }>,
   options: AppOptions,
-  deps: RouteDependencies,
 ): void {
   const {
     scanner,
@@ -70,7 +70,7 @@ export function registerRoutes(
     geminiScanner,
     codexReaderFactory,
     geminiReaderFactory,
-  } = deps;
+  } = container.cradle as unknown as RouteDependencies;
 
   // Auth routes (always mounted if authService is provided)
   if (options.authService) {

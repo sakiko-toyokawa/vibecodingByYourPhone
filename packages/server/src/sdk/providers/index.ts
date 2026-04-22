@@ -65,20 +65,22 @@ export {
   type OpenCodeProviderConfig,
 } from "./opencode.js";
 
+import type { IProviderAdapter } from "../../providers/adapter.js";
+import { providerRegistry } from "../../providers/registry.js";
+
 /**
  * Get all available provider instances.
  * Useful for provider detection UI.
  */
 export function getAllProviders(): AgentProvider[] {
-  return [
-    claudeProvider,
-    claudeOllamaProvider,
-    codexProvider,
-    codexOSSProvider,
-    geminiProvider,
-    geminiACPProvider,
-    opencodeProvider,
-  ];
+  return providerRegistry
+    .list()
+    .map((d) =>
+      "getAgentProvider" in d
+        ? (d as IProviderAdapter).getAgentProvider()
+        : null,
+    )
+    .filter((p): p is AgentProvider => p !== null);
 }
 
 /**
@@ -89,22 +91,9 @@ export function getAllProviders(): AgentProvider[] {
  * provider is deprecated and will be removed.
  */
 export function getProvider(name: ProviderName): AgentProvider | null {
-  switch (name) {
-    case "claude":
-      return claudeProvider;
-    case "claude-ollama":
-      return claudeOllamaProvider;
-    case "codex":
-      return codexProvider;
-    case "codex-oss":
-      return codexOSSProvider;
-    case "gemini":
-    case "gemini-acp":
-      // Both map to ACP provider - "gemini" is legacy name for backward compatibility
-      return geminiACPProvider;
-    case "opencode":
-      return opencodeProvider;
-    default:
-      return null;
+  const descriptor = providerRegistry.getOrNull(name);
+  if (descriptor && "getAgentProvider" in descriptor) {
+    return (descriptor as IProviderAdapter).getAgentProvider();
   }
+  return null;
 }

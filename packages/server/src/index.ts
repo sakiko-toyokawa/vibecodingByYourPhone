@@ -1,3 +1,4 @@
+import { createContainerInstance } from "./container.js";
 import { startServer } from "./server.js";
 import { initializeServices } from "./services-init.js";
 import {
@@ -12,8 +13,9 @@ process.setMaxListeners(50);
 registerUnhandledRejectionHandler();
 registerShutdownHandlers();
 
-const services = await initializeServices();
-await startServer(services).catch((error) => {
+createContainerInstance();
+await initializeServices();
+await startServer().catch((error) => {
   console.error("Failed to start server:", error);
   process.exit(1);
 });

@@ -1,6 +1,41 @@
 use tauri::Manager;
 use tauri_plugin_deep_link::DeepLinkExt;
 
+#[cfg(target_os = "android")]
+use jni::objects::JValue;
+#[cfg(target_os = "android")]
+use jni::signature::{JavaType, Primitive};
+
+#[tauri::command]
+fn set_system_bars(window: tauri::WebviewWindow, light: bool) {
+    #[cfg(target_os = "android")]
+    {
+        let _ = window.with_webview(move |webview| {
+            let env = webview.env();
+            let activity = webview.activity();
+            let method = env
+                .get_method_id(activity, "setSystemBars", "(Z)V")
+                .expect("setSystemBars method not found");
+            env.call_method(
+                activity,
+                method,
+                JavaType::Primitive(Primitive::Void),
+                &[JValue::Bool(if light {
+                    jni::sys::JNI_TRUE
+                } else {
+                    jni::sys::JNI_FALSE
+                })],
+            )
+            .expect("setSystemBars call failed");
+        });
+    }
+}
+
+#[tauri::command]
+fn exit_app(app_handle: tauri::AppHandle) {
+    app_handle.exit(0);
+}
+
 /// Extract query string from an app link URL and convert to hash fragment.
 ///
 /// Input:  https://yepanywhere.com/open?u=username&p=password&r=relay_url
@@ -27,6 +62,7 @@ fn handle_deep_link(app: &tauri::AppHandle, url_str: &str) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![set_system_bars, exit_app])
         .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
             // Handle deep links that launched the app

@@ -237,7 +237,9 @@ export type BusEvent =
 
 export type EventHandler<T = BusEvent> = (event: T) => void;
 
-export class EventBus {
+import type { IEventBus } from "./IEventBus.js";
+
+export class EventBus implements IEventBus {
   private subscribers: Set<EventHandler> = new Set();
 
   /**
@@ -269,5 +271,9 @@ export class EventBus {
    */
   get subscriberCount(): number {
     return this.subscribers.size;
+  }
+
+  async destroy(): Promise<void> {
+    this.subscribers.clear();
   }
 }

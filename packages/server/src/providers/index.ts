@@ -7,6 +7,7 @@ import { providerRegistry } from "./registry.js";
 
 export { providerRegistry } from "./registry.js";
 export type { ProviderDescriptor, ProviderScanner } from "./descriptor.js";
+export type { IProviderAdapter } from "./adapter.js";
 export { ProviderRegistry } from "./registry.js";
 export { ClaudeProviderDescriptor } from "./claude.js";
 export { CodexProviderDescriptor } from "./codex.js";
