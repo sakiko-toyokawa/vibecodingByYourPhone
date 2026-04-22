@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "YepAnywhere",
+  "version": "0.1.0",
+  "identifier": "com.yepanywhere.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm prepare-sidecar && pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm prepare-sidecar && pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Yep Anywhere",
+        "width": 1100,
+        "height": 750,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": false,
+    "targets": "all",
+    "externalBin": [
+      "binaries/bun"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installerHooks": "./nsis/hooks.nsh"
+      },
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://updates.yepanywhere.com/tauri/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "pubkey": "RWTMbSc7oMFk712l6aKLo0y9iO3kwoYE95lYs38lSkkhch3/QnkLg7zf"
+    }
+  }
+}

@@ -1,0 +1,366 @@
+---
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout
+  title="News - Yep Anywhere"
+  description="News and updates about Yep Anywhere"
+>
+  <Header activePage="news" />
+
+  <main>
+    <section class="page-header">
+      <div class="container">
+        <h1>News</h1>
+        <p>Updates and transparency notes</p>
+      </div>
+    </section>
+
+    <section class="news-list">
+      <div class="container">
+
+        <article class="news-item open">
+          <div class="news-item-header" data-toggle>
+            <div>
+              <h2>Android Dev Without a Desktop: Remote Device Control</h2>
+              <div class="news-item-meta">March 3, 2026 &middot; <a href="/remote-device-control">View article</a></div>
+            </div>
+            <span class="news-item-expand">+</span>
+          </div>
+          <div class="news-item-content">
+            <div class="article-content">
+              <p>I've been building Android apps from my phone using AI agents, but I always had to walk to my computer to see the result. Not anymore. Yep Anywhere now streams your Android device or emulator to your phone over WebRTC &mdash; H264 video, full touch input, low latency. The full dev loop closes on your phone. Next up: accessibility tree support so agents can verify their own work.</p>
+              <p><a href="/remote-device-control">Read the full post</a></p>
+            </div>
+          </div>
+        </article>
+
+        <article class="news-item open">
+          <div class="news-item-header" data-toggle>
+            <div>
+              <h2>What I Learned from the OpenClaw Guy's AI Coding Workflow</h2>
+              <div class="news-item-meta">February 27, 2026 &middot; <a href="/ai-coding-workflow-openclaw">View article</a></div>
+            </div>
+            <span class="news-item-expand">+</span>
+          </div>
+          <div class="news-item-content">
+            <div class="article-content">
+              <p>Peter Steinberger shipped 8,471 commits in 72 days across 48 repos. I've done 4,092 in 101 days while raising two young kids. This isn't a comparison &mdash; it's about what I learned from watching his workflow and how it changed my approach: adopting Codex, rethinking pull requests, and using phone-based constraints as a forcing function for better engineering.</p>
+              <p><a href="/ai-coding-workflow-openclaw">Read the full post</a></p>
+            </div>
+          </div>
+        </article>
+
+        <article class="news-item open">
+          <div class="news-item-header" data-toggle>
+            <div>
+              <h2>Five Ways to Access AI Subscriptions Programmatically (and What Breaks)</h2>
+              <div class="news-item-meta">February 25, 2026 &middot; <a href="/subscription-access-approaches">View article</a></div>
+            </div>
+            <span class="news-item-expand">+</span>
+          </div>
+          <div class="news-item-content">
+            <div class="article-content">
+              <p>AI coding agents cost $15-75/MTok via API keys, but $20-200/mo via subscriptions. Every wrapper project has to pick an approach to bridge that gap. We read the source code of five projects &mdash; emdash, Yep Anywhere, OpenCode, pi-mono, and Vercel AI SDK &mdash; and found five distinct strategies, from raw terminal passthrough to reverse-engineered OAuth. Some have already gotten users banned.</p>
+              <p><a href="/subscription-access-approaches">Read the full post</a></p>
+            </div>
+          </div>
+        </article>
+
+        <article class="news-item open">
+          <div class="news-item-header" data-toggle>
+            <div>
+              <h2>Claude Code Remote Control vs Yep Anywhere</h2>
+              <div class="news-item-meta">February 24, 2026 &middot; <a href="/claude-code-remote-control">View article</a></div>
+            </div>
+            <span class="news-item-expand">+</span>
+          </div>
+          <div class="news-item-content">
+            <div class="article-content">
+              <p>Anthropic just announced Remote Control &mdash; a new Claude Code feature that lets you continue terminal sessions from your phone. We're thrilled they're validating this workflow. Here's how it compares to Yep Anywhere and what we add on top: multi-session dashboard, phone-initiated sessions, server-owned processes, and more.</p>
+              <p><a href="/claude-code-remote-control">Read the full post</a></p>
+            </div>
+          </div>
+        </article>
+
+        <article class="news-item open">
+          <div class="news-item-header" data-toggle>
+            <div>
+              <h2>Google Is Banning Paying Subscribers for Using OpenClaw</h2>
+              <div class="news-item-meta">February 23, 2026 &middot; <a href="/google-openclaw-crackdown">View article</a></div>
+            </div>
+            <span class="news-item-expand">+</span>
+          </div>
+          <div class="news-item-content">
+            <div class="article-content">
+              <p>Google permanently banned hundreds of AI Pro and Ultra subscribers for using OpenClaw to access the Antigravity backend. No warning, no appeal, still charging $249/month. This is the same pattern we've been writing about since January &mdash; and why Yep Anywhere only uses official CLI harnesses.</p>
+              <p><a href="/google-openclaw-crackdown">Read the full post</a></p>
+            </div>
+          </div>
+        </article>
+
+        <article class="news-item open">
+          <div class="news-item-header" data-toggle>
+            <div>
+              <h2>The Agent SDK Auth Scare (and Why You're Fine)</h2>
+              <div class="news-item-meta">February 19, 2026 &middot; <a href="/sdk-auth-clarification">View article</a></div>
+            </div>
+            <span class="news-item-expand">+</span>
+          </div>
+          <div class="news-item-content">
+            <div class="article-content">
+              <p>Anthropic updated their legal docs and the community panicked. One paragraph says Pro/Max covers the Agent SDK, the next says OAuth tokens can't be used with it. A Claude Code product lead clarified on X that nothing is changing. Here's our reading of why individual SDK use is fine.</p>
+              <p><a href="/sdk-auth-clarification">Read the full post</a></p>
+            </div>
+          </div>
+        </article>
+
+        <article class="news-item open">
+          <div class="news-item-header" data-toggle>
+            <div>
+              <h2>Does Your AI Agent Have a Soul?</h2>
+              <div class="news-item-meta">February 16, 2026 &middot; <a href="/openclaw-and-yep-anywhere">View article</a></div>
+            </div>
+            <span class="news-item-expand">+</span>
+          </div>
+          <div class="news-item-content">
+            <div class="article-content">
+              <p>Peter Steinberger just announced he's joining OpenAI. OpenClaw will move to a foundation and stay open source. Here's our perspective on where these tools overlap, diverge, and where the space is heading &mdash; from soul.md and heartbeat systems to the long tail of agent tasks.</p>
+              <p><a href="/openclaw-and-yep-anywhere">Read the full post</a></p>
+            </div>
+          </div>
+        </article>
+
+        <article class="news-item open">
+          <div class="news-item-header" data-toggle>
+            <div>
+              <h2>Introducing Public Relay: Supervise Claude Code from Anywhere</h2>
+              <div class="news-item-meta">January 21, 2026 &middot; <a href="/public-relay">View article</a></div>
+            </div>
+            <span class="news-item-expand">+</span>
+          </div>
+          <div class="news-item-content">
+            <div class="article-content">
+              <p>We're excited to announce that Yep Anywhere now has a <strong>free public relay</strong> at <code>relay.yepanywhere.com</code>. Access your Claude Code agents from your phone with end-to-end encryption&mdash;no Tailscale, no port forwarding, no VPN required.</p>
+
+              <h3>What is Yep Anywhere?</h3>
+              <p>A mobile-first web interface for Claude Code. Claude runs on your dev machine, but you can supervise it from anywhere. Walk away from your desk and your agent keeps working. Get push notifications when it needs approval. Respond from your lock screen.</p>
+
+              <h3>How the Relay Works</h3>
+              <p>Just enable the relay in Settings and you get a unique URL. Open that URL on your phone and you're connected. All traffic is end-to-end encrypted using SRP-6a and TweetNaCl&mdash;the relay can't see your code or conversations.</p>
+
+              <p>No accounts required. No Firebase, no database, no tracking. Your password never leaves your device.</p>
+
+              <p><a href="/public-relay">Read the full announcement</a> for screenshots, installation instructions, and the complete feature set.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="news-item open">
+          <div class="news-item-header" data-toggle>
+            <div>
+              <h2>How We Use the Claude SDK (and Why We're Not Like the Blocked Tools)</h2>
+              <div class="news-item-meta">January 11, 2026 &middot; <a href="/tos-compliance">View article</a></div>
+            </div>
+            <span class="news-item-expand">+</span>
+          </div>
+          <div class="news-item-content">
+            <div class="article-content">
+              <p>In late 2025 and early 2026, Anthropic sent takedown notices to several third-party Claude Code clients. We want to be transparent about how Yep Anywhere differs from those projects.</p>
+
+              <h3>What Got Blocked</h3>
+              <p>Projects like OpenCode, Crush (Charmbracelet), and Windsurf were blocked for <strong>spoofing the Claude Code client identity</strong> to access Claude Max subscription pricing ($200/month) instead of paying per-token API rates.</p>
+
+              <p>Claude Max subscriptions offer dramatically cheaper access than API pricing (users reported $1000+ monthly API costs reduced to $200). The blocked tools would:</p>
+              <ul>
+                <li>Send fake HTTP headers pretending to be the official Claude Code CLI</li>
+                <li>Trick Anthropic's servers into granting subscription-tier pricing</li>
+                <li>Provide their own alternative UI while freeloading on pricing meant only for Anthropic's official tool</li>
+              </ul>
+
+              <p>An Anthropic engineer confirmed: <blockquote>"We tightened our safeguards against spoofing the Claude Code harness."</blockquote></p>
+
+              <h3>How Yep Anywhere Is Different</h3>
+              <p>Yep Anywhere does <strong>none of the above</strong>. Here's what we actually do:</p>
+
+              <p><strong>1. We use the official SDK.</strong> We depend on <code>@anthropic-ai/claude-agent-sdk</code>, Anthropic's official published SDK. We call the SDK's <code>query()</code> function directly without modification or header spoofing.</p>
+
+              <p><strong>2. We don't handle authentication.</strong> Users authenticate via the Claude CLI directly (<code>claude login</code>) or by setting <code>ANTHROPIC_API_KEY</code>. We never touch, intercept, or proxy OAuth tokens.</p>
+
+              <p><strong>3. We don't spoof client identity.</strong> Our code makes no attempt to impersonate Claude Code or any other client. We pass requests to the SDK as-is, which identifies itself appropriately.</p>
+
+              <p><strong>4. We're a remote interface, not a replacement.</strong> Yep Anywhere is a mobile-friendly supervisor for Claude Code sessions running on your own machine. Think of it like SSH for AI agents—we provide remote access to sessions, not a replacement client.</p>
+
+              <h3>Comparison</h3>
+              <table class="comparison-table">
+                <thead>
+                  <tr>
+                    <th>Aspect</th>
+                    <th>Blocked Tools</th>
+                    <th>Yep Anywhere</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Client identity spoofing</td>
+                    <td>Yes</td>
+                    <td>No</td>
+                  </tr>
+                  <tr>
+                    <td>Header manipulation</td>
+                    <td>Yes</td>
+                    <td>No</td>
+                  </tr>
+                  <tr>
+                    <td>Pricing tier circumvention</td>
+                    <td>Yes</td>
+                    <td>No</td>
+                  </tr>
+                  <tr>
+                    <td>Uses official SDK</td>
+                    <td>No (custom API calls)</td>
+                    <td>Yes</td>
+                  </tr>
+                  <tr>
+                    <td>Handles user auth</td>
+                    <td>Yes (OAuth proxy/interception)</td>
+                    <td>No &mdash; users authenticate via CLI directly</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3>Our Stance</h3>
+              <p>We believe our approach aligns with Anthropic's terms of service. Users pay for their own Claude access through legitimate channels, and we provide a remote interface to manage sessions. We're not trying to game pricing or impersonate official tools.</p>
+
+              <p>If Anthropic has concerns about our implementation, we welcome the conversation.</p>
+
+              <h3>References</h3>
+              <ul>
+                <li><a href="https://news.ycombinator.com/item?id=46549823">Anthropic blocks third-party Claude Code access (Hacker News)</a></li>
+                <li><a href="https://github.com/charmbracelet/crush/pull/1783">Charmbracelet Crush removal PR</a></li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+      </div>
+    </section>
+  </main>
+
+  <Footer />
+</BaseLayout>
+
+<script is:inline>
+  document.querySelectorAll('[data-toggle]').forEach(function(el) {
+    el.addEventListener('click', function(e) {
+      if (e.target.tagName === 'A') return;
+      this.parentElement.classList.toggle('open');
+    });
+  });
+</script>
+
+<style>
+  .page-header {
+    padding: 60px 0 40px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .page-header h1 {
+    font-size: 36px;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+
+  .page-header p {
+    color: var(--text-secondary);
+    font-size: 16px;
+  }
+
+  .news-list {
+    padding: 40px 0;
+  }
+
+  .news-item {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 24px;
+    overflow: hidden;
+  }
+
+  .news-item-header {
+    padding: 24px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .news-item-header:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .news-item-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .news-item-meta {
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
+  .news-item-meta a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .news-item-meta a:hover {
+    text-decoration: underline;
+  }
+
+  .news-item-expand {
+    color: var(--text-secondary);
+    font-size: 24px;
+    line-height: 1;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+
+  .news-item.open .news-item-expand {
+    transform: rotate(45deg);
+  }
+
+  .news-item-content {
+    display: none;
+    padding: 0 24px 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  .news-item.open .news-item-content {
+    display: block;
+  }
+
+  @media (max-width: 600px) {
+    .page-header {
+      padding: 40px 0 32px;
+    }
+
+    .page-header h1 {
+      font-size: 28px;
+    }
+
+    .news-item-header {
+      padding: 20px;
+    }
+
+    .news-item-header h2 {
+      font-size: 18px;
+    }
+  }
+</style>

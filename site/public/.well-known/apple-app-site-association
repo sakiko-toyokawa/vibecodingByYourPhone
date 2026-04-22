@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["VD7BYQ6ABM.com.yepanywhere.mobile"],
+        "paths": ["/open*"]
+      }
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@yep-anywhere/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare-frontend": "pnpm --filter @yep-anywhere/client build:remote && cp ../client/dist-remote/remote.html ../client/dist-remote/index.html",
+    "tauri": "tauri",
+    "dev:android": "pnpm prepare-frontend && tauri android dev",
+    "dev:ios": "pnpm prepare-frontend && tauri ios dev",
+    "build:android": "pnpm prepare-frontend && tauri android build",
+    "build:ios": "pnpm prepare-frontend && tauri ios build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

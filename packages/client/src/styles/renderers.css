@@ -1,0 +1,3366 @@
+/* Renderer Styles for Message Content Blocks */
+
+/* ==========================================================================
+   Code Blocks
+   ========================================================================== */
+
+.code-block {
+  background: var(--bg-code);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.75rem;
+  overflow-x: auto;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  margin: 0.5rem 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  tab-size: var(--tab-size);
+}
+
+.code-block-error {
+  border-color: var(--error-color);
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+}
+
+/* ==========================================================================
+   Text Blocks
+   ========================================================================== */
+
+.text-block,
+.text-content {
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  color: var(--text-primary);
+  position: relative;
+}
+
+/* Copy button for text blocks */
+.text-block-copy {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--bg-secondary, #252525);
+  border: 1px solid var(--border-color, #333);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-muted, #888);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  z-index: 10;
+}
+
+.text-block:hover .text-block-copy,
+.text-block-copy:focus {
+  opacity: 1;
+}
+
+.text-block-copy:hover {
+  background: var(--bg-tertiary, #333);
+  color: var(--text-primary, #ccc);
+}
+
+.text-block-copy:active {
+  background: var(--bg-tertiary, #444);
+}
+
+.text-block-copy:focus {
+  outline: 1px solid var(--focus-border, #007acc);
+  outline-offset: -1px;
+}
+
+.text-block-copy.copied {
+  color: #4a4;
+  opacity: 1;
+}
+
+.text-block p {
+  margin: 0 0 var(--space-2) 0;
+}
+
+.text-block p:last-child {
+  margin-bottom: 0;
+}
+
+/* Streaming cursor animation - uses ::after on last child to stay inline */
+.text-block.streaming > :last-child::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--text-primary);
+  margin-left: 2px;
+  animation: blink 0.8s ease-in-out infinite;
+  vertical-align: text-bottom;
+}
+
+@keyframes blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   Server-Rendered Streaming Markdown
+   ========================================================================== */
+
+/* Container for completed server-rendered blocks */
+.streaming-blocks {
+  /* Blocks are inserted as child divs with .streaming-block class */
+}
+
+/* Individual block rendered by server */
+.streaming-block {
+  /* Inherits text-block styles - no additional styling needed */
+}
+
+/* Pending text (incomplete block being streamed) */
+.streaming-pending {
+  opacity: 0.7;
+}
+
+/* Ensure streaming blocks have appropriate paragraph spacing */
+.streaming-blocks p,
+.streaming-block p {
+  margin: 0 0 var(--space-2) 0;
+}
+
+.streaming-blocks p:last-child,
+.streaming-block p:last-child {
+  margin-bottom: 0;
+}
+
+/* Code styling in streaming blocks */
+.streaming-blocks code,
+.streaming-block code,
+.streaming-pending code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--bg-code);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+
+/* Pre blocks in streaming */
+.streaming-blocks pre,
+.streaming-block pre {
+  background: var(--bg-code);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.streaming-blocks pre code,
+.streaming-block pre code {
+  background: none;
+  padding: 0;
+}
+
+/* Lists in streaming blocks */
+.streaming-blocks ul,
+.streaming-blocks ol,
+.streaming-block ul,
+.streaming-block ol {
+  margin: var(--space-2) 0;
+  padding-left: 24px;
+}
+
+.streaming-blocks li,
+.streaming-block li {
+  margin: var(--space-1) 0;
+}
+
+/* Links in streaming blocks */
+.streaming-blocks a,
+.streaming-block a,
+.streaming-pending a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+.streaming-blocks a:hover,
+.streaming-block a:hover,
+.streaming-pending a:hover {
+  text-decoration: underline;
+}
+
+/* Local media links (clickable placeholders for images/videos in markdown) */
+.local-media-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  cursor: pointer;
+}
+
+.local-media-type {
+  font-size: 0.85em;
+  opacity: 0.6;
+}
+
+/* Local media modal content */
+.local-media-modal-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.local-media-image {
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+.local-media-player {
+  max-width: 100%;
+  max-height: 80vh;
+  border-radius: var(--radius-md);
+}
+
+.local-media-loading,
+.local-media-error {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.local-media-error {
+  color: var(--color-error);
+}
+
+/* Blockquotes in streaming blocks */
+.streaming-blocks blockquote,
+.streaming-block blockquote {
+  margin: var(--space-2) 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--border-color);
+  color: var(--text-muted);
+}
+
+/* Headers in streaming blocks */
+.streaming-blocks h1,
+.streaming-blocks h2,
+.streaming-blocks h3,
+.streaming-blocks h4,
+.streaming-blocks h5,
+.streaming-blocks h6,
+.streaming-block h1,
+.streaming-block h2,
+.streaming-block h3,
+.streaming-block h4,
+.streaming-block h5,
+.streaming-block h6 {
+  margin: var(--space-3) 0 var(--space-2) 0;
+  font-weight: 600;
+}
+
+/* Tables in streaming blocks */
+.streaming-blocks table,
+.streaming-block table {
+  border-collapse: collapse;
+  margin: var(--space-2) 0;
+  width: 100%;
+  font-size: var(--font-size-sm);
+}
+
+.streaming-blocks th,
+.streaming-blocks td,
+.streaming-block th,
+.streaming-block td {
+  border: 1px solid var(--border-color);
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+}
+
+.streaming-blocks th,
+.streaming-block th {
+  background: var(--bg-secondary);
+  font-weight: 600;
+}
+
+.text-block code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--bg-code);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+
+.text-block pre {
+  background: var(--bg-code);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.text-block pre code {
+  background: none;
+  padding: 0;
+}
+
+.text-block ul,
+.text-block ol {
+  margin: var(--space-2) 0;
+  padding-left: 24px;
+}
+
+.text-block li {
+  margin: var(--space-1) 0;
+}
+
+.text-block a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+.text-block a:hover {
+  text-decoration: underline;
+}
+
+.text-block blockquote {
+  margin: var(--space-2) 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--border-color);
+  color: var(--text-muted);
+}
+
+.text-block h1,
+.text-block h2,
+.text-block h3,
+.text-block h4,
+.text-block h5,
+.text-block h6 {
+  margin: var(--space-3) 0 var(--space-2) 0;
+  font-weight: 600;
+}
+
+.text-block hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: var(--space-3) 0;
+}
+
+.text-block table {
+  border-collapse: collapse;
+  margin: var(--space-2) 0;
+  width: 100%;
+  font-size: var(--font-size-sm);
+}
+
+.text-block th,
+.text-block td {
+  border: 1px solid var(--border-color);
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+}
+
+.text-block th {
+  background: var(--bg-secondary);
+  font-weight: 600;
+}
+
+.text-block tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* ==========================================================================
+   Thinking Blocks - Collapsible Pattern
+   ========================================================================== */
+
+.thinking-block.collapsible {
+  margin: var(--space-1) 0;
+}
+
+.collapsible__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+  cursor: pointer;
+  list-style: none;
+}
+
+.collapsible__summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible__icon {
+  font-size: var(--font-size-xs);
+  transition: transform 0.15s ease;
+}
+
+details[open] .collapsible__icon {
+  transform: rotate(90deg);
+}
+
+.collapsible__content {
+  padding: var(--space-2) 0 var(--space-2) var(--space-4);
+}
+
+.collapsible__content .text-content {
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* Button-style thinking toggle (collapsed state in new renderer) */
+.thinking-toggle-collapsed {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  border: 1px solid var(--border-color, #333);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-muted, #888);
+  font-size: var(--font-size-base);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.thinking-toggle-collapsed:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+  border-color: var(--border-input, #555);
+}
+
+.thinking-label {
+  color: inherit;
+}
+
+.thinking-icon {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+/* Expanded thinking block button */
+.thinking-block-expanded {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: 1px solid var(--border-color, #333);
+  border-radius: var(--radius-md, 6px);
+  color: var(--text-muted, #888);
+  font-size: var(--font-size-base);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.thinking-block-expanded:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.03));
+}
+
+.thinking-toggle-expanded {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: 0.5rem;
+  color: var(--text-muted, #888);
+}
+
+.thinking-content {
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+/* Pulsing animation for collapsed thinking blocks that are still streaming */
+.thinking-streaming-collapsed .collapsible__summary,
+.thinking-streaming-collapsed .thinking-toggle-collapsed {
+  animation: thinking-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ==========================================================================
+   Tool Blocks
+   ========================================================================== */
+
+.tool-block {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin: 0.5rem 0;
+  overflow: hidden;
+}
+
+.tool-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: var(--font-size-sm);
+}
+
+.tool-icon {
+  font-family: monospace;
+  color: var(--text-muted);
+}
+
+.tool-name {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.tool-content {
+  padding: 0.75rem;
+}
+
+.tool-block.tool-error {
+  border-color: var(--error-color);
+}
+
+.tool-block.tool-error .tool-header {
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  color: var(--error-color);
+}
+
+.tool-fallback {
+  margin: 0;
+  padding: 0.5rem;
+  background: var(--bg-code);
+  border-radius: 4px;
+  font-size: var(--font-size-base);
+  overflow-x: auto;
+}
+
+.tool-fallback-error {
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  border: 1px solid var(--error-color);
+}
+
+/* ==========================================================================
+   Bash Tool
+   ========================================================================== */
+
+.bash-tool-use {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bash-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bash-stdout,
+.bash-stderr {
+  margin: 0;
+}
+
+.bash-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-size-lg);
+}
+
+/* Bash Collapsed Preview */
+.bash-collapsed-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: var(--font-size-base);
+  background: var(--bg-code);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.bash-collapsed-preview:hover {
+  border-color: var(--border-input, var(--border-color));
+}
+
+.bash-collapsed-preview:focus {
+  outline: 1px solid var(--focus-border, #007acc);
+  outline-offset: -1px;
+}
+
+.bash-preview-row {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.375rem 0.5rem;
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+}
+
+.bash-preview-row:last-child {
+  border-bottom: none;
+}
+
+.bash-preview-label {
+  flex-shrink: 0;
+  width: 2.5rem;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.bash-preview-command {
+  flex: 1;
+  min-width: 0;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bash-preview-output-row {
+  align-items: flex-start;
+}
+
+.bash-preview-output {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  max-height: 5rem;
+  overflow: hidden;
+}
+
+.bash-preview-output pre {
+  margin: 0;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
+  font-size: var(--font-size-base);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.bash-preview-output.bash-preview-error pre {
+  color: var(--error-color);
+}
+
+.bash-preview-truncated {
+  max-height: 5rem;
+}
+
+.bash-preview-fade {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2rem;
+  background: linear-gradient(to bottom, transparent, var(--bg-code));
+  pointer-events: none;
+}
+
+.bash-preview-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.bash-preview-interrupted {
+  color: var(--warning-color);
+  font-style: italic;
+}
+
+/* Bash Modal Content Sections */
+.bash-modal-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bash-modal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.bash-modal-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.bash-modal-label-error {
+  color: var(--error-color);
+}
+
+.bash-modal-code {
+  margin: 0;
+  background: var(--bg-code);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.bash-modal-code-error {
+  border-color: var(--error-color);
+}
+
+.bash-modal-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-size-lg);
+}
+
+/* ==========================================================================
+   Read Tool
+   ========================================================================== */
+
+.read-tool-use {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.read-range {
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+}
+
+.read-text-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.file-link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: transparent;
+  border: 1px solid var(--vscode-widget-border, #454545);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: var(--font-size-base);
+  color: var(--vscode-textLink-foreground, #3794ff);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.file-link-button:hover {
+  background: var(--vscode-list-hoverBackground, #2a2d2e);
+  border-color: var(--vscode-focusBorder, #007fd4);
+}
+
+.file-link-button .file-range {
+  color: var(--text-muted);
+}
+
+.file-link-button .file-line-count {
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* Inline file link for interactive summary */
+.file-link-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: inherit;
+  color: var(--vscode-textLink-foreground, #3794ff);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s;
+}
+
+.file-link-inline:hover {
+  text-decoration-color: currentColor;
+}
+
+.file-line-count-inline {
+  color: var(--text-muted);
+  font-size: 0.85em;
+  text-decoration: none;
+}
+
+/* Non-expandable tool row header */
+.tool-row-header.non-expandable {
+  cursor: default;
+}
+
+.tool-row.interactive .tool-summary {
+  flex: 1;
+}
+
+.file-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.file-path {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: var(--font-size-base);
+  color: var(--link-color);
+  word-break: break-all;
+}
+
+.file-range {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.file-content-with-lines {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: var(--font-size-base);
+  background: var(--bg-code);
+  tab-size: var(--tab-size);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.line-numbers {
+  text-align: right;
+  padding: 0.75rem 0.5rem;
+  color: var(--text-muted);
+  user-select: none;
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.line-numbers > div {
+  line-height: 1.5;
+}
+
+.line-content {
+  padding: 0.75rem;
+  margin: 0;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+
+.line-content code {
+  display: block;
+}
+
+.read-image-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.image-info {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.read-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.read-pdf-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.read-error {
+  color: var(--error-color);
+  padding: 0.5rem;
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  border-radius: 4px;
+}
+
+/* ==========================================================================
+   Edit Tool
+   ========================================================================== */
+
+.edit-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.edit-result-error {
+  padding: 0.5rem;
+}
+
+.edit-result-warning {
+  padding: 0.5rem;
+}
+
+.edit-result-muted {
+  padding: 0.5rem;
+}
+
+.edit-error-message {
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+  font-size: var(--font-size-lg);
+}
+
+.edit-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.edit-change-summary {
+  color: var(--text-muted, #888);
+  font-size: var(--font-size-base);
+}
+
+.edit-simple {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.edit-label {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  margin-bottom: 0.25rem;
+}
+
+/* Edit collapsed preview */
+.edit-collapsed-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.edit-collapsed-preview .diff-view-container {
+  position: relative;
+}
+
+.edit-collapsed-preview .diff-expand-button {
+  position: relative;
+  bottom: auto;
+  right: auto;
+  align-self: flex-end;
+  margin-top: 0.25rem;
+}
+
+/* Show button on hover for desktop */
+.edit-collapsed-preview:hover .diff-expand-button {
+  opacity: 1;
+}
+
+.edit-collapsed-error {
+  padding: 0.5rem;
+}
+
+.edit-collapsed-warning {
+  padding: 0.5rem;
+}
+
+.edit-collapsed-muted {
+  padding: 0.5rem;
+}
+
+/* ==========================================================================
+   Diff View
+   ========================================================================== */
+
+.diff-view {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: var(--font-size-base);
+}
+
+.diff-hunk {
+  margin: 0.5rem 0;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.diff-hunk:first-child {
+  margin-top: 0;
+}
+
+.diff-content {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-code);
+  overflow-x: auto;
+  tab-size: var(--tab-size);
+}
+
+.diff-content > div {
+  padding: 0 0.5rem;
+  line-height: 1.5;
+}
+
+.diff-removed {
+  background: var(--bg-diff-removed, rgba(207, 34, 46, 0.15));
+  color: var(--text-diff-removed, var(--error-color));
+}
+
+.diff-added {
+  background: var(--bg-diff-added, rgba(26, 127, 55, 0.15));
+  color: var(--text-diff-added, var(--success-color));
+}
+
+.diff-context {
+  color: var(--text-muted);
+}
+
+/* Highlighted diff from shiki */
+.highlighted-diff {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  tab-size: var(--tab-size);
+}
+
+.highlighted-diff pre.shiki {
+  margin: 0;
+  padding: 0.5rem;
+  background: var(--bg-code) !important;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.highlighted-diff code {
+  background: transparent;
+  /* Remove whitespace between line spans */
+  display: flex;
+  flex-direction: column;
+  /* Collapse whitespace text nodes (from \n between spans) */
+  font-size: 0;
+  /* Expand to fit content so all lines get same width */
+  width: max-content;
+  min-width: 100%;
+}
+
+.highlighted-diff .line {
+  padding: 0 0.5rem;
+  /* Restore font size collapsed above */
+  font-size: var(--font-size-base);
+}
+
+/* Override any token background colors from Shiki syntax tokens */
+.highlighted-diff .line span[style] {
+  background-color: transparent !important;
+}
+
+/* Diff line background colors */
+.highlighted-diff .line-deleted {
+  background: var(--bg-diff-deleted, rgba(248, 81, 73, 0.15)) !important;
+}
+
+.highlighted-diff .line-inserted {
+  background: var(--bg-diff-inserted, rgba(63, 185, 80, 0.15)) !important;
+}
+
+/* Word-level diff highlighting - subtle emphasis within lines */
+
+/* When nested inside already-highlighted lines, slightly more prominent */
+
+/* Diff view container with truncation */
+.diff-view-container {
+  position: relative;
+}
+
+.diff-view-container.truncated {
+  max-height: 18rem; /* ~12 lines */
+  overflow: hidden;
+}
+
+/* Fade overlay for truncated diffs */
+.diff-fade-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4rem;
+  background: linear-gradient(to bottom, transparent, var(--bg-surface));
+  pointer-events: none;
+}
+
+/* Expand button (appears on hover) */
+.diff-expand-button {
+  position: absolute;
+  bottom: 0.5rem;
+  right: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #fff);
+  border: none;
+  border-radius: 4px;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.diff-view-container:hover .diff-expand-button {
+  opacity: 1;
+}
+
+.diff-expand-button:hover {
+  background: var(--vscode-button-hoverBackground, #1177bb);
+}
+
+/* Always show expand button on mobile (no hover on touch devices) */
+@media (max-width: 600px) {
+  .diff-expand-button {
+    opacity: 1;
+  }
+}
+
+/* ==========================================================================
+   Shared Modal Component
+   ========================================================================== */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  width: 90vw;
+  max-width: 1200px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.375rem 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  border-radius: 4px 4px 0 0;
+}
+
+.modal-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.modal-close:hover {
+  background: var(--bg-hover);
+}
+
+.modal-content {
+  flex: 1;
+  overflow: auto;
+  padding: 0.5rem;
+}
+
+/* Mobile: Make modals nearly full-screen with minimal chrome */
+@media (max-width: 600px) {
+  .modal-overlay {
+    align-items: flex-end;
+  }
+
+  .modal {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 100vh; /* fallback */
+    max-height: 100dvh; /* dynamic viewport height - accounts for mobile browser chrome */
+    height: 100vh; /* fallback */
+    height: 100dvh;
+    border-radius: 0;
+    border: none;
+  }
+
+  .modal-header {
+    padding: 0.25rem 0.5rem;
+    border-radius: 0;
+  }
+
+  .modal-content {
+    padding: 0;
+  }
+
+  .modal-title {
+    font-size: 0.875rem;
+  }
+
+  .file-content-modal,
+  .diff-modal-content {
+    border-radius: 0;
+  }
+
+  .code-highlighter-plain {
+    padding: 0.25rem;
+  }
+
+  pre.code-highlighter-plain {
+    padding: 0.25rem;
+  }
+
+  .bash-modal-sections {
+    gap: 0.25rem;
+  }
+
+  .bash-modal-code {
+    border-radius: 0;
+  }
+}
+
+/* ==========================================================================
+   Process Info Modal
+   ========================================================================== */
+
+.process-info-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.5rem;
+  max-width: 500px;
+}
+
+.process-info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.process-info-section-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 0.375rem 0;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.process-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.25rem 0;
+}
+
+.process-info-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.process-info-value {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  text-align: right;
+  word-break: break-all;
+}
+
+.process-info-value.mono {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+
+.process-info-loading,
+.process-info-error,
+.process-info-muted {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  padding: 0.5rem 0;
+}
+
+.process-info-error {
+  color: var(--error-color);
+}
+
+@media (max-width: 600px) {
+  .process-info-content {
+    padding: 0.5rem;
+    max-width: 100%;
+  }
+
+  .process-info-row {
+    flex-direction: column;
+    gap: 0.125rem;
+    align-items: flex-start;
+  }
+
+  .process-info-value {
+    text-align: left;
+  }
+}
+
+/* ==========================================================================
+   Model Switch Modal
+   ========================================================================== */
+
+.model-switch-content {
+  padding: 0.5rem;
+  max-width: 400px;
+}
+
+.model-switch-loading,
+.model-switch-error {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  padding: 1rem;
+  text-align: center;
+}
+
+.model-switch-error {
+  color: var(--error-color);
+}
+
+.model-switch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.model-switch-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.model-switch-item:hover {
+  background: var(--bg-hover);
+}
+
+.model-switch-item.current {
+  background: var(--bg-hover);
+}
+
+.model-switch-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.model-switch-name {
+  font-weight: 500;
+}
+
+.model-switch-description {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  flex: 1;
+}
+
+.model-switch-badge {
+  font-size: var(--font-size-xs);
+  color: var(--accent-color);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Badges
+   ========================================================================== */
+
+.badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.badge-warning {
+  background: var(--bg-warning, rgba(154, 103, 0, 0.15));
+  color: var(--warning-color);
+}
+
+.badge-error {
+  background: var(--bg-error, rgba(207, 34, 46, 0.15));
+  color: var(--error-color);
+}
+
+.badge-info {
+  background: var(--bg-secondary);
+  color: var(--link-color);
+}
+
+.badge-muted {
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+
+.expand-button {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  margin-top: 0.5rem;
+  min-height: 44px; /* Touch target */
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.expand-button:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary, var(--text-primary));
+}
+
+.expand-button:active {
+  background: var(--bg-tertiary);
+}
+
+/* ==========================================================================
+   Fallback Renderer
+   ========================================================================== */
+
+.fallback-block {
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  overflow: hidden;
+}
+
+.fallback-type {
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.fallback-content {
+  margin: 0;
+  padding: 0.5rem;
+  font-size: var(--font-size-base);
+  overflow-x: auto;
+  background: var(--bg-code);
+}
+
+/* ==========================================================================
+   Write Tool
+   ========================================================================== */
+
+.write-tool-use {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.write-info {
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+}
+
+.write-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.write-error {
+  color: var(--error-color);
+  padding: 0.5rem;
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  border-radius: 4px;
+}
+
+/* Write Collapsed Preview */
+.write-collapsed-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  font-size: var(--font-size-base);
+  background: var(--bg-code);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  margin-top: 0.25rem;
+}
+
+.write-collapsed-preview:hover {
+  border-color: var(--border-input, var(--border-color));
+}
+
+.write-collapsed-preview:focus {
+  outline: 1px solid var(--focus-border, #007acc);
+  outline-offset: -1px;
+}
+
+.write-collapsed-error {
+  border-color: var(--error-color);
+  cursor: default;
+  padding: 0.5rem;
+}
+
+.write-preview-lines {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  padding: 0.25rem 0.5rem;
+}
+
+.write-preview-error {
+  color: var(--error-color);
+  font-size: var(--font-size-base);
+}
+
+.write-preview-content {
+  position: relative;
+  padding: 0.375rem 0.5rem;
+  max-height: 4.5rem;
+  overflow: hidden;
+}
+
+.write-preview-content pre {
+  margin: 0;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
+  font-size: var(--font-size-base);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.write-preview-truncated {
+  max-height: 4.5rem;
+}
+
+.write-preview-fade {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2rem;
+  background: linear-gradient(to bottom, transparent, var(--bg-code));
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Glob Tool
+   ========================================================================== */
+
+.glob-tool-use {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.glob-pattern {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: var(--font-size-lg);
+  color: var(--link-color);
+}
+
+.glob-path {
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+}
+
+.glob-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.glob-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.glob-count {
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+}
+
+.glob-error {
+  color: var(--error-color);
+  padding: 0.5rem;
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  border-radius: 4px;
+}
+
+.glob-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-size-lg);
+}
+
+/* ==========================================================================
+   File List (shared by Glob and Grep)
+   ========================================================================== */
+
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background: var(--bg-code);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.5rem;
+}
+
+.file-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.file-list-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.file-list-item .file-path {
+  font-weight: 500;
+}
+
+.file-list-item .file-dir {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  font-family: "SF Mono", Monaco, monospace;
+}
+
+.file-list-more {
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+  padding: 0.25rem 0.5rem;
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Grep Tool
+   ========================================================================== */
+
+.grep-tool-use {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.grep-pattern {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: var(--font-size-lg);
+  color: var(--link-color);
+}
+
+.grep-glob {
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+}
+
+.grep-path {
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+}
+
+.grep-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.grep-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.grep-count {
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+}
+
+.grep-count-summary {
+  color: var(--text-muted);
+  font-size: var(--font-size-lg);
+}
+
+.grep-content {
+  margin: 0;
+}
+
+.grep-error {
+  color: var(--error-color);
+  padding: 0.5rem;
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  border-radius: 4px;
+}
+
+.grep-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-size-lg);
+}
+
+/* ==========================================================================
+   TodoWrite Tool
+   ========================================================================== */
+
+.todo-tool-use {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.todo-summary {
+  color: var(--text-muted);
+  font-size: var(--font-size-lg);
+}
+
+.todo-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.125rem 0;
+}
+
+.todo-checkbox {
+  font-size: 1rem;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.todo-content {
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.todo-completed {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+/* Todo status colors - muted gray tones */
+.todo-status-pending .todo-checkbox {
+  color: var(--text-muted);
+}
+
+.todo-status-in-progress .todo-checkbox {
+  color: var(--text-muted);
+}
+
+.todo-status-completed .todo-checkbox {
+  color: var(--text-muted);
+}
+
+.todo-error {
+  color: var(--error-color);
+  padding: 0.5rem;
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  border-radius: 4px;
+}
+
+.todo-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-size-lg);
+}
+
+/* ==========================================================================
+   Task Tool
+   ========================================================================== */
+
+.task-tool-use {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.task-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.task-description {
+  font-weight: 500;
+  color: var(--text-secondary, var(--text-primary));
+}
+
+.task-prompt {
+  margin-top: 0.5rem;
+}
+
+.task-prompt-toggle {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  font-size: var(--font-size-sm);
+}
+
+.task-prompt-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary, var(--text-primary));
+}
+
+.task-prompt-content {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: var(--bg-code);
+  border-radius: 4px;
+  font-size: var(--font-size-base);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.task-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.task-result-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.task-stats {
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+}
+
+.task-content {
+  border-left: 2px solid var(--border-color);
+  padding-left: 1rem;
+  margin-left: 0.25rem;
+}
+
+.task-error {
+  color: var(--error-color);
+  padding: 0.5rem;
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  border-radius: 4px;
+}
+
+/* Error summary shown in collapsed task header */
+.task-error-summary {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 400px;
+  flex-shrink: 1;
+}
+
+/* Error details shown in expanded task view */
+.task-error-details {
+  padding: 0.75rem;
+}
+
+.task-error-message {
+  background: var(--bg-error, rgba(207, 34, 46, 0.08));
+  color: var(--text-primary);
+  padding: 0.75rem;
+  border-radius: 4px;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  border-left: 3px solid var(--error-color);
+}
+
+.task-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-size-lg);
+}
+
+/* Task Inline - Subtle Subagent Card */
+.task-inline {
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.task-inline.expanded {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.task-inline.status-running {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Completed tasks use default background - they should fade into background */
+
+.task-inline.status-failed,
+.task-inline.status-error {
+  background: rgba(255, 100, 100, 0.03);
+}
+
+/* Task Header - Clickable Row */
+.task-inline-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  color: inherit;
+  transition: background 0.15s;
+}
+
+.task-inline-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.task-inline-header:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.task-expand-icon {
+  color: var(--text-muted);
+  font-size: 0.625rem;
+  width: 1rem;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.task-inline.expanded .task-expand-icon {
+  color: var(--text-muted);
+}
+
+.task-inline-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-agent-type {
+  flex-shrink: 0;
+}
+
+.task-model {
+  flex-shrink: 0;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+/* Spinner Animation */
+.task-spinner {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+  color: #88aaff;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Badge for running status */
+.badge-running {
+  background: var(--bg-secondary);
+  color: var(--link-color);
+}
+
+.badge-pending {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+/* Task Inline Content - Expanded View */
+.task-inline-content {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background: transparent;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+/* Task Nested Content - Full Agent Messages */
+.task-nested-content {
+  padding: 0.75rem;
+}
+
+.task-nested-content > * + * {
+  margin-top: 0.5rem;
+}
+
+/* Loading State */
+.task-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+  border-top: 1px solid var(--border-subtle, var(--border-color));
+}
+
+/* Task Stats in Header */
+.task-stats {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Real-time context usage during streaming */
+.task-context-usage {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   WebSearch Tool
+   ========================================================================== */
+
+.websearch-tool-use {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.websearch-query {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: var(--font-size-lg);
+  color: var(--link-color);
+}
+
+.websearch-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.websearch-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.websearch-query-display {
+  color: var(--text-secondary, var(--text-muted));
+  font-style: italic;
+}
+
+.websearch-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.websearch-link-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.5rem;
+  background: var(--bg-code);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.websearch-link-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.websearch-link {
+  color: var(--link-color);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.websearch-link:hover {
+  text-decoration: underline;
+}
+
+.websearch-url {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.websearch-error {
+  color: var(--error-color);
+  padding: 0.5rem;
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  border-radius: 4px;
+}
+
+.websearch-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-size-lg);
+}
+
+/* ==========================================================================
+   WebFetch Tool
+   ========================================================================== */
+
+.webfetch-tool-use {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.webfetch-url {
+  color: var(--link-color);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.webfetch-url:hover {
+  text-decoration: underline;
+}
+
+.webfetch-prompt {
+  color: var(--text-muted);
+  font-size: var(--font-size-lg);
+}
+
+.webfetch-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.webfetch-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.webfetch-meta {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.webfetch-content {
+  margin: 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.webfetch-error {
+  color: var(--error-color);
+  padding: 0.5rem;
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  border-radius: 4px;
+}
+
+.webfetch-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-size-lg);
+}
+
+/* ==========================================================================
+   AskUserQuestion Tool
+   ========================================================================== */
+
+.question-tool-use,
+.question-result {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.question-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.question-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.question-text {
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.question-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.question-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-code);
+}
+
+.question-option:hover {
+  background: var(--bg-tertiary);
+}
+
+.question-option-selected {
+  border-color: #4a4;
+  background: rgba(68, 170, 68, 0.1);
+}
+
+.question-option-indicator {
+  color: var(--text-muted);
+  font-family: monospace;
+  flex-shrink: 0;
+}
+
+.question-option-selected .question-option-indicator {
+  color: var(--success-color);
+}
+
+.question-option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.question-option-label {
+  font-weight: 500;
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.question-option-desc {
+  font-size: var(--font-size-base);
+  color: var(--text-muted);
+}
+
+.question-error {
+  color: var(--error-color);
+  padding: 0.5rem;
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  border-radius: 4px;
+}
+
+.question-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-size-lg);
+}
+
+/* ==========================================================================
+   ExitPlanMode Tool (uses inline rendering - no tool-row wrapper)
+   ========================================================================== */
+
+.exitplan-pending {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-size-lg);
+}
+
+/* Collapsible wrapper for ExitPlanMode */
+.exitplan-collapsible {
+  margin: var(--space-1) 0;
+}
+
+.exitplan-collapsible .collapsible__content {
+  padding-left: 0;
+}
+
+/* Inline plan content - styled like regular chat text */
+.exitplan-inline {
+  font-size: var(--font-size-lg);
+  line-height: 1.5;
+}
+
+.exitplan-inline h1,
+.exitplan-inline h2,
+.exitplan-inline h3 {
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.exitplan-inline h1:first-child,
+.exitplan-inline h2:first-child,
+.exitplan-inline h3:first-child {
+  margin-top: 0;
+}
+
+.exitplan-inline h1 {
+  font-size: 1.125rem;
+}
+
+.exitplan-inline h2 {
+  font-size: 1rem;
+}
+
+.exitplan-inline h3 {
+  font-size: 0.9375rem;
+}
+
+.exitplan-inline p {
+  margin: 0.5rem 0;
+}
+
+.exitplan-inline p:first-child {
+  margin-top: 0;
+}
+
+.exitplan-inline ul,
+.exitplan-inline ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.exitplan-inline li {
+  margin: 0.25rem 0;
+}
+
+.exitplan-inline code {
+  background: var(--bg-tertiary);
+  padding: 0.125rem 0.25rem;
+  border-radius: 3px;
+  font-size: var(--font-size-base);
+}
+
+.exitplan-inline pre {
+  background: var(--bg-tertiary);
+  padding: 0.5rem;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.exitplan-inline pre code {
+  background: none;
+  padding: 0;
+}
+
+.exitplan-inline table {
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  width: 100%;
+}
+
+.exitplan-inline th,
+.exitplan-inline td {
+  border: 1px solid var(--border-color);
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+}
+
+.exitplan-inline th {
+  background: var(--bg-tertiary);
+}
+
+.exitplan-error {
+  color: var(--error-color);
+  padding: 0.5rem;
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  border-radius: 4px;
+}
+
+/* ==========================================================================
+   BashOutput Tool
+   ========================================================================== */
+
+.bashoutput-tool-use {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bashoutput-label {
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.bashoutput-id {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: var(--font-size-base);
+  color: var(--text-muted);
+  background: var(--bg-code);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+}
+
+.bashoutput-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bashoutput-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.bashoutput-status {
+  font-weight: 500;
+  font-size: var(--font-size-lg);
+}
+
+.bashoutput-command {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: var(--font-size-base);
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.bashoutput-timestamp {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.bashoutput-error {
+  color: var(--error-color);
+  padding: 0.5rem;
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  border-radius: 4px;
+}
+
+.bashoutput-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-size-lg);
+}
+
+/* Status indicators */
+.status-running {
+  color: var(--link-color);
+}
+
+.status-completed {
+  color: var(--success-color);
+}
+
+.status-failed {
+  color: var(--error-color);
+}
+
+.status-timeout {
+  color: var(--warning-color);
+}
+
+/* ==========================================================================
+   TaskOutput Tool
+   ========================================================================== */
+
+.taskoutput-tool-use {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.taskoutput-label {
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.taskoutput-id {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: var(--font-size-base);
+  color: var(--text-muted);
+  background: var(--bg-code);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+}
+
+.taskoutput-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.taskoutput-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.taskoutput-status {
+  font-weight: 500;
+  font-size: var(--font-size-lg);
+}
+
+.taskoutput-desc {
+  color: var(--text-muted);
+  font-size: var(--font-size-lg);
+}
+
+.taskoutput-task {
+  border-left: 2px solid var(--border-color);
+  padding-left: 1rem;
+  margin-left: 0.25rem;
+}
+
+.taskoutput-task-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.taskoutput-content {
+  margin: 0;
+}
+
+.taskoutput-error {
+  color: var(--error-color);
+  padding: 0.5rem;
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  border-radius: 4px;
+}
+
+.taskoutput-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-size-lg);
+}
+
+/* ==========================================================================
+   KillShell Tool
+   ========================================================================== */
+
+.killshell-tool-use {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.killshell-label {
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.killshell-id {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: var(--font-size-base);
+  color: var(--text-muted);
+  background: var(--bg-code);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+}
+
+.killshell-result {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.killshell-message {
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.killshell-error {
+  color: var(--error-color);
+  padding: 0.5rem;
+  background: var(--bg-error, rgba(207, 34, 46, 0.1));
+  border-radius: 4px;
+}
+
+.killshell-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-size-lg);
+}
+
+/* ==========================================================================
+   Badge Success (for status badges)
+   ========================================================================== */
+
+.badge-success {
+  background: var(--bg-success, rgba(26, 127, 55, 0.15));
+  color: var(--success-color);
+}
+
+/* ==========================================================================
+   Mobile Adjustments
+   ========================================================================== */
+
+@media (max-width: 600px) {
+  .code-block {
+    font-size: var(--font-size-sm);
+    padding: 0.5rem;
+  }
+
+  .diff-view {
+    font-size: var(--font-size-sm);
+  }
+
+  .file-content-with-lines {
+    font-size: var(--font-size-sm);
+  }
+
+  .tool-header {
+    font-size: 0.6875rem;
+  }
+
+  .line-numbers {
+    padding: 0.5rem 0.25rem;
+  }
+
+  .line-content {
+    padding: 0.5rem;
+  }
+}
+
+/* ==========================================================================
+   Subagent Items - messages from Task subagents
+   ========================================================================== */
+
+.subagent-item {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  padding: 0.5rem;
+  margin: 0.25rem 0;
+}
+
+.subagent-item .tool-row {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.subagent-item .tool-row-header {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* ==========================================================================
+   File Viewer
+   ========================================================================== */
+
+.file-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-surface);
+}
+
+.file-viewer-standalone {
+  min-height: 100%;
+}
+
+.file-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.file-viewer-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.file-viewer-path {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: var(--font-size-base);
+  color: var(--link-color);
+  word-break: break-all;
+}
+
+.file-viewer-meta {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.file-viewer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.file-viewer-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.file-viewer-action:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.file-viewer-action.copied {
+  color: var(--success-color);
+}
+
+.file-viewer-close {
+  margin-left: 0.5rem;
+}
+
+.file-viewer-body {
+  flex: 1;
+  overflow: auto;
+  padding: 0;
+}
+
+.file-viewer-loading,
+.file-viewer-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--text-muted);
+}
+
+.file-viewer-error {
+  color: var(--error-color);
+}
+
+/* Code display with syntax highlighting */
+.file-viewer-code {
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  background: var(--bg-code);
+  overflow-x: auto;
+}
+
+/* Syntax highlighter overrides */
+.file-viewer-code pre {
+  margin: 0 !important;
+}
+
+.file-viewer-code code {
+  font-family: inherit !important;
+}
+
+/* Remove line backgrounds from syntax highlighter themes (causes striped look) */
+.file-viewer-code code,
+.file-viewer-code code *,
+.file-viewer-code pre,
+.file-viewer-code pre * {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Server-rendered Shiki highlighting container */
+.file-viewer-code-highlighted .shiki-container {
+  padding: 0.75rem;
+}
+
+.file-viewer-code-highlighted .shiki-container pre.shiki {
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+  overflow-x: auto;
+}
+
+.file-viewer-code-highlighted .shiki-container code {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.file-viewer-truncated {
+  padding: 0.5rem 0.75rem;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+/* Modal code content containers */
+.file-content-modal,
+.diff-modal-content {
+  background: var(--bg-code);
+  border-radius: 4px;
+  overflow: auto;
+}
+
+/* Diff context expansion controls */
+.diff-context-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.diff-context-path {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-context-toggle {
+  padding: 0.25rem 0.75rem;
+  font-size: var(--font-size-base);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.diff-context-toggle:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.diff-context-toggle:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.diff-context-error {
+  color: var(--text-error);
+  font-size: var(--font-size-sm);
+}
+
+/* Plain code display (fallback and large files) */
+.code-highlighter-plain {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0.375rem;
+  margin: 0;
+  background: transparent;
+}
+
+.code-highlighter-plain .code-line-numbers {
+  text-align: right;
+  padding-right: 1em;
+  color: var(--text-dimmed);
+  user-select: none;
+  min-width: 2.5em;
+}
+
+.code-highlighter-plain .code-line-numbers > div {
+  line-height: 1.5;
+}
+
+.code-highlighter-plain .code-content {
+  margin: 0;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+
+.code-highlighter-plain .code-content code {
+  display: block;
+  white-space: pre;
+}
+
+/* Simple plain code without line numbers */
+pre.code-highlighter-plain {
+  display: block;
+  padding: 0.375rem;
+  margin: 0;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+
+pre.code-highlighter-plain code {
+  display: block;
+  white-space: pre;
+}
+
+/* Image display */
+.file-viewer-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  min-height: 200px;
+}
+
+.file-viewer-image img {
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+/* Binary file display */
+.file-viewer-binary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.file-viewer-download-btn {
+  padding: 0.5rem 1rem;
+  background: var(--primary-color);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: var(--font-size-base);
+  cursor: pointer;
+}
+
+.file-viewer-download-btn:hover {
+  filter: brightness(1.1);
+}
+
+/* Fullscreen mode */
+.file-viewer-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: var(--bg-surface);
+  border-radius: 0;
+  max-height: none;
+  height: 100vh;
+  width: 100vw;
+}
+
+.file-viewer-fullscreen .file-viewer-header {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0;
+  flex-shrink: 0;
+}
+
+.file-viewer-fullscreen .file-viewer-body {
+  flex: 1;
+  overflow: auto;
+  padding: 0;
+}
+
+.file-viewer-fullscreen .file-viewer-code {
+  padding: 0.5rem;
+}
+
+.file-viewer-fullscreen .file-viewer-image {
+  padding: 0;
+}
+
+.file-viewer-fullscreen .file-viewer-image img {
+  max-height: calc(100vh - 50px);
+}
+
+/* ==========================================================================
+   File Path Link
+   ========================================================================== */
+
+.file-path-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: inherit;
+  color: var(--vscode-textLink-foreground, #3794ff);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s;
+}
+
+.file-path-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.file-path-link-name {
+  word-break: break-all;
+}
+
+.file-path-link-line {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+/* Server-rendered file links (from markdown augments) */
+.file-link {
+  color: var(--vscode-textLink-foreground, #3794ff);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s;
+}
+
+.file-link:hover {
+  text-decoration-color: currentColor;
+}
+
+/* ==========================================================================
+   File Viewer Modal - extends base modal styles
+   ========================================================================== */
+
+.file-viewer-modal .file-viewer {
+  height: 100%;
+}
+
+/* ==========================================================================
+   File Page (Standalone)
+   ========================================================================== */
+
+.file-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-surface);
+}
+
+.file-page-error {
+  align-items: center;
+  justify-content: center;
+}
+
+.file-page-error-content {
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.file-page-error-content h1 {
+  margin: 0 0 1rem 0;
+  font-size: 1.25rem;
+  color: var(--text-primary);
+}
+
+.file-page-nav {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.file-page-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--link-color);
+  text-decoration: none;
+  font-size: var(--font-size-base);
+  padding: 0.25rem 0.5rem;
+  margin: -0.25rem -0.5rem;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.file-page-back-link:hover {
+  background: var(--bg-hover);
+}
+
+.file-page-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.file-page-content .file-viewer {
+  height: 100%;
+}
+
+.file-page-content .file-viewer-header {
+  border-radius: 0;
+}
+
+/* Mobile adjustments */
+@media (max-width: 600px) {
+  .file-viewer-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .file-viewer-actions {
+    align-self: flex-end;
+  }
+
+  .file-viewer-code {
+    font-size: var(--font-size-sm);
+  }
+}
+
+/* Markdown preview toggle */
+.markdown-view-toggle {
+  display: flex;
+  gap: 0;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.markdown-view-toggle .toggle-btn {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.markdown-view-toggle .toggle-btn:first-child {
+  border-radius: 4px 0 0 4px;
+  border-right: none;
+}
+
+.markdown-view-toggle .toggle-btn:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.markdown-view-toggle .toggle-btn:hover {
+  background: var(--bg-hover);
+}
+
+.markdown-view-toggle .toggle-btn.active {
+  background: var(--primary-color);
+  color: #fff;
+  border-color: var(--primary-color);
+}
+
+/* Markdown preview container */
+.markdown-preview {
+  overflow: auto;
+}
+
+.markdown-preview .markdown-rendered {
+  padding: 1rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.markdown-preview .markdown-rendered h1,
+.markdown-preview .markdown-rendered h2,
+.markdown-preview .markdown-rendered h3,
+.markdown-preview .markdown-rendered h4,
+.markdown-preview .markdown-rendered h5,
+.markdown-preview .markdown-rendered h6 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.markdown-preview .markdown-rendered h1:first-child,
+.markdown-preview .markdown-rendered h2:first-child,
+.markdown-preview .markdown-rendered h3:first-child {
+  margin-top: 0;
+}
+
+.markdown-preview .markdown-rendered p {
+  margin: 0.75rem 0;
+}
+
+.markdown-preview .markdown-rendered ul,
+.markdown-preview .markdown-rendered ol {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+
+.markdown-preview .markdown-rendered li {
+  margin: 0.25rem 0;
+}
+
+.markdown-preview .markdown-rendered code {
+  background: var(--bg-code);
+  padding: 0.125rem 0.25rem;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.markdown-preview .markdown-rendered pre {
+  background: var(--bg-code);
+  padding: 0.75rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+}
+
+.markdown-preview .markdown-rendered pre code {
+  background: none;
+  padding: 0;
+}
+
+.markdown-preview .markdown-rendered blockquote {
+  border-left: 3px solid var(--border-color);
+  padding-left: 1rem;
+  margin: 0.75rem 0;
+  color: var(--text-muted);
+}
+
+.markdown-preview .markdown-rendered a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+.markdown-preview .markdown-rendered a:hover {
+  text-decoration: underline;
+}
+
+.markdown-preview .markdown-rendered table {
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  width: 100%;
+}
+
+.markdown-preview .markdown-rendered th,
+.markdown-preview .markdown-rendered td {
+  border: 1px solid var(--border-color);
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.markdown-preview .markdown-rendered th {
+  background: var(--bg-secondary);
+}
+
+.markdown-preview .markdown-rendered img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Note: When "Show full context" is clicked in the diff modal, JS automatically
+   scrolls to the first .line-deleted or .line-inserted element. This uses
+   scrollIntoView({ block: "center" }) in EditRenderer.tsx. */

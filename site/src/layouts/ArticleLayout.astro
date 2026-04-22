@@ -1,0 +1,83 @@
+---
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import BaseLayout from "./BaseLayout.astro";
+
+interface Props {
+  title: string;
+  description: string;
+  date: string;
+  canonicalPath?: string;
+  publishedTime?: string;
+  ogImage?: string;
+  showPrivacyInFooter?: boolean;
+}
+
+const {
+  title,
+  description,
+  date,
+  canonicalPath,
+  publishedTime,
+  ogImage,
+  showPrivacyInFooter = true,
+} = Astro.props;
+
+const jsonLd = JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  headline: title,
+  description: description,
+  datePublished: publishedTime,
+  author: {
+    "@type": "Person",
+    name: "Kyle Graehl",
+    url: "https://kyle.graehl.org",
+  },
+  publisher: {
+    "@type": "Organization",
+    name: "Yep Anywhere",
+    url: "https://yepanywhere.com",
+  },
+  mainEntityOfPage: {
+    "@type": "WebPage",
+    "@id": new URL(Astro.url.pathname, Astro.site).href,
+  },
+});
+---
+
+<BaseLayout
+  title={title}
+  description={description}
+  ogType="article"
+  ogImage={ogImage}
+  canonicalPath={canonicalPath}
+  publishedTime={publishedTime}
+>
+  <script type="application/ld+json" set:html={jsonLd} />
+  <Header />
+
+  <main>
+    <article>
+      <div class="article-header">
+        <div class="container">
+          <h1>{title}</h1>
+          <div class="article-meta">
+            <span>{date}</span>
+            <a href="/news">Back to News</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="article-body">
+        <div class="container">
+          <div class="article-content">
+            <slot />
+          </div>
+        </div>
+      </div>
+    </article>
+  </main>
+
+  <Footer showPrivacy={showPrivacyInFooter} />
+</BaseLayout>

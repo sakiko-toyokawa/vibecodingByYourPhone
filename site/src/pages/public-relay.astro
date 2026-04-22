@@ -1,0 +1,239 @@
+---
+import ArticleLayout from "../layouts/ArticleLayout.astro";
+---
+
+<ArticleLayout
+  title="Introducing Public Relay: Supervise Claude Code from Anywhere - Yep Anywhere"
+  description="Yep Anywhere now has a free public relay. Access your Claude Code agents from your phone with end-to-end encryption. No accounts, no setup, just enable and go."
+  date="January 21, 2026"
+  publishedTime="2026-01-21"
+>
+  <p>We're excited to announce that Yep Anywhere now has a <strong>free public relay</strong> at <code>relay.yepanywhere.com</code>. This makes it easier than ever to access your Claude Code agents from your phone, tablet, or any device&mdash;no Tailscale, no port forwarding, no VPN setup required.</p>
+
+  <p>Just install Yep Anywhere, enable the relay in Settings, and you're connected from anywhere in the world. Already set up? <a href="https://yepanywhere.com/remote"><strong>Log in at yepanywhere.com/remote</strong></a>.</p>
+
+  <h2>What is Yep Anywhere?</h2>
+
+  <p>Yep Anywhere is a <strong>mobile-first web interface for Claude Code</strong>. Think of it as the VS Code Claude extension, but designed for phones and multi-session workflows.</p>
+
+  <p>The core idea: Claude runs on your dev machine (where your code lives), but you can supervise it from anywhere. Walk away from your desk and your agent keeps working. Get a push notification when it needs approval. Respond from your lock screen. Check in between meetings.</p>
+
+  <div class="screenshot-grid">
+    <div class="screenshot-item">
+      <img src="/screenshots/conversation.png" alt="Chat interface with file uploads">
+      <p>Chat with your agent</p>
+    </div>
+    <div class="screenshot-item">
+      <img src="/screenshots/approval.png" alt="Tool approval request">
+      <p>Approve tool requests</p>
+    </div>
+    <div class="screenshot-item">
+      <img src="/screenshots/navigation.png" alt="Multi-session dashboard">
+      <p>See all sessions at a glance</p>
+    </div>
+  </div>
+
+  <h2>Why We Built This</h2>
+
+  <p>Claude Code is great, but it ties you to your desk. If you're using the CLI, you need a terminal open. If you're using VS Code, you need VS Code open. Step away and you lose visibility.</p>
+
+  <p>We wanted something different:</p>
+  <ul>
+    <li><strong>Server-owned processes</strong> &mdash; Claude runs on your dev machine. Client disconnects don't interrupt work. Pick up where you left off on any device.</li>
+    <li><strong>Multi-session dashboard</strong> &mdash; See all your projects at once. No more cycling through terminal tabs or VS Code windows.</li>
+    <li><strong>Mobile supervision</strong> &mdash; Push notifications for approvals. Respond from your phone. Keep your agents productive while you're away.</li>
+    <li><strong>File uploads from anywhere</strong> &mdash; Share screenshots, images, and documents directly from your phone's camera roll.</li>
+  </ul>
+
+  <h2>How the Public Relay Works</h2>
+
+  <p>The relay solves a fundamental problem: your dev machine is behind a firewall, but you want to access it from your phone on cellular data.</p>
+
+  <p>Previously, you needed Tailscale, ngrok, port forwarding, or a VPN. Now you just enable the relay:</p>
+
+  <div class="code-block">
+    <code>npm i -g yepanywhere</code><br>
+    <code>yepanywhere</code><br>
+    <code># Open Settings &rarr; Enable "Public Relay"</code>
+  </div>
+
+  <p>Your server connects to <code>relay.yepanywhere.com</code> and gets a unique URL. Open that URL on your phone and you're in.</p>
+
+  <div class="feature-highlight">
+    <h4>End-to-End Encrypted</h4>
+    <p>All traffic is encrypted using SRP-6a key exchange and TweetNaCl. The relay can't see your code, your conversations, or your files. We only see encrypted blobs passing through.</p>
+  </div>
+
+  <p>No accounts are required. No Firebase, no database, no tracking. Your password never leaves your device&mdash;it's only used to derive encryption keys locally.</p>
+
+  <h2>Full Feature Set</h2>
+
+  <p>Beyond remote access, Yep Anywhere gives you:</p>
+
+  <ul>
+    <li><strong>Real-time streaming</strong> &mdash; Watch Claude think and work, just like in the terminal</li>
+    <li><strong>Tool approval</strong> &mdash; Approve or reject tool requests from your phone</li>
+    <li><strong>File uploads</strong> &mdash; Share images, screenshots, and documents from any device</li>
+    <li><strong>Push notifications</strong> &mdash; Get notified when your agent needs attention (uses VAPID, no third-party services)</li>
+    <li><strong>Voice input</strong> &mdash; Talk to your agents via browser speech API</li>
+    <li><strong>Session management</strong> &mdash; Star important sessions, archive old ones, filter and search</li>
+    <li><strong>Interop</strong> &mdash; See sessions started in Claude CLI or VS Code in real-time</li>
+    <li><strong>Diff viewer</strong> &mdash; Review code changes with syntax highlighting</li>
+    <li><strong>Todo tracking</strong> &mdash; See Claude's task list and progress</li>
+  </ul>
+
+  <div class="desktop-screenshots">
+    <img src="/screenshots/desktop.png" alt="Desktop view">
+    <img src="/screenshots/desktop-diff.png" alt="Desktop diff view">
+  </div>
+
+  <h2>Getting Started</h2>
+
+  <p>Installation takes about 30 seconds:</p>
+
+  <div class="code-block">
+    <code># Install from npm</code><br>
+    <code>npm i -g yepanywhere</code><br><br>
+    <code># Start the server</code><br>
+    <code>yepanywhere</code><br><br>
+    <code># Open http://localhost:3400</code><br>
+    <code># Go to Settings &rarr; Enable "Public Relay"</code><br>
+    <code># Set a username and password for remote access</code>
+  </div>
+
+  <p>Once configured, go to <a href="https://yepanywhere.com/remote"><strong>yepanywhere.com/remote</strong></a> on your phone or any device. Enter your username and password, and you're connected.</p>
+
+  <div class="cta-section" style="margin: 24px 0;">
+    <h3>Ready to Connect?</h3>
+    <p>If you've already set up your server, log in now:</p>
+    <a href="https://yepanywhere.com/remote" class="btn btn-primary">Go to Remote Login</a>
+  </div>
+
+  <h3>Requirements</h3>
+  <ul>
+    <li>Node.js 18+</li>
+    <li>Claude Code CLI installed and authenticated (or an Anthropic API key)</li>
+    <li>That's it</li>
+  </ul>
+
+  <h2>Privacy & Security</h2>
+
+  <p>We take privacy seriously:</p>
+  <ul>
+    <li><strong>End-to-end encryption</strong> &mdash; The relay can't read your data</li>
+    <li><strong>No accounts</strong> &mdash; No email, no signup, no tracking</li>
+    <li><strong>Runs locally</strong> &mdash; All your data stays on your machine</li>
+    <li><strong>Open source</strong> &mdash; <a href="https://github.com/kzahel/yepanywhere">100% MIT licensed</a>, audit it yourself</li>
+    <li><strong>Self-host option</strong> &mdash; Run your own relay if you prefer</li>
+  </ul>
+
+  <p>The only thing we store is the encrypted connection state while you're connected. When you disconnect, it's gone.</p>
+
+  <h2>What's Next</h2>
+
+  <p>We're actively developing Yep Anywhere. Some things we're working on:</p>
+  <ul>
+    <li>Remote executors &mdash; run Claude on VMs or containers via SSH</li>
+    <li>Better notification controls</li>
+    <li>Session sharing (with permission)</li>
+    <li>More agent providers (Codex, local models)</li>
+  </ul>
+
+  <p>If you have feature requests or find bugs, <a href="https://github.com/kzahel/yepanywhere/issues">open an issue on GitHub</a>.</p>
+
+  <div class="cta-section">
+    <h3>Try It Now</h3>
+    <p>Install Yep Anywhere and enable the public relay. Your dev machine in your pocket.</p>
+    <a href="/#install" class="btn btn-primary">Get Started</a>
+  </div>
+</ArticleLayout>
+
+<style>
+  .screenshot-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 24px;
+    margin: 24px 0;
+    justify-items: center;
+  }
+
+  .screenshot-item {
+    text-align: center;
+  }
+
+  .screenshot-item img {
+    width: 100%;
+    max-width: 280px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  .screenshot-item p {
+    margin-top: 12px;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
+  .desktop-screenshots {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 24px 0;
+  }
+
+  .desktop-screenshots img {
+    max-width: 100%;
+    width: 380px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  .feature-highlight {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 24px 0;
+  }
+
+  .feature-highlight h4 {
+    font-size: 16px;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+
+  .feature-highlight p {
+    margin-bottom: 0;
+  }
+
+  .cta-section {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    text-align: center;
+    margin: 40px 0;
+  }
+
+  .cta-section h3 {
+    margin-top: 0;
+    margin-bottom: 16px;
+  }
+
+  .cta-section p {
+    margin-bottom: 24px;
+  }
+
+  @media (max-width: 600px) {
+    .screenshot-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .desktop-screenshots img {
+      width: 100%;
+    }
+  }
+</style>

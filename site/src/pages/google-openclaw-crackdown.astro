@@ -1,0 +1,89 @@
+---
+import ArticleLayout from "../layouts/ArticleLayout.astro";
+---
+
+<ArticleLayout
+  title="Google Is Banning Paying Subscribers for Using OpenClaw - Yep Anywhere"
+  description="Google permanently banned hundreds of AI Pro and Ultra subscribers for using OpenClaw with Antigravity. Here's why this keeps happening and why Yep Anywhere users aren't affected."
+  date="February 23, 2026"
+  publishedTime="2026-02-23"
+>
+  <p>Google just <a href="https://discuss.ai.google.dev/t/account-restricted-without-warning-google-ai-ultra-oauth-via-openclaw/122778">permanently banned</a> hundreds of Google AI Pro ($20/mo) and Ultra ($249/mo) subscribers for using OpenClaw. No warning. No appeal path. While still charging them.</p>
+
+  <p>This is the same pattern we've been writing about since January. Here's what happened, why it matters, and why Yep Anywhere users aren't affected.</p>
+
+  <h3>What happened</h3>
+  <p>OpenClaw added support for Google's Antigravity backend &mdash; the infrastructure powering Google's first-party AI products. Users authenticated OpenClaw with their Google account via OAuth, and the tool routed coding-agent requests through Antigravity's subsidized API.</p>
+
+  <p>Google detected this and applied zero-tolerance bans. A Google employee <a href="https://x.com/_mohansolo/status/2025766889205739899">confirmed on X</a>:</p>
+
+  <blockquote>"We've been seeing a massive increase in malicious usage of the Antigravity backend that has tremendously degraded the quality of service for our users. We needed to find a path to quickly shut off access to these users that are not using the product as intended."</blockquote>
+
+  <p>The <a href="https://antigravity.google/terms">Antigravity Terms of Service (Section 6)</a> explicitly prohibits "using the Service in connection with products not provided by us." OpenClaw's plugin was literally called <code>google-antigravity-auth</code>. The <a href="https://news.ycombinator.com/item?id=47115805">Hacker News thread</a> has 478 comments and counting.</p>
+
+  <h3>The real problem: economics, not ethics</h3>
+  <p>The technical argument for the ban is straightforward. Google aggressively caches prompts for its own first-party clients &mdash; prompt caching is how they make $20/mo subscriptions viable. Third-party tools break those cache hit rates. As one <a href="https://news.ycombinator.com/item?id=47115805">HN commenter put it</a>:</p>
+
+  <blockquote>"Third-party tools break those cache hit rates, potentially increasing serving costs 5-10x per request. That's a legitimate economic concern."</blockquote>
+
+  <p>The buffet analogy from the thread is apt: you paid for all-you-can-eat, but you brought your own takeaway boxes. The restaurant has every right to kick you out. What they don't have the right to do is keep charging you after they've locked the doors.</p>
+
+  <h3>The enforcement is indefensible</h3>
+  <p>Most of the internet agrees: the ban itself is within Google's rights, but the execution is a disaster.</p>
+
+  <ul>
+    <li><strong>Zero-tolerance permanent bans</strong> on paying subscribers with no warning</li>
+    <li><strong>No graduated response</strong> &mdash; no email, no "stop doing this or else," just account gone</li>
+    <li><strong>Still charging $249/month</strong> on bricked accounts</li>
+    <li><strong>False positives</strong> &mdash; people who never used OpenClaw getting banned</li>
+    <li><strong>Kafkaesque support</strong> &mdash; departments bouncing users between each other with no escalation path</li>
+  </ul>
+
+  <p>One commenter called it "the worst customer experience I've ever seen for a trillion-dollar company." Others noted that a simple "we noticed you're using a third-party tool &mdash; please stop or switch to API access" email would have been trivially easy and infinitely more humane.</p>
+
+  <h3>A pattern, not an incident</h3>
+  <p>This isn't new. We've been tracking this exact pattern:</p>
+
+  <ul>
+    <li><strong>January 2026:</strong> Anthropic <a href="https://news.ycombinator.com/item?id=46549823">blocks third-party tools</a> that spoof Claude Code's client identity. We wrote about <a href="/tos-compliance">how YA differs from those tools</a>.</li>
+    <li><strong>February 2026:</strong> Anthropic <a href="/sdk-auth-clarification">updates legal docs</a>, causing confusion about Agent SDK usage. Clarified within hours &mdash; individual use is fine.</li>
+    <li><strong>February 2026:</strong> Google bans Antigravity/OpenClaw users. No clarification, no reversal, no functioning support.</li>
+  </ul>
+
+  <p>The direction is clear: <strong>every major AI provider will eventually crack down on tools that extract subsidized OAuth tokens to power unauthorized backends.</strong> The only question is how they handle it. Anthropic communicated. Google nuked.</p>
+
+  <h3>Where Yep Anywhere stands</h3>
+  <p>Yep Anywhere only uses official CLIs. We spawn <code>claude</code> (via the Agent SDK), <code>codex</code>, and <code>gemini</code> &mdash; the same binaries the providers ship and support. The CLI handles its own authentication, its own API calls, its own billing. We provide a UI on top.</p>
+
+  <p>This is fundamentally different from what got people banned. OpenClaw extracted OAuth tokens from consumer subscriptions and routed them through its own agent harness to hit subsidized backends. We never touch tokens. We never hit a provider API. We never impersonate a first-party client.</p>
+
+  <p>There's nothing for a provider to object to, because from their perspective, you're just using their CLI.</p>
+
+  <h3>A note on Gemini CLI</h3>
+  <p>We have experimental support for launching Gemini CLI sessions via <code>--experimental-acp</code>, and we can read existing Gemini CLI session history from disk. But honestly, Gemini CLI is rough compared to Claude Code and Codex. The session storage lives in <code>~/.gemini/tmp/</code> with hashed paths &mdash; it feels like an internal format that wasn't designed for external consumption. Write operations through ACP are unreliable. <a href="https://github.com/iOfficeAI/AionUi">AionUI</a>, another multi-agent wrapper, tried to integrate Gemini CLI and ultimately gave up &mdash; they ended up calling the <code>@google/genai</code> API directly instead, bypassing the CLI entirely.</p>
+
+  <p>We hope Google invests more in Gemini CLI. A robust official CLI is the right answer to this whole mess &mdash; it's how you give developers programmatic access without them resorting to OAuth extraction from consumer products. Claude Code and Codex got this right. Gemini CLI isn't there yet.</p>
+
+  <p>Notably, Gemini CLI sessions (<code>~/.gemini/tmp/</code>) and Antigravity sessions (<code>~/.gemini/antigravity/</code>, Protocol Buffers) are completely separate systems. We interact with the former. We have zero interaction with the latter.</p>
+
+  <h3>The right approach for developer tools</h3>
+  <p>If you're building tools on top of AI providers, there are really only two sustainable paths:</p>
+
+  <p><strong>Use official CLIs and SDKs.</strong> The provider ships a tool. You use it. Authentication, billing, and rate limits are the provider's problem. Your tool works today and keeps working when policies change, because you were never exploiting anything. This is what Yep Anywhere does.</p>
+
+  <p><strong>Use the API with your own key.</strong> Pay per-token at the published rate. More expensive than consumer subscriptions, but it's the sanctioned programmatic access path.</p>
+
+  <p>What doesn't work &mdash; what has now gotten users banned by both Anthropic and Google &mdash; is extracting OAuth tokens from subsidized consumer subscriptions and routing them through unauthorized third-party tools. The economics don't support it, the ToS prohibit it, and the providers are enforcing it.</p>
+
+  <p>There's a reason providers ship their own CLI harnesses. The harness controls prompt caching, telemetry, and context management &mdash; it's how they make flat-rate subscriptions economically viable. When a third-party tool bypasses the harness and hits the backend directly with extracted tokens, it breaks the caching assumptions the provider's pricing depends on. That's not a gray area. That's why the bans are happening.</p>
+
+  <h3>References</h3>
+  <ul>
+    <li><a href="https://news.ycombinator.com/item?id=47115805">HN: Google restricting AI Pro/Ultra subscribers for using OpenClaw</a> (576 points, 478 comments)</li>
+    <li><a href="https://discuss.ai.google.dev/t/account-restricted-without-warning-google-ai-ultra-oauth-via-openclaw/122778">Google AI Forum: Account restricted without warning</a></li>
+    <li><a href="https://discuss.ai.google.dev/t/important-reminder-antigravity-terms-of-service-section-6-recent-gemini-access-suspensions/125193">Google AI Forum: Antigravity ToS Section 6 reminder</a></li>
+    <li><a href="https://antigravity.google/terms">Antigravity Terms of Service</a></li>
+    <li><a href="/tos-compliance">Our Jan 2026 post: How we use the Claude SDK</a></li>
+    <li><a href="/sdk-auth-clarification">Our Feb 2026 post: The Agent SDK auth scare</a></li>
+  </ul>
+</ArticleLayout>

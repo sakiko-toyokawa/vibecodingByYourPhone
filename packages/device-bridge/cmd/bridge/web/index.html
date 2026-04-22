@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Emulator Bridge</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #111; color: #fff; font-family: system-ui, sans-serif; overflow: hidden; height: 100dvh; display: flex; flex-direction: column; }
+        #video-container { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+        video { max-width: 100%; max-height: 100%; object-fit: contain; touch-action: none; }
+        #status { position: fixed; top: 8px; left: 8px; font-size: 12px; font-family: monospace; color: #888; z-index: 10; pointer-events: none; }
+        .nav { display: flex; justify-content: center; gap: 12px; padding: 12px; background: #222; }
+        .nav button { padding: 10px 20px; font-size: 14px; background: #333; color: #fff; border: 1px solid #555; border-radius: 6px; cursor: pointer; touch-action: manipulation; }
+        .nav button:active { background: #555; }
+        #connect-btn { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 16px 32px; font-size: 18px; background: #2563eb; color: #fff; border: none; border-radius: 8px; cursor: pointer; z-index: 20; }
+        #connect-btn:hover { background: #1d4ed8; }
+        #connect-btn.hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div id="status">Disconnected</div>
+    <button id="connect-btn" onclick="connect()">Connect</button>
+    <div id="video-container">
+        <video id="video" autoplay playsinline muted></video>
+    </div>
+    <div class="nav">
+        <button ontouchstart="sendKey('GoBack')" onclick="sendKey('GoBack')">Back</button>
+        <button ontouchstart="sendKey('GoHome')" onclick="sendKey('GoHome')">Home</button>
+        <button ontouchstart="sendKey('AppSwitch')" onclick="sendKey('AppSwitch')">Recents</button>
+    </div>
+
+    <script>
+    let pc = null;
+    let dc = null;
+    const video = document.getElementById('video');
+    const status = document.getElementById('status');
+    const connectBtn = document.getElementById('connect-btn');
+
+    function setStatus(msg) {
+        status.textContent = msg;
+        console.log('[bridge]', msg);
+    }
+
+    async function connect() {
+        connectBtn.classList.add('hidden');
+        setStatus('Connecting...');
+
+        try {
+            // 1. Get SDP offer from server.
+            const offerRes = await fetch('/api/connect', { method: 'POST' });
+            if (!offerRes.ok) throw new Error(await offerRes.text());
+            const offerData = await offerRes.json();
+
+            // 2. Create PeerConnection.
+            pc = new RTCPeerConnection({
+                iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }]
+            });
+
+            pc.ontrack = (e) => {
+                setStatus('Video track received');
+                video.srcObject = e.streams[0];
+            };
+
+            pc.ondatachannel = (e) => {
+                dc = e.channel;
+                dc.onopen = () => setStatus('Connected');
+                dc.onclose = () => setStatus('DataChannel closed');
+            };
+
+            pc.oniceconnectionstatechange = () => {
+                const state = pc.iceConnectionState;
+                if (state === 'connected') setStatus('Connected');
+                else if (state === 'failed') setStatus('Connection failed');
+                else if (state === 'disconnected') setStatus('Disconnected');
+            };
+
+            // 3. Set remote description (server's offer).
+            await pc.setRemoteDescription({ type: offerData.type, sdp: offerData.sdp });
+
+            // 4. Create answer.
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+
+            // 5. Wait for ICE gathering to complete.
+            if (pc.iceGatheringState !== 'complete') {
+                await new Promise((resolve) => {
+                    pc.onicegatheringstatechange = () => {
+                        if (pc.iceGatheringState === 'complete') resolve();
+                    };
+                });
+            }
+
+            // 6. Send answer to server.
+            const answerRes = await fetch('/api/answer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'answer', sdp: pc.localDescription.sdp })
+            });
+            if (!answerRes.ok) throw new Error(await answerRes.text());
+
+            setStatus('Waiting for video...');
+        } catch (err) {
+            setStatus('Error: ' + err.message);
+            connectBtn.classList.remove('hidden');
+        }
+    }
+
+    // Touch handling — map to normalized coordinates on the video element.
+    function getVideoRect() {
+        const rect = video.getBoundingClientRect();
+        const videoW = video.videoWidth;
+        const videoH = video.videoHeight;
+        if (!videoW || !videoH) return rect;
+
+        // Account for object-fit: contain letterboxing.
+        const scale = Math.min(rect.width / videoW, rect.height / videoH);
+        const renderW = videoW * scale;
+        const renderH = videoH * scale;
+        return {
+            left: rect.left + (rect.width - renderW) / 2,
+            top: rect.top + (rect.height - renderH) / 2,
+            width: renderW,
+            height: renderH,
+        };
+    }
+
+    function mapTouches(e) {
+        const rect = getVideoRect();
+        return Array.from(e.touches).map(t => ({
+            id: t.identifier,
+            x: Math.max(0, Math.min(1, (t.clientX - rect.left) / rect.width)),
+            y: Math.max(0, Math.min(1, (t.clientY - rect.top) / rect.height)),
+            pressure: t.force || 1.0,
+        }));
+    }
+
+    function sendTouches(touches) {
+        if (dc && dc.readyState === 'open') {
+            dc.send(JSON.stringify({ type: 'touch', touches }));
+        }
+    }
+
+    video.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        sendTouches(mapTouches(e));
+    }, { passive: false });
+
+    video.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        sendTouches(mapTouches(e));
+    }, { passive: false });
+
+    video.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        // Send release for all changed touches.
+        const rect = getVideoRect();
+        const releases = Array.from(e.changedTouches).map(t => ({
+            id: t.identifier,
+            x: Math.max(0, Math.min(1, (t.clientX - rect.left) / rect.width)),
+            y: Math.max(0, Math.min(1, (t.clientY - rect.top) / rect.height)),
+            pressure: 0,
+        }));
+        sendTouches(releases);
+    }, { passive: false });
+
+    // Mouse fallback for desktop testing.
+    let mouseDown = false;
+    video.addEventListener('mousedown', (e) => {
+        mouseDown = true;
+        const rect = getVideoRect();
+        sendTouches([{
+            id: 0,
+            x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+            y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
+            pressure: 1.0,
+        }]);
+    });
+
+    video.addEventListener('mousemove', (e) => {
+        if (!mouseDown) return;
+        const rect = getVideoRect();
+        sendTouches([{
+            id: 0,
+            x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+            y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
+            pressure: 1.0,
+        }]);
+    });
+
+    video.addEventListener('mouseup', (e) => {
+        mouseDown = false;
+        const rect = getVideoRect();
+        sendTouches([{
+            id: 0,
+            x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+            y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
+            pressure: 0,
+        }]);
+    });
+
+    function sendKey(key) {
+        if (dc && dc.readyState === 'open') {
+            dc.send(JSON.stringify({ type: 'key', key }));
+        }
+    }
+    </script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+---
+import ArticleLayout from "../layouts/ArticleLayout.astro";
+---
+
+<ArticleLayout
+  title="Mobile Dev Without a Desktop: Remote Device Control"
+  description="Stream and control Android devices and iOS Simulators from your phone over WebRTC. Complete mobile development for both platforms, all from your phone."
+  date="March 3, 2026"
+  publishedTime="2026-03-03"
+  ogImage="/screenshots/device-stream.png"
+>
+  <p><a href="https://yepanywhere.com">Yep Anywhere</a> lets you supervise AI coding agents from your phone. But when those agents are building mobile apps, you still have to walk to your computer to see the result. Now you don't. Yep streams your Android devices, Android emulators, and iOS Simulators to your phone &mdash; H264 over WebRTC, full touch input. Complete mobile development for both platforms, all from your phone.</p>
+
+  <div class="video-embed">
+    <iframe
+      src="https://www.youtube.com/embed/l-cU3wgcCTA?controls=0&modestbranding=1&rel=0&showinfo=0"
+      title="Remote device control demo"
+      style="border:none;"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+      allowfullscreen
+    ></iframe>
+  </div>
+
+  <p>Spot-check a layout, test a user flow, verify a fix. Android devices connect via ADB, iOS Simulators via <code>simctl</code>. You see the screen on your phone. Tap on your phone, the device responds.</p>
+
+  <h2>How it works</h2>
+
+  <div class="screenshot-row">
+    <figure>
+      <img src="/screenshots/device-sidebar.png" alt="Yep Anywhere sidebar showing Devices tab alongside sessions, projects, and agents" loading="lazy" />
+      <figcaption>Devices in the sidebar</figcaption>
+    </figure>
+    <figure>
+      <img src="/screenshots/device-list.png" alt="Device list showing Android emulators, ChromeOS devices, and iOS Simulators" loading="lazy" />
+      <figcaption>Auto-discovered devices</figcaption>
+    </figure>
+    <figure>
+      <img src="/screenshots/device-stream.png" alt="Live stream of an Android emulator showing the home screen with touch controls" loading="lazy" />
+      <figcaption>Android stream</figcaption>
+    </figure>
+    <figure>
+      <img src="/screenshots/device-stream-ios.png" alt="Live stream of an iOS Simulator running an app, controlled from a phone" loading="lazy" />
+      <figcaption>iOS Simulator stream</figcaption>
+    </figure>
+    <figure>
+      <img src="/screenshots/device-settings.png" alt="Stream quality settings showing frame rate, resolution, and adaptive quality controls" loading="lazy" />
+      <figcaption>Quality &amp; performance settings</figcaption>
+    </figure>
+  </div>
+
+  <p>Video is peer-to-peer WebRTC &mdash; encrypted, low latency. Signaling goes through Yep's relay, but video and touch data flow directly between your dev machine and your phone. No relay bandwidth cost.</p>
+
+  <p>A Go sidecar (Pion) handles WebRTC and H264 encoding. It's a single pre-built binary, compiled on GitHub Actions for each platform &mdash; no native dependencies, no libdatachannel, no system WebRTC libraries to install. The binary downloads automatically on first connect and only when you actually use device control, so Yep Anywhere stays lightweight. For Android, it talks to your device over ADB. For iOS Simulators, it uses <code>simctl</code> for input and screen capture. Frames are encoded with x264 (<code>ultrafast</code>/<code>zerolatency</code>), hardware-decoded on your phone. Touch and nav buttons go over the WebRTC data channel. Multi-touch and pressure work natively.</p>
+
+  <p>Adaptive quality monitors packet loss and drops FPS before you notice stutter, recovers when the connection stabilizes.</p>
+
+  <h2>What's next: agents that can see</h2>
+
+  <p>We're adding accessibility tree support so agents can read what's on screen, tap elements by semantic label, and verify their own work. Build a feature, install the APK or launch the iOS Simulator, navigate to the screen, confirm the list loads and the back button works &mdash; without a human in the loop.</p>
+
+  <p>Existing device MCP servers have high latency per action &mdash; screenshot, parse, decide, tap, repeat. We're prioritizing speed: direct ADB and <code>simctl</code> access, accessibility tree for structured interactions, screenshots only when you need visual verification.</p>
+
+  <p>The agent and the device are on the same machine. No network hop for input, no cloud round-trip for screenshots. The sidecar is already there.</p>
+
+  <h2>Try it</h2>
+
+  <p>Device control ships in Yep Anywhere today. Enable Device Bridge in Settings, and any Android emulator, Android device, or iOS Simulator shows up automatically in the Devices tab. iOS support is for Simulators running on your Mac &mdash; real iOS devices are not yet supported. It's still in beta &mdash; expect rough edges.</p>
+
+  <p><a href="/#install" class="cta-link">Install Yep Anywhere</a></p>
+</ArticleLayout>
+
+<style>
+  .video-embed {
+    position: relative;
+    width: 100%;
+    max-width: 360px;
+    margin: 24px auto;
+    aspect-ratio: 9 / 16;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #000;
+  }
+
+  .video-embed iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+
+  .screenshot-row {
+    display: flex;
+    gap: 16px;
+    margin: 24px 0;
+    justify-content: center;
+  }
+
+  .screenshot-row figure {
+    flex: 1;
+    max-width: 200px;
+    margin: 0;
+    text-align: center;
+  }
+
+  .screenshot-row img {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+
+  .screenshot-row figcaption {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 8px;
+  }
+
+  @media (max-width: 700px) {
+    .screenshot-row {
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .screenshot-row figure {
+      max-width: 280px;
+    }
+  }
+
+  .cta-link {
+    display: inline-block;
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 16px;
+    text-decoration: none;
+    margin-top: 8px;
+  }
+
+  .cta-link:hover {
+    text-decoration: underline;
+  }
+</style>

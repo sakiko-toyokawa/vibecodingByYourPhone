@@ -1,0 +1,83 @@
+export type {
+  Connection,
+  StreamHandlers,
+  Subscription,
+  UploadOptions,
+} from "./types";
+export {
+  WebSocketCloseError,
+  RelayReconnectRequiredError,
+  SubscriptionError,
+  isNonRetryableError,
+  NON_RETRYABLE_CLOSE_CODES,
+} from "./types";
+export {
+  ConnectionManager,
+  type ConnectionState,
+  type ConnectionManagerConfig,
+  type ReconnectFn,
+  type SendPingFn,
+  type TimerInterface,
+  type VisibilityInterface,
+} from "./ConnectionManager";
+export { DirectConnection, directConnection } from "./DirectConnection";
+export {
+  WebSocketConnection,
+  getWebSocketConnection,
+} from "./WebSocketConnection";
+// SecureConnection is NOT re-exported here to avoid eagerly loading tssrp6a,
+// which crashes in non-secure contexts (HTTP on LAN IPs) because crypto.subtle
+// is unavailable. Import directly from "./SecureConnection" where needed.
+
+import type { Connection } from "./types";
+
+/**
+ * Check if this is the remote client build.
+ *
+ * The remote client is a statically-built version that MUST use SecureConnection
+ * for all API requests. This is determined at build time via VITE_IS_REMOTE_CLIENT.
+ *
+ * This is different from isRemoteMode() which checks runtime state.
+ * isRemoteClient() is a static check based on how the app was built.
+ */
+export function isRemoteClient(): boolean {
+  return import.meta.env.VITE_IS_REMOTE_CLIENT === true;
+}
+
+/**
+ * Global connection for remote mode.
+ *
+ * When set, this connection is used for all API calls instead of
+ * the default DirectConnection/WebSocketConnection.
+ *
+ * Set this after successful SRP authentication in remote mode.
+ */
+let globalConnection: Connection | null = null;
+
+/**
+ * Set the global connection (for remote mode).
+ */
+export function setGlobalConnection(connection: Connection | null): void {
+  globalConnection = connection;
+}
+
+/**
+ * Get the global connection if set.
+ */
+export function getGlobalConnection(): Connection | null {
+  return globalConnection;
+}
+
+/**
+ * Check if running in remote mode (global connection is set).
+ */
+export function isRemoteMode(): boolean {
+  return globalConnection !== null;
+}
+
+/**
+ * Singleton ConnectionManager for the app.
+ * Both ActivityBus and useSessionStream feed events into this instance.
+ */
+import { ConnectionManager } from "./ConnectionManager";
+export const connectionManager = new ConnectionManager();

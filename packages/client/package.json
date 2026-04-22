@@ -1,0 +1,45 @@
+{
+  "name": "@yep-anywhere/client",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node ../../scripts/run-with-safe-home.js vite",
+    "dev:remote": "node ../../scripts/run-with-safe-home.js vite --config vite.config.remote.ts",
+    "build": "tsc && vite build",
+    "build:stable": "tsc && vite build --base /_stable/ --outDir dist-stable",
+    "build:remote": "tsc && vite build --config vite.config.remote.ts",
+    "preview:remote": "vite preview --config vite.config.remote.ts",
+    "test": "node ../../scripts/run-with-safe-home.js vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:android": "playwright test --grep \"streams physical Android\"",
+    "test:e2e:android:soak": "YEP_E2E_ANDROID_LONG_STREAM=true YEP_E2E_ANDROID_LONG_STREAM_MS=${YEP_E2E_ANDROID_LONG_STREAM_MS:-120000} playwright test --grep \"long duration\"",
+    "test:e2e:emulator:apk": "DEVICE_BRIDGE_USE_APK_FOR_EMULATOR=true ANDROID_DEVICE_SERVER_APK=${ANDROID_DEVICE_SERVER_APK:-../android-device-server/app/build/outputs/apk/release/yep-device-server.apk} playwright test --grep \"APK transport override\"",
+    "test:e2e:emulator:apk:adaptive": "DEVICE_BRIDGE_USE_APK_FOR_EMULATOR=true ANDROID_DEVICE_SERVER_APK=${ANDROID_DEVICE_SERVER_APK:-../android-device-server/app/build/outputs/apk/release/yep-device-server.apk} YEP_BRIDGE_TEST_ADAPTIVE_PROFILE_CYCLE=true E2E_SERVER_LOG_LEVEL=info E2E_SERVER_FILE_LOG_LEVEL=info playwright test --grep \"adaptive profile downshift/upshift events via APK transport override\"",
+    "test:e2e:chromeos": "CHROMEOS_HOST=${CHROMEOS_HOST:-chromeroot} playwright test --grep \"streams ChromeOS\""
+  },
+  "dependencies": {
+    "@yep-anywhere/shared": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.11.0",
+    "tssrp6a": "^3.0.0",
+    "tweetnacl": "^1.0.3",
+    "uqr": "^0.1.2",
+    "zod": "^4.3.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@testing-library/react": "^16.1.0",
+    "@types/hast": "^3.0.4",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "vitest": "^2.1.8"
+  }
+}

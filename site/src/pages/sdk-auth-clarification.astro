@@ -1,0 +1,60 @@
+---
+import ArticleLayout from "../layouts/ArticleLayout.astro";
+---
+
+<ArticleLayout
+  title="The Agent SDK Auth Scare (and Why You're Fine) - Yep Anywhere"
+  description="Anthropic updated their legal docs and the community panicked. Here's what actually changed, what the docs actually say, and what it means for Agent SDK users."
+  date="February 19, 2026"
+  publishedTime="2026-02-19"
+>
+  <p>On February 19, 2026, Anthropic updated their <a href="https://code.claude.com/docs/en/legal-and-compliance">Legal and compliance</a> docs for Claude Code. Within hours, Hacker News had <a href="https://news.ycombinator.com/item?id=47069299">160+ comments</a>, X was on fire, and developers were asking whether using the Agent SDK with a Max subscription was about to get them banned.</p>
+
+  <p>Here's what actually happened, what the docs actually say, and what it means for Yep Anywhere users.</p>
+
+  <h3>What the docs say</h3>
+  <p>The updated page has two relevant sections, back to back:</p>
+
+  <p><strong>Usage policy:</strong></p>
+  <blockquote>"Advertised usage limits for Pro and Max plans assume ordinary, individual usage of Claude Code <strong>and the Agent SDK</strong>."</blockquote>
+
+  <p><strong>Authentication and credential use:</strong></p>
+  <blockquote>"OAuth authentication (used with Free, Pro, and Max plans) is intended exclusively for Claude Code and Claude.ai. Using OAuth tokens obtained through Claude Free, Pro, or Max accounts in any other product, tool, or service &mdash; <strong>including the Agent SDK</strong> &mdash; is not permitted."</blockquote>
+
+  <p>Read those paragraphs in order. The first says your subscription covers the Agent SDK. The next says using your subscription's OAuth tokens with the Agent SDK is not permitted. The community's reaction was understandable.</p>
+
+  <h3>The clarification</h3>
+  <p>Thariq, a product leader on Claude Code at Anthropic, <a href="https://x.com/trq212/status/2024212378402095389">posted on X</a> within hours:</p>
+
+  <blockquote>"Apologies, this was a docs clean up we rolled out that's caused some confusion. Nothing is changing about how you can use the Agent SDK and MAX subscriptions!"</blockquote>
+
+  <p>Multiple HN commenters noted that a tweet doesn't override written ToS. They're right &mdash; Anthropic should fix the docs. But the intent is clear: <strong>individual use of the Agent SDK with your subscription is fine.</strong> The restriction targets third-party developers routing other people's subscription credentials through their services.</p>
+
+  <h3>What this means for Yep Anywhere</h3>
+  <p>Yep Anywhere falls squarely under individual use:</p>
+
+  <ul>
+    <li><strong>You run it on your own machine</strong>, for yourself</li>
+    <li><strong>You authenticate via your own Claude CLI</strong> &mdash; we don't handle, intercept, or proxy OAuth tokens</li>
+    <li><strong>We use the official Agent SDK</strong> (<code>@anthropic-ai/claude-agent-sdk</code>) without modification</li>
+    <li><strong>We don't spoof client identity</strong> or manipulate headers</li>
+    <li><strong>We're not a third-party service</strong> routing your credentials &mdash; we're a local interface to your own Claude Code sessions</li>
+  </ul>
+
+  <p>We covered this in detail in our <a href="/tos-compliance">January compliance post</a> when the earlier wave of third-party tools got blocked. The core facts haven't changed.</p>
+
+  <h3>The bigger picture</h3>
+  <p>The <a href="https://news.ycombinator.com/item?id=47069299">HN thread</a> is worth reading. The community frustration isn't really about Yep Anywhere or any specific tool &mdash; it's about contradictory docs creating uncertainty for developers who want to build on Claude's platform.</p>
+
+  <p>The tools that got blocked (OpenCode, Crush, etc.) were spoofing client identity to freeload on subscription pricing. That's clearly different from an individual using the official SDK for personal tooling. But when the written terms don't distinguish between the two, everyone gets nervous.</p>
+
+  <p>We'll update this post if Anthropic clarifies their docs further. In the meantime: you're fine. Use the Agent SDK with your subscription. Build things. Anthropic wants you to &mdash; that's why the SDK exists.</p>
+
+  <h3>References</h3>
+  <ul>
+    <li><a href="https://code.claude.com/docs/en/legal-and-compliance">Anthropic Legal and Compliance docs</a></li>
+    <li><a href="https://x.com/trq212/status/2024212378402095389">Thariq's clarification on X</a></li>
+    <li><a href="https://news.ycombinator.com/item?id=47069299">HN discussion thread (160+ comments)</a></li>
+    <li><a href="/tos-compliance">Our January compliance post</a></li>
+  </ul>
+</ArticleLayout>

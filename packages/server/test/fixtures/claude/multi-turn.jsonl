@@ -1,0 +1,6 @@
+{"type":"system","subtype":"init","session_id":"claude-fixture-003","cwd":"/test"}
+{"type":"user","session_id":"claude-fixture-003","message":{"role":"user","content":"What is 2+2?"}}
+{"type":"assistant","session_id":"claude-fixture-003","message":{"role":"assistant","content":"2 + 2 = 4"}}
+{"type":"user","session_id":"claude-fixture-003","message":{"role":"user","content":"And what about 3+3?"}}
+{"type":"assistant","session_id":"claude-fixture-003","message":{"role":"assistant","content":"3 + 3 = 6"}}
+{"type":"result","session_id":"claude-fixture-003"}

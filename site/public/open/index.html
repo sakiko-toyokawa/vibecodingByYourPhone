@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Opening Yep Anywhere...</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #0d0d0d; color: #e5e5e5; }
+    .container { text-align: center; padding: 2rem; }
+    a { color: #16a34a; }
+  </style>
+  <script>
+    // If the native app is installed, Android/iOS will intercept this URL
+    // via app links before this page loads. If we get here, redirect to
+    // the web remote client with hash credentials for auto-login.
+    const params = new URLSearchParams(window.location.search);
+    const u = params.get('u');
+    const p = params.get('p');
+    const r = params.get('r') || '';
+    if (u && p) {
+      const hash = 'u=' + encodeURIComponent(u) + '&p=' + encodeURIComponent(p) + (r ? '&r=' + encodeURIComponent(r) : '');
+      window.location.href = '/remote/login/relay#' + hash;
+    }
+  </script>
+</head>
+<body>
+  <div class="container">
+    <p>Redirecting to Yep Anywhere...</p>
+    <p><a href="/remote">Open web client</a></p>
+  </div>
+<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "692e83e36aa64496b6dc27e0d9700ee0"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
