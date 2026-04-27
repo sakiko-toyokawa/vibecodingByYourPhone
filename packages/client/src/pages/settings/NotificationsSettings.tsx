@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react";
 import { BrowserNotificationToggle } from "../../components/BrowserNotificationToggle";
 import { PushNotificationToggle } from "../../components/PushNotificationToggle";
 import { useBrowserNotifications } from "../../hooks/useBrowserNotifications";
@@ -9,6 +10,7 @@ import {
   useSubscribedDevices,
 } from "../../hooks/useSubscribedDevices";
 import { useI18n } from "../../i18n";
+import { UI_KEYS } from "../../lib/storageKeys";
 
 /**
  * Unified device that merges subscribed device info with connection status.
@@ -182,6 +184,36 @@ export function NotificationsSettings() {
   const hasSubscriptions = subscribedDevices.length > 0;
   const isLoading = devicesLoading || connectionsLoading;
 
+  // Tauri native notification setting (shared between desktop and mobile)
+  const isDesktopTauri =
+    typeof window !== "undefined" &&
+    (window as Window & { __DESKTOP_TOKEN__?: string }).__DESKTOP_TOKEN__ !==
+      undefined;
+  const isMobileTauri =
+    typeof window !== "undefined" &&
+    (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !==
+      undefined &&
+    (window as Window & { __DESKTOP_TOKEN__?: string }).__DESKTOP_TOKEN__ ===
+      undefined;
+  const [desktopNotifyEnabled, setDesktopNotifyEnabled] = useState(() => {
+    try {
+      return (
+        localStorage.getItem(UI_KEYS.desktopNativeNotifications) === "true"
+      );
+    } catch {
+      return false;
+    }
+  });
+  const toggleDesktopNotify = useCallback(() => {
+    const next = !desktopNotifyEnabled;
+    try {
+      localStorage.setItem(UI_KEYS.desktopNativeNotifications, String(next));
+    } catch {
+      // Ignore storage errors
+    }
+    setDesktopNotifyEnabled(next);
+  }, [desktopNotifyEnabled]);
+
   // Merge subscribed and connected devices
   const unifiedDevices = mergeDevices(
     subscribedDevices,
@@ -269,6 +301,48 @@ export function NotificationsSettings() {
           </p>
           <div className="settings-group">
             <BrowserNotificationToggle />
+            {isDesktopTauri && (
+              <div className="settings-item">
+                <div className="settings-item-info">
+                  <strong>{t("desktopNativeNotifyTitle")}</strong>
+                  <p>{t("desktopNativeNotifyDescription")}</p>
+                </div>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={desktopNotifyEnabled}
+                    onChange={toggleDesktopNotify}
+                  />
+                  <span className="toggle-slider" />
+                </label>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Mobile native notifications - Tauri plugin (only on mobile Tauri app) */}
+      {isMobile && isMobileTauri && (
+        <section className="settings-section">
+          <h2>{t("notificationsNativeTitle")}</h2>
+          <p className="settings-section-description">
+            {t("notificationsNativeDescription")}
+          </p>
+          <div className="settings-group">
+            <div className="settings-item">
+              <div className="settings-item-info">
+                <strong>{t("mobileNativeNotifyTitle")}</strong>
+                <p>{t("mobileNativeNotifyDescription")}</p>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={desktopNotifyEnabled}
+                  onChange={toggleDesktopNotify}
+                />
+                <span className="toggle-slider" />
+              </label>
+            </div>
           </div>
         </section>
       )}
