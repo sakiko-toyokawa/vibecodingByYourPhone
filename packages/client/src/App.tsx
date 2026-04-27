@@ -8,6 +8,8 @@ import { InboxProvider } from "./contexts/InboxContext";
 import { SchemaValidationProvider } from "./contexts/SchemaValidationContext";
 import { ToastProvider } from "./contexts/ToastContext";
 import { useActivityBusConnection } from "./hooks/useActivityBusConnection";
+import { useDesktopNativeNotifications } from "./hooks/useDesktopNativeNotifications";
+import { useMobileNativeNotifications } from "./hooks/useMobileNativeNotifications";
 import { useNeedsAttentionBadge } from "./hooks/useNeedsAttentionBadge";
 import { useSyncNotifyInAppSetting } from "./hooks/useNotifyInApp";
 import { useOnboarding } from "./hooks/useOnboarding";
@@ -25,6 +27,12 @@ interface Props {
 function AppContent({ children }: Props) {
   // Manage SSE connection based on auth state (prevents 401s on login page)
   useActivityBusConnection();
+
+  // Desktop native notifications when AI output completes
+  useDesktopNativeNotifications();
+
+  // Mobile native notifications when AI completes or needs approval
+  useMobileNativeNotifications();
 
   // Client-side log collection for connection diagnostics
   useEffect(() => initClientLogCollection(), []);
