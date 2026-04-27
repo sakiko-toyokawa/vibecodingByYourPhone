@@ -3,30 +3,25 @@ use tauri_plugin_deep_link::DeepLinkExt;
 
 #[cfg(target_os = "android")]
 use jni::objects::JValue;
-#[cfg(target_os = "android")]
-use jni::signature::{JavaType, Primitive};
 
 #[tauri::command]
 fn set_system_bars(window: tauri::WebviewWindow, light: bool) {
     #[cfg(target_os = "android")]
     {
         let _ = window.with_webview(move |webview| {
-            let env = webview.env();
-            let activity = webview.activity();
-            let method = env
-                .get_method_id(activity, "setSystemBars", "(Z)V")
-                .expect("setSystemBars method not found");
-            env.call_method(
-                activity,
-                method,
-                JavaType::Primitive(Primitive::Void),
-                &[JValue::Bool(if light {
-                    jni::sys::JNI_TRUE
-                } else {
-                    jni::sys::JNI_FALSE
-                })],
-            )
-            .expect("setSystemBars call failed");
+            webview.jni_handle().exec(move |env, activity, _webview| {
+                env.call_method(
+                    activity,
+                    "setSystemBars",
+                    "(Z)V",
+                    &[JValue::Bool(if light {
+                        jni::sys::JNI_TRUE
+                    } else {
+                        jni::sys::JNI_FALSE
+                    })],
+                )
+                .expect("setSystemBars call failed");
+            });
         });
     }
 }
@@ -51,10 +46,17 @@ fn deep_link_to_hash(url_str: &str) -> Option<String> {
     Some(format!("#{query}"))
 }
 
+fn build_hash_assignment_script(hash: &str) -> Option<String> {
+    let serialized = serde_json::to_string(hash).ok()?;
+    Some(format!("window.location.hash = {serialized};"))
+}
+
 fn handle_deep_link(app: &tauri::AppHandle, url_str: &str) {
     if let Some(hash) = deep_link_to_hash(url_str) {
         if let Some(window) = app.get_webview_window("main") {
-            let _ = window.eval(&format!("window.location.hash = '{hash}';"));
+            if let Some(script) = build_hash_assignment_script(&hash) {
+                let _ = window.eval(&script);
+            }
         }
     }
 }
@@ -64,6 +66,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![set_system_bars, exit_app])
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // Handle deep links that launched the app
             if let Ok(Some(urls)) = app.deep_link().get_current() {
