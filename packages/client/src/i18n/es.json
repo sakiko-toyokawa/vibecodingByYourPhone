@@ -568,6 +568,8 @@
   "browserToggleEnable": "Activar",
   "browserToggleTestNotification": "Notificación de prueba",
   "browserToggleTestBody": "Las notificaciones de escritorio están funcionando.",
+  "desktopNativeNotifyTitle": "AI Complete Notification",
+  "desktopNativeNotifyDescription": "Show a system notification with sound when AI finishes generating a response.",
   "remoteAccessConnectedTitle": "Acceso remoto",
   "remoteAccessConnectedDescription": "Estás conectado a un servidor remoto mediante relay.",
   "remoteAccessCurrentHostTitle": "Host actual",
@@ -882,5 +884,9 @@
   "remoteSetupErrorPasswordMismatch": "Las contraseñas no coinciden",
   "remoteSetupErrorCustomRelayRequired": "La URL personalizada del relay es obligatoria",
   "remoteSetupErrorSaveFailed": "Error al guardar",
-  "remoteSetupErrorUpdateFailed": "Error al actualizar"
+  "remoteSetupErrorUpdateFailed": "Error al actualizar",
+  "notificationsNativeTitle": "Native Notifications",
+  "notificationsNativeDescription": "Get system notifications when AI completes a response or needs your approval.",
+  "mobileNativeNotifyTitle": "AI Notifications",
+  "mobileNativeNotifyDescription": "Show a notification when AI finishes replying or asks for confirmation."
 }

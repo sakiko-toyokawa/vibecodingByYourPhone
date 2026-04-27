@@ -191,8 +191,8 @@ export function NotificationsSettings() {
       undefined;
   const isMobileTauri =
     typeof window !== "undefined" &&
-    (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !==
-      undefined &&
+    (window as Window & { __TAURI_INTERNALS__?: unknown })
+      .__TAURI_INTERNALS__ !== undefined &&
     (window as Window & { __DESKTOP_TOKEN__?: string }).__DESKTOP_TOKEN__ ===
       undefined;
   const [desktopNotifyEnabled, setDesktopNotifyEnabled] = useState(() => {

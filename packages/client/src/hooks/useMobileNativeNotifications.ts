@@ -77,65 +77,59 @@ export function useMobileNativeNotifications(): void {
   const lastNotifyTime = useRef<Map<string, number>>(new Map());
   const sessionTitles = useRef<Map<string, string>>(new Map());
 
-  const handleProcessStateChange = useCallback(
-    (event: ProcessStateEvent) => {
-      // Only run inside Tauri mobile app
-      if (!isMobileTauriApp()) {
-        return;
-      }
+  const handleProcessStateChange = useCallback((event: ProcessStateEvent) => {
+    // Only run inside Tauri mobile app
+    if (!isMobileTauriApp()) {
+      return;
+    }
 
-      // Check setting
-      const settingEnabled = getNotificationSetting();
-      if (!settingEnabled) {
-        return;
-      }
+    // Check setting
+    const settingEnabled = getNotificationSetting();
+    if (!settingEnabled) {
+      return;
+    }
 
-      const previous = lastActivityMap.current.get(event.sessionId);
-      const current = event.activity;
-      lastActivityMap.current.set(event.sessionId, current);
+    const previous = lastActivityMap.current.get(event.sessionId);
+    const current = event.activity;
+    lastActivityMap.current.set(event.sessionId, current);
 
-      // Skip if app is visible (user is actively looking at it)
-      if (document.visibilityState === "visible") {
-        return;
-      }
+    // Skip if app is visible (user is actively looking at it)
+    if (document.visibilityState === "visible") {
+      return;
+    }
 
-      // Debounce: don't notify the same session within 5 seconds
-      const now = Date.now();
-      const lastTime = lastNotifyTime.current.get(event.sessionId) ?? 0;
-      if (now - lastTime < 5000) {
-        return;
-      }
+    // Debounce: don't notify the same session within 5 seconds
+    const now = Date.now();
+    const lastTime = lastNotifyTime.current.get(event.sessionId) ?? 0;
+    if (now - lastTime < 5000) {
+      return;
+    }
 
-      const title = sessionTitles.current.get(event.sessionId) || "Yep Anywhere";
+    const title = sessionTitles.current.get(event.sessionId) || "Yep Anywhere";
 
-      // Detect AI completion: in-turn -> idle
-      if (previous === "in-turn" && current === "idle") {
-        lastNotifyTime.current.set(event.sessionId, now);
-        void sendNativeNotification(title, "AI 已生成新的回复");
-        return;
-      }
+    // Detect AI completion: in-turn -> idle
+    if (previous === "in-turn" && current === "idle") {
+      lastNotifyTime.current.set(event.sessionId, now);
+      void sendNativeNotification(title, "AI 已生成新的回复");
+      return;
+    }
 
-      // Detect waiting for human input: any -> waiting-input
-      if (current === "waiting-input") {
-        lastNotifyTime.current.set(event.sessionId, now);
-        const body =
-          event.pendingInputType === "tool-approval"
-            ? "AI 请求执行工具，需要你的确认"
-            : "AI 向你提出问题，需要你的回复";
-        void sendNativeNotification(title, body);
-      }
-    },
-    [],
-  );
+    // Detect waiting for human input: any -> waiting-input
+    if (current === "waiting-input") {
+      lastNotifyTime.current.set(event.sessionId, now);
+      const body =
+        event.pendingInputType === "tool-approval"
+          ? "AI 请求执行工具，需要你的确认"
+          : "AI 向你提出问题，需要你的回复";
+      void sendNativeNotification(title, body);
+    }
+  }, []);
 
-  const handleSessionUpdated = useCallback(
-    (event: SessionUpdatedEvent) => {
-      if (event.title !== undefined && event.title !== null) {
-        sessionTitles.current.set(event.sessionId, event.title);
-      }
-    },
-    [],
-  );
+  const handleSessionUpdated = useCallback((event: SessionUpdatedEvent) => {
+    if (event.title !== undefined && event.title !== null) {
+      sessionTitles.current.set(event.sessionId, event.title);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isMobileTauriApp()) return;

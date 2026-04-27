@@ -568,6 +568,8 @@
   "browserToggleEnable": "有効化",
   "browserToggleTestNotification": "テスト通知",
   "browserToggleTestBody": "デスクトップ通知が動作しています！",
+  "desktopNativeNotifyTitle": "AI Complete Notification",
+  "desktopNativeNotifyDescription": "Show a system notification with sound when AI finishes generating a response.",
   "remoteAccessConnectedTitle": "リモートアクセス",
   "remoteAccessConnectedDescription": "リレー経由でリモートサーバーに接続しています。",
   "remoteAccessCurrentHostTitle": "現在のホスト",
@@ -882,5 +884,9 @@
   "remoteSetupErrorPasswordMismatch": "パスワードが一致しません",
   "remoteSetupErrorCustomRelayRequired": "カスタム Relay URL は必須です",
   "remoteSetupErrorSaveFailed": "保存に失敗しました",
-  "remoteSetupErrorUpdateFailed": "更新に失敗しました"
+  "remoteSetupErrorUpdateFailed": "更新に失敗しました",
+  "notificationsNativeTitle": "Native Notifications",
+  "notificationsNativeDescription": "Get system notifications when AI completes a response or needs your approval.",
+  "mobileNativeNotifyTitle": "AI Notifications",
+  "mobileNativeNotifyDescription": "Show a notification when AI finishes replying or asks for confirmation."
 }

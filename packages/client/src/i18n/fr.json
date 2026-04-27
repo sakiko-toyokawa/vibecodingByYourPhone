@@ -568,6 +568,8 @@
   "browserToggleEnable": "Activer",
   "browserToggleTestNotification": "Notification de test",
   "browserToggleTestBody": "Les notifications de bureau fonctionnent !",
+  "desktopNativeNotifyTitle": "AI Complete Notification",
+  "desktopNativeNotifyDescription": "Show a system notification with sound when AI finishes generating a response.",
   "remoteAccessConnectedTitle": "Accès à distance",
   "remoteAccessConnectedDescription": "Vous êtes connecté à un serveur distant via un relais.",
   "remoteAccessCurrentHostTitle": "Hôte actuel",
@@ -882,5 +884,9 @@
   "remoteSetupErrorPasswordMismatch": "Les mots de passe ne correspondent pas",
   "remoteSetupErrorCustomRelayRequired": "L’URL de relais personnalisée est requise",
   "remoteSetupErrorSaveFailed": "Impossible d’enregistrer",
-  "remoteSetupErrorUpdateFailed": "Impossible de mettre à jour"
+  "remoteSetupErrorUpdateFailed": "Impossible de mettre à jour",
+  "notificationsNativeTitle": "Native Notifications",
+  "notificationsNativeDescription": "Get system notifications when AI completes a response or needs your approval.",
+  "mobileNativeNotifyTitle": "AI Notifications",
+  "mobileNativeNotifyDescription": "Show a notification when AI finishes replying or asks for confirmation."
 }
