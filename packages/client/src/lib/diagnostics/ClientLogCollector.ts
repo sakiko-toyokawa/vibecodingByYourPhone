@@ -25,6 +25,31 @@ const FLUSH_BATCH_SIZE = 500;
 
 const PREFIX_REGEX = /^\[([A-Za-z]+)\]/;
 const DEVICE_ID_KEY = "yep-anywhere-device-id";
+const REDACTION_PATTERNS: Array<{
+  pattern: RegExp;
+  replace: string;
+}> = [
+  {
+    pattern: /(desktop_token=)[^&\s"']+/gi,
+    replace: "$1[REDACTED]",
+  },
+  {
+    pattern: /(["']desktop_token["']\s*:\s*["'])[^"']+(["'])/gi,
+    replace: "$1[REDACTED]$2",
+  },
+  {
+    pattern: /((?:x|X)-Desktop-Token["']?\s*[:=]\s*["']?)[^\s"',}]+/g,
+    replace: "$1[REDACTED]",
+  },
+];
+
+function redactSensitiveData(message: string): string {
+  let redacted = message;
+  for (const { pattern, replace } of REDACTION_PATTERNS) {
+    redacted = redacted.replace(pattern, replace);
+  }
+  return redacted;
+}
 
 function getDeviceId(): string | undefined {
   try {
@@ -165,7 +190,7 @@ export class ClientLogCollector {
       timestamp: Date.now(),
       level,
       prefix,
-      message,
+      message: redactSensitiveData(message),
     };
 
     if (this._useMemoryFallback || !this._db) {

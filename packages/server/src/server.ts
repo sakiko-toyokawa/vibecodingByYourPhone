@@ -20,6 +20,7 @@ import {
 import { CodexSessionScanner } from "./projects/codex-scanner.js";
 import { GeminiSessionScanner } from "./projects/gemini-scanner.js";
 import { ProjectScanner } from "./projects/scanner.js";
+import type { ProviderScanner } from "./providers/descriptor.js";
 import { createUploadRoutes } from "./routes/upload.js";
 import { getServerCompatibilityInfo } from "./routes/version.js";
 import {
@@ -115,6 +116,10 @@ export async function startServer(): Promise<{
   const effectiveServerPort = networkBindingService.getLocalhostPort();
   const effectiveLocalhostUrl = `${serverProtocol}://127.0.0.1:${effectiveServerPort}`;
   console.log(`Server URL: ${effectiveLocalhostUrl}`);
+  const serverInfoState = {
+    host: "127.0.0.1",
+    port: effectiveServerPort,
+  };
 
   // Create the app first (without WebSocket support initially)
   const { app, supervisor, scanner } = createApp({
@@ -141,6 +146,7 @@ export async function startServer(): Promise<{
     relayConfigCallbackHolder,
     serverHost: "127.0.0.1",
     serverPort: effectiveServerPort,
+    getServerInfo: () => ({ ...serverInfoState }),
     installId: installService.getInstallId(),
     dataDir: config.dataDir,
     networkBindingService,
@@ -156,14 +162,19 @@ export async function startServer(): Promise<{
     allowedImagePaths: config.allowedImagePaths,
   });
 
+  const extraScanners = new Map<string, ProviderScanner>();
+  extraScanners.set(
+    "codex",
+    new CodexSessionScanner({ sessionsDir: config.codexSessionsDir }),
+  );
+  extraScanners.set(
+    "gemini",
+    new GeminiSessionScanner({ sessionsDir: config.geminiSessionsDir }),
+  );
+
   const focusedSessionWatchManager = new FocusedSessionWatchManager({
     scanner,
-    codexScanner: new CodexSessionScanner({
-      sessionsDir: config.codexSessionsDir,
-    }),
-    geminiScanner: new GeminiSessionScanner({
-      sessionsDir: config.geminiSessionsDir,
-    }),
+    extraScanners,
   });
 
   // Set service references for graceful shutdown
@@ -467,6 +478,11 @@ export async function startServer(): Promise<{
             (info) => {
               const networkUrl = `${serverProtocol}://${bindConfig.host}:${info.port}`;
               console.log(`Server URL: ${networkUrl}`);
+              if (needsLocalhostClose) {
+                serverInfoState.host = bindConfig.host;
+                serverInfoState.port = info.port;
+                networkBindingService.setRuntimeLocalhostPort(info.port);
+              }
               console.log(
                 `[NetworkBinding] Network socket listening on ${bindConfig.host}:${info.port}`,
               );
@@ -522,6 +538,9 @@ export async function startServer(): Promise<{
       }
 
       const serverUrl = `${serverProtocol}://127.0.0.1:${info.port}`;
+      serverInfoState.host = "127.0.0.1";
+      serverInfoState.port = info.port;
+      networkBindingService.setRuntimeLocalhostPort(info.port);
       console.log(`Server URL: ${serverUrl}`);
       console.log(`Server running at ${serverUrl}`);
       console.log(`Projects dir: ${config.claudeProjectsDir}`);

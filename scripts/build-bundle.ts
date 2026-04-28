@@ -14,6 +14,7 @@
 
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
 const ROOT_DIR = path.resolve(import.meta.dirname, "..");
@@ -23,7 +24,7 @@ const SERVER_DIST = path.join(SERVER_PACKAGE, "dist");
 const SHARED_DIST = path.join(ROOT_DIR, "packages/shared/dist");
 
 // Staging directory for npm publishing (keeps workspace package.json intact)
-const STAGING_DIR = path.join(ROOT_DIR, "dist/npm-package");
+const STAGING_DIR = path.join(ROOT_DIR, "dist/npm-package3");
 
 // Version for npm package - set via NPM_VERSION env var (from git tag in CI) or fallback
 const NPM_VERSION = process.env.NPM_VERSION || "0.4.8";
@@ -51,6 +52,49 @@ function execStep(command: string, cwd?: string): void {
   });
 }
 
+/**
+ * Check whether packages/server/dist/ is up to date with src/.
+ * Compares every .ts file in src/ against the corresponding .js in dist/.
+ */
+function isServerDistFresh(): boolean {
+  const srcDir = path.join(SERVER_PACKAGE, "src");
+  if (!fs.existsSync(SERVER_DIST) || !fs.existsSync(srcDir)) {
+    return false;
+  }
+
+  function walk(dir: string): boolean {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(dir, entry.name);
+      const rel = path.relative(srcDir, srcPath);
+      const distPath = path.join(SERVER_DIST, rel);
+
+      if (entry.isDirectory()) {
+        if (!fs.existsSync(distPath)) {
+          return false;
+        }
+        if (!walk(srcPath)) {
+          return false;
+        }
+      } else if (entry.name.endsWith(".ts")) {
+        const jsName = entry.name.replace(/\.ts$/, ".js");
+        const jsPath = path.join(SERVER_DIST, path.dirname(rel), jsName);
+        if (!fs.existsSync(jsPath)) {
+          return false;
+        }
+        const srcStat = fs.statSync(srcPath);
+        const distStat = fs.statSync(jsPath);
+        if (srcStat.mtimeMs > distStat.mtimeMs) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  return walk(srcDir);
+}
+
 function step(name: string, fn: () => void): void {
   log(`\n${"=".repeat(60)}`);
   log(`Step: ${name}`);
@@ -76,8 +120,18 @@ step("Clean previous builds", () => {
 
   for (const dir of dirsToClean) {
     if (fs.existsSync(dir)) {
-      fs.rmSync(dir, { recursive: true, force: true });
-      log(`  Removed: ${path.relative(ROOT_DIR, dir)}`);
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+        log(`  Removed: ${path.relative(ROOT_DIR, dir)}`);
+      } catch (err) {
+        // On Windows, deeply-nested node_modules may be locked by antivirus/indexer.
+        // Rename it instead so the build can proceed.
+        const fallback = `${dir}.old.${Date.now()}`;
+        fs.renameSync(dir, fallback);
+        log(
+          `  Renamed (locked): ${path.relative(ROOT_DIR, dir)} -> ${path.relative(ROOT_DIR, fallback)}`,
+        );
+      }
     }
   }
 });
@@ -112,6 +166,11 @@ step("Build client", () => {
 
 // Build server
 step("Build server", () => {
+  if (isServerDistFresh()) {
+    log("Server dist is up to date, skipping build");
+    return;
+  }
+
   log("Building @yep-anywhere/server (TypeScript compilation)...");
   execStep("pnpm --filter @yep-anywhere/server build");
 
@@ -138,7 +197,27 @@ step("Create staging directory", () => {
 step("Copy server dist to staging", () => {
   const stagingDist = path.join(STAGING_DIR, "dist");
   log(`Copying server dist to ${path.relative(ROOT_DIR, stagingDist)}...`);
-  copyRecursive(SERVER_DIST, stagingDist);
+
+  // Exclude test/mocks from production bundle.
+  // Note: debug-streaming.js is kept because routes/index.js has a static
+  // ESM import for it (even though it's only used in dev mode).
+  const excludeFromBundle = new Set([
+    "__mocks__",
+    "mock-registry.d.ts",
+    "mock-registry.d.ts.map",
+    "mock-registry.js",
+    "mock-registry.js.map",
+    "mock.d.ts",
+    "mock.d.ts.map",
+    "mock.js",
+    "mock.js.map",
+  ]);
+
+  copyRecursive(
+    SERVER_DIST,
+    stagingDist,
+    (name) => !excludeFromBundle.has(name),
+  );
   log("  Server dist copied to staging");
 });
 
@@ -163,6 +242,8 @@ step("Rewrite @yep-anywhere/shared imports", () => {
         if (!content.includes("@yep-anywhere/shared")) continue;
 
         let relPath = path.relative(path.dirname(fullPath), sharedEntry);
+        // Normalize to forward slashes for cross-platform ESM imports
+        relPath = relPath.replace(/\\/g, "/");
         // Ensure it starts with ./ for Node.js ESM resolution
         if (!relPath.startsWith(".")) relPath = `./${relPath}`;
 
@@ -291,7 +372,7 @@ step("Generate package.json for npm", () => {
 
   log("  Package name: yepanywhere");
   log(`  Version: ${NPM_VERSION}`);
-  log("  Written to: dist/npm-package/package.json");
+  log("  Written to: dist/npm-package3/package.json");
   log("  (Original packages/server/package.json unchanged)");
 });
 
@@ -339,14 +420,164 @@ MIT
   }
 });
 
-// Helper: Recursive copy
-function copyRecursive(src: string, dest: string): void {
+// Install runtime dependencies into staging (for self-contained desktop bundle)
+// We dereference pnpm symlinks and prune dev files to avoid Windows MAX_PATH issues.
+step("Install runtime dependencies", () => {
+  // Use a fresh temp directory to avoid Windows EPERM on rename.
+  // Desktop paths (dist/) are often locked by Defender/OneDrive.
+  const deployDir = path.join(os.tmpdir(), `yep-deployed-${Date.now()}`);
+
+  log(
+    `Deploying server package with production dependencies to ${deployDir}...`,
+  );
+  execStep(
+    `pnpm --filter @yep-anywhere/server deploy --prod --config.shamefully-hoist=true ${deployDir}`,
+  );
+
+  const deployedNodeModules = path.join(deployDir, "node_modules");
+  const stagingNodeModules = path.join(STAGING_DIR, "node_modules");
+
+  if (!fs.existsSync(deployedNodeModules)) {
+    throw new Error("pnpm deploy did not produce node_modules");
+  }
+
+  log("Copying node_modules to staging (dereferencing symlinks)...");
+  copyNodeModulesDeref(deployedNodeModules, stagingNodeModules);
+  log("  Runtime dependencies installed");
+
+  // Verify core dependencies are present in the bundled node_modules
+  const requiredPackages = [
+    "hono",
+    "@hono/node-server",
+    "@hono/node-ws",
+    "pino",
+    "zod",
+    "ws",
+    "ioredis",
+    "bcrypt",
+    "@anthropic-ai/claude-agent-sdk",
+    "@openai/codex-sdk",
+    "awilix",
+    "diff",
+    "marked",
+    "proper-lockfile",
+  ];
+  for (const pkg of requiredPackages) {
+    const pkgPath = path.join(stagingNodeModules, pkg);
+    if (!fs.existsSync(pkgPath)) {
+      throw new Error(`Bundled node_modules missing required package: ${pkg}`);
+    }
+  }
+  log("  Core dependency integrity check passed");
+
+  // Clean up temp deploy dir
+  fs.rmSync(deployDir, { recursive: true, force: true });
+});
+
+/// Copy node_modules while dereferencing symlinks and pruning unnecessary files.
+/// This avoids pnpm's deeply-nested .pnpm virtual-store paths that exceed Windows MAX_PATH.
+function copyNodeModulesDeref(srcRoot: string, destRoot: string): void {
+  const pruneNames = new Set([".d.ts", ".d.ts.map", ".js.map", ".ts.map"]);
+  const pruneDirs = new Set([
+    "test",
+    "tests",
+    "__tests__",
+    "docs",
+    "doc",
+    "examples",
+    "demos",
+    "benchmark",
+    "benchmarks",
+  ]);
+  const pruneTopNames = new Set([
+    ".pnpm",
+    ".modules.yaml",
+    ".package-lock.json",
+  ]);
+
+  function shouldPruneFile(name: string): boolean {
+    const lower = name.toLowerCase();
+    for (const suffix of pruneNames) {
+      if (lower.endsWith(suffix)) return true;
+    }
+    if (lower.startsWith("readme")) return true;
+    if (lower.startsWith("changelog")) return true;
+    if (lower.startsWith("license")) return true;
+    if (lower.startsWith("authors")) return true;
+    if (lower.startsWith("contributing")) return true;
+    if (lower === ".eslintrc" || lower.startsWith(".eslintrc.")) return true;
+    if (lower === ".prettierrc" || lower.startsWith(".prettierrc."))
+      return true;
+    if (lower === "tsconfig.json" || lower === "jsconfig.json") return true;
+    if (lower.endsWith(".test.js") || lower.endsWith(".spec.js")) return true;
+    if (lower.endsWith(".test.ts") || lower.endsWith(".spec.ts")) return true;
+    return false;
+  }
+
+  function walk(src: string, dest: string, depth: number): void {
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+
+      // At top level, skip pnpm internal dirs
+      if (depth === 0 && pruneTopNames.has(entry.name)) {
+        continue;
+      }
+
+      // Skip prune directories
+      if (entry.isDirectory()) {
+        if (pruneDirs.has(entry.name.toLowerCase())) {
+          continue;
+        }
+        fs.mkdirSync(destPath, { recursive: true });
+        walk(srcPath, destPath, depth + 1);
+        // Remove empty dirs
+        try {
+          fs.rmdirSync(destPath);
+        } catch {
+          // not empty, keep it
+        }
+        continue;
+      }
+
+      // Skip prune files
+      if (shouldPruneFile(entry.name)) {
+        continue;
+      }
+
+      if (entry.isSymbolicLink()) {
+        const realPath = fs.realpathSync(srcPath);
+        const stats = fs.statSync(realPath);
+        if (stats.isDirectory()) {
+          fs.mkdirSync(destPath, { recursive: true });
+          walk(realPath, destPath, depth + 1);
+        } else {
+          fs.copyFileSync(realPath, destPath);
+        }
+      } else {
+        fs.copyFileSync(srcPath, destPath);
+      }
+    }
+  }
+
+  fs.mkdirSync(destRoot, { recursive: true });
+  walk(srcRoot, destRoot, 0);
+}
+
+// Helper: Recursive copy with optional filter
+function copyRecursive(
+  src: string,
+  dest: string,
+  filter?: (name: string) => boolean,
+): void {
   const stats = fs.statSync(src);
 
   if (stats.isDirectory()) {
     fs.mkdirSync(dest, { recursive: true });
     for (const file of fs.readdirSync(src)) {
-      copyRecursive(path.join(src, file), path.join(dest, file));
+      if (filter && !filter(file)) continue;
+      copyRecursive(path.join(src, file), path.join(dest, file), filter);
     }
   } else {
     fs.copyFileSync(src, dest);
@@ -372,7 +603,7 @@ if (allSuccess) {
   log("\nThe npm package is ready for publishing:");
   log(`  Location: ${path.relative(ROOT_DIR, STAGING_DIR)}`);
   log("\nNext steps:");
-  log("  1. cd dist/npm-package");
+  log("  1. cd dist/npm-package3");
   log("  2. Test: npm pack");
   log("  3. Publish: npm publish");
   log("\nNote: packages/server/package.json is unchanged (workspace intact)");

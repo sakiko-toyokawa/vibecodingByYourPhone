@@ -1,7 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { EventBus, IEventBus, SourceChangeEvent } from "./EventBus.js";
+import type { EventBus, SourceChangeEvent } from "./EventBus.js";
+import type { IEventBus } from "./IEventBus.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

@@ -6,9 +6,9 @@ import type {
   EventBus,
   FileChangeEvent,
   FileChangeType,
-  IEventBus,
   WatchProvider,
 } from "./EventBus.js";
+import type { IEventBus } from "./IEventBus.js";
 
 export interface FileWatcherOptions {
   /** Directory to watch (e.g., ~/.claude) */

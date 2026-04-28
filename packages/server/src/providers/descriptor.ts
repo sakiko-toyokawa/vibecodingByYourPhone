@@ -5,6 +5,7 @@ export interface ProviderScanner {
   getSessionsForProject(
     projectPath: string,
   ): Promise<Array<{ id: string; filePath: string }>>;
+  invalidateCache(): void;
 }
 
 export type FileType = "session" | "agent-session" | "other";

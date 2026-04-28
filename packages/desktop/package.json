@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "prepare-sidecar": "bash scripts/prepare-sidecar.sh",
+    "prepare-sidecar": "node scripts/prepare-sidecar.cjs",
     "dev": "node ../../scripts/run-with-safe-home.js vite",
     "build": "tsc && vite build",
     "tauri": "pnpm prepare-sidecar && tauri"
@@ -12,12 +12,14 @@
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-autostart": "^2.5.1",
+    "@tauri-apps/plugin-notification": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-process": "^2",
     "@tauri-apps/plugin-shell": "^2",
     "@tauri-apps/plugin-updater": "^2",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
+    "@yep-anywhere/client": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

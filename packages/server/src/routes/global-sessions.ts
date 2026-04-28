@@ -29,6 +29,7 @@ import type {
   SessionOwnership,
   SessionSummary,
 } from "../supervisor/types.js";
+import type { IEventBus } from "../watcher/IEventBus.js";
 import type { BusEvent, EventBus } from "../watcher/index.js";
 import { buildProviderProjectCatalog } from "./provider-catalog.js";
 
@@ -53,7 +54,7 @@ export interface GlobalSessionsDeps {
   /** Optional shared Gemini reader factory for cross-provider session lookups */
   geminiReaderFactory?: (projectPath: string) => GeminiSessionReader;
   /** Event bus for cache invalidation */
-  eventBus?: EventBus;
+  eventBus?: IEventBus;
 }
 
 export interface GlobalSessionItem {

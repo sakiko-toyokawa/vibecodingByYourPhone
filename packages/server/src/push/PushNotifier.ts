@@ -16,9 +16,9 @@ import type { InputRequest } from "../supervisor/types.js";
 import type {
   BusEvent,
   EventBus,
-  IEventBus,
   ProcessStateEvent,
 } from "../watcher/EventBus.js";
+import type { IEventBus } from "../watcher/IEventBus.js";
 import type { PushService } from "./PushService.js";
 import type { DismissPayload, PendingInputPayload } from "./types.js";
 

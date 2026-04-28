@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { UrlProjectId } from "@yep-anywhere/shared";
 import type { PermissionMode, UserMessage } from "../sdk/types.js";
 import type { EventBus } from "../watcher/EventBus.js";
+import type { IEventBus } from "../watcher/IEventBus.js";
 import type { ModelSettings } from "./Supervisor.js";
 
 /** Type of queued request */
@@ -65,14 +66,14 @@ export function isQueueFullError(
 }
 
 export interface WorkerQueueOptions {
-  eventBus?: EventBus;
+  eventBus?: IEventBus;
   /** Maximum queue size. 0 = unlimited (default) */
   maxQueueSize?: number;
 }
 
 export class WorkerQueue {
   private queue: QueuedRequest[] = [];
-  private eventBus?: EventBus;
+  private eventBus?: IEventBus;
   private maxQueueSize: number;
 
   constructor(options: WorkerQueueOptions = {}) {

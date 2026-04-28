@@ -10,11 +10,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { YepAnywhereLogo } from "../components/YepAnywhereLogo";
 import { useRemoteConnection } from "../contexts/RemoteConnectionContext";
 import { useI18n } from "../i18n";
-import {
-  createRelayHost,
-  getHostByRelayUsername,
-  saveHost,
-} from "../lib/hostStorage";
+import { upsertRelayHost } from "../lib/hostStorage";
 
 /**
  * Parse credentials from URL hash for auto-login via QR code.
@@ -90,15 +86,11 @@ export function RelayLoginPage() {
     const effectiveRelayUrl = relayUrl || DEFAULT_RELAY_URL;
 
     // Get or create host BEFORE connecting so handleSessionEstablished can sync session
-    let host = getHostByRelayUsername(username);
-    if (!host) {
-      host = createRelayHost({
-        relayUrl: effectiveRelayUrl,
-        relayUsername: username,
-        srpUsername: username,
-      });
-      saveHost(host);
-    }
+    const host = upsertRelayHost({
+      relayUrl: effectiveRelayUrl,
+      relayUsername: username,
+      srpUsername: username,
+    });
     // Set currentHostId before connect so the session callback can use it
     setCurrentHostId(host.id);
 
@@ -167,15 +159,11 @@ export function RelayLoginPage() {
 
     // Get or create host BEFORE connecting so handleSessionEstablished can sync session
     if (rememberMe) {
-      let host = getHostByRelayUsername(username);
-      if (!host) {
-        host = createRelayHost({
-          relayUrl,
-          relayUsername: username,
-          srpUsername: username,
-        });
-        saveHost(host);
-      }
+      const host = upsertRelayHost({
+        relayUrl,
+        relayUsername: username,
+        srpUsername: username,
+      });
       // Set currentHostId before connect so the session callback can use it
       setCurrentHostId(host.id);
     }

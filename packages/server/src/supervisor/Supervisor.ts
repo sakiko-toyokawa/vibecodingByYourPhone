@@ -29,6 +29,7 @@ import type {
   SessionUpdatedEvent,
   WorkerActivityEvent,
 } from "../watcher/EventBus.js";
+import type { IEventBus } from "../watcher/IEventBus.js";
 import { Process, type ProcessConstructorOptions } from "./Process.js";
 import { ProcessPool } from "./ProcessPool.js";
 import {
@@ -118,7 +119,7 @@ export interface SupervisorOptions {
   /** Default permission mode for new sessions */
   defaultPermissionMode?: PermissionMode;
   /** EventBus for emitting session status changes */
-  eventBus?: EventBus;
+  eventBus?: IEventBus;
   /** Maximum concurrent workers. 0 = unlimited (default for backward compat) */
   maxWorkers?: number;
   /** Idle threshold in milliseconds for preemption. Workers idle longer than this can be preempted. */
@@ -141,7 +142,7 @@ export class Supervisor {
   private realSdk: RealClaudeSDKInterface | null;
   private idleTimeoutMs?: number;
   private defaultPermissionMode: PermissionMode;
-  private eventBus?: EventBus;
+  private eventBus?: IEventBus;
   private workerQueue: WorkerQueue;
   private onSessionExecutor?: OnSessionExecutorCallback;
   private onSessionSummary?: OnSessionSummaryCallback;
@@ -1544,9 +1545,11 @@ export class Supervisor {
   private emitWorkerActivity(): void {
     if (!this.eventBus) return;
 
-    const hasActiveWork = this.processPool.getAll().some(
-      (p) => p.state.type === "in-turn" || p.state.type === "waiting-input",
-    );
+    const hasActiveWork = this.processPool
+      .getAll()
+      .some(
+        (p) => p.state.type === "in-turn" || p.state.type === "waiting-input",
+      );
 
     const event: WorkerActivityEvent = {
       type: "worker-activity-changed",
@@ -1811,9 +1814,11 @@ export class Supervisor {
     queueLength: number;
     hasActiveWork: boolean;
   } {
-    const hasActiveWork = this.processPool.getAll().some(
-      (p) => p.state.type === "in-turn" || p.state.type === "waiting-input",
-    );
+    const hasActiveWork = this.processPool
+      .getAll()
+      .some(
+        (p) => p.state.type === "in-turn" || p.state.type === "waiting-input",
+      );
     return {
       activeWorkers: this.processPool.size,
       queueLength: this.workerQueue.length,

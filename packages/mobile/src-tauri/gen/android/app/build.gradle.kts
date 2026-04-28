@@ -16,6 +16,21 @@ val tauriProperties = Properties().apply {
 android {
     compileSdk = 36
     namespace = "com.yepanywhere.mobile"
+
+    signingConfigs {
+        create("release") {
+            val localProps = Properties()
+            val localPropsFile = rootProject.file("local.properties")
+            if (localPropsFile.exists()) {
+                localPropsFile.inputStream().use { localProps.load(it) }
+            }
+            storeFile = file(localProps.getProperty("storeFile") ?: "yepanywhere.keystore")
+            storePassword = localProps.getProperty("storePassword") ?: ""
+            keyAlias = localProps.getProperty("keyAlias") ?: ""
+            keyPassword = localProps.getProperty("keyPassword") ?: ""
+        }
+    }
+
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "com.yepanywhere.mobile"
@@ -38,6 +53,7 @@ android {
         }
         getByName("release") {
             isMinifyEnabled = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }
                     .plus(getDefaultProguardFile("proguard-android-optimize.txt"))

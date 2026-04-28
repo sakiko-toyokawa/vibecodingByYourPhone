@@ -128,12 +128,16 @@ export function registerRoutes(
   );
 
   // Server info (host/port binding info for Local Access settings)
-  if (options.serverHost && options.serverPort) {
+  if (
+    options.getServerInfo ||
+    (options.serverHost !== undefined && options.serverPort !== undefined)
+  ) {
     app.route(
       "/api/server-info",
       createServerInfoRoutes({
         host: options.serverHost,
         port: options.serverPort,
+        getServerInfo: options.getServerInfo,
         installId: options.installId,
         deviceBridgeAvailable: !!options.deviceBridgeService?.hasBinary(),
       }),

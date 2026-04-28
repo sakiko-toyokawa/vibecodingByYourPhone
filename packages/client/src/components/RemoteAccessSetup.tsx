@@ -402,7 +402,7 @@ export function RemoteAccessSetup({
             placeholder={t("remoteSetupUsernamePlaceholder" as never)}
             minLength={3}
             maxLength={32}
-            pattern="[a-z0-9][a-z0-9-]*[a-z0-9]|[a-z0-9]{1,2}"
+            pattern="[a-z0-9][-a-z0-9]*[a-z0-9]|[a-z0-9]{1,2}"
             title={t("remoteSetupUsernameHint" as never)}
             autoComplete="username"
             disabled={isSaving}

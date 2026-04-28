@@ -20,8 +20,11 @@ import {
   type UrlProjectId,
 } from "@yep-anywhere/shared";
 import { getLogger } from "../logging/logger.js";
+import type { IProviderAdapter } from "../providers/adapter.js";
+import { providerRegistry } from "../providers/registry.js";
 import type { ISessionReader } from "../sessions/types.js";
 import type { SessionSummary } from "../supervisor/types.js";
+import type { IEventBus } from "../watcher/IEventBus.js";
 import type { EventBus, FileChangeEvent } from "../watcher/index.js";
 import type { ISessionIndexService } from "./types.js";
 
@@ -68,7 +71,7 @@ export interface SessionIndexServiceOptions {
    */
   fullValidationIntervalMs?: number;
   /** Optional event bus for watcher-driven invalidation. */
-  eventBus?: EventBus;
+  eventBus?: IEventBus;
   /** Max time to wait for cross-process write lock (ms). */
   writeLockTimeoutMs?: number;
   /** Age at which lock directories are treated as stale and removed (ms). */
@@ -541,37 +544,29 @@ export class SessionIndexService implements ISessionIndexService {
       return;
     }
 
-    if (event.provider === "claude") {
-      const fileName = path.basename(event.relativePath);
-      if (!fileName.endsWith(".jsonl")) return;
-      const sessionId = fileName.slice(0, -6);
-      const relativeDir = path.dirname(event.relativePath);
-      const sessionDir =
-        relativeDir === "."
-          ? this.projectsDir
-          : path.join(this.projectsDir, relativeDir);
+    const descriptor = providerRegistry.getOrNull(event.provider);
+    const adapter = descriptor as IProviderAdapter | null;
 
-      this.markSessionDirty(sessionDir, sessionId);
+    const extracted = adapter?.extractSessionFromFileChange?.(event, {
+      projectsDir: this.projectsDir,
+    });
+    if (extracted) {
+      this.markSessionDirty(extracted.sessionDir, extracted.sessionId);
 
       // Directory creates/deletes require full readdir reconciliation.
       if (event.changeType === "create" || event.changeType === "delete") {
-        this.markDirDirty(sessionDir);
+        this.markDirDirty(extracted.sessionDir);
       }
       return;
     }
 
-    if (event.provider === "codex") {
-      // Codex indexes are project-scoped over a shared sessions tree
-      // (codex::<sessionsDir>::<projectPath>), so a raw file event does not
-      // tell us which project scope owns the changed session. Mark all loaded
-      // Codex scopes dirty and let the next request reconcile via listSessionFiles.
-      this.markMatchingScopesDirty("codex::");
-      return;
-    }
-
-    if (event.provider === "gemini") {
-      // Gemini uses the same shared-tree + project-scoped index pattern.
-      this.markMatchingScopesDirty("gemini::");
+    const group = descriptor?.group;
+    if (group) {
+      // Providers with project-scoped indexes over a shared sessions tree
+      // (e.g. codex, gemini) use a <group>:: prefix. A raw file event does not
+      // tell us which project scope owns the changed session, so mark all
+      // loaded scopes for that group dirty and let the next request reconcile.
+      this.markMatchingScopesDirty(`${group}::`);
     }
   }
 

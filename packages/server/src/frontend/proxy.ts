@@ -443,8 +443,15 @@ export function attachUnifiedUpgradeHandler(
 
         // Handle the upgrade with the ws library
         wss.handleUpgrade(req, socket, head, (ws) => {
-          debugLog("Upgrade", `[${connId}] WebSocket upgrade complete`);
-          wss.emit("connection", ws, req);
+          try {
+            debugLog("Upgrade", `[${connId}] WebSocket upgrade complete`);
+            wss.emit("connection", ws, req);
+          } catch (err) {
+            debugLog("Upgrade", `[${connId}] Error in connection handler`, {
+              error: String(err),
+            });
+            socket.destroy();
+          }
         });
       })
       .catch((err) => {

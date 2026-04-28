@@ -136,6 +136,18 @@ For Chromebook testing and debugging (screenshots, input, diagnostics), use the 
 
 Requires SSH access to `chromeroot`. See `~/code/chromeos-testbed/CLAUDE.md` for details.
 
+## Desktop App Debugging Checklist
+
+When debugging the Tauri desktop app, **always check dependency integrity first** before investigating code changes:
+
+```bash
+# Check that the bundled server has its node_modules
+ls ~/.yep-anywhere/node_modules/yepanywhere/node_modules/hono/package.json
+ls ~/.yep-anywhere/node_modules/yepanywhere/node_modules/@hono/node-server/package.json
+```
+
+**How it works:** The desktop app copies `yepanywhere-server` from bundled resources to `{dataDir}/node_modules/yepanywhere/`. The bundled package **includes `node_modules`** (installed via `pnpm deploy --prod` during the build), so `bun install` is skipped when core dependencies are present. If the data directory was previously used by a CLI-installed version (different dependency tree), remove the old `node_modules` to avoid module resolution conflicts.
+
 ## After Editing Code
 
 After editing TypeScript or other source files, verify your changes compile and pass checks:

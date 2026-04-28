@@ -8,6 +8,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { EventBus, SessionSeenEvent } from "../watcher/EventBus.js";
+import type { IEventBus } from "../watcher/IEventBus.js";
 
 export type { SessionSeenEvent };
 
@@ -31,14 +32,14 @@ export interface NotificationServiceOptions {
   /** Directory to store notification state (defaults to ~/.yep-anywhere) */
   dataDir?: string;
   /** EventBus for emitting seen events */
-  eventBus?: EventBus;
+  eventBus?: IEventBus;
 }
 
 export class NotificationService {
   private state: NotificationState;
   private dataDir: string;
   private filePath: string;
-  private eventBus?: EventBus;
+  private eventBus?: IEventBus;
   private savePromise: Promise<void> | null = null;
   private pendingSave = false;
 

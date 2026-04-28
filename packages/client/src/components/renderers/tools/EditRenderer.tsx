@@ -320,6 +320,7 @@ function DiffModalContent({
   oldString,
   newString,
   originalFile,
+  replaceAll,
 }: {
   diffHtml?: string;
   structuredPatch: PatchHunk[];
@@ -328,6 +329,7 @@ function DiffModalContent({
   newString: string;
   /** Complete file content from SDK Edit result (never truncated). Null for file creation. */
   originalFile?: string | null;
+  replaceAll?: boolean;
 }) {
   const { projectPath } = useSessionMetadata();
   const [showFullContext, setShowFullContext] = useState(false);
@@ -341,6 +343,8 @@ function DiffModalContent({
     oldString,
     newString,
     originalFile: originalFile ?? "", // Empty string won't be used if canExpandContext is false
+    structuredPatch,
+    replaceAll,
   });
 
   const handleToggle = useCallback(async () => {
@@ -442,6 +446,7 @@ function EditCollapsedPreview({
 
   const showValidationWarning =
     enabled && validationErrors && !isToolIgnored("Edit");
+  const replaceAll = result?.replaceAll ?? input?.replace_all ?? false;
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -568,6 +573,7 @@ function EditCollapsedPreview({
               filePath={filePath}
               oldString={oldString}
               newString={newString}
+              replaceAll={replaceAll}
             />
           </Modal>
         )}
@@ -678,6 +684,7 @@ function EditCollapsedPreview({
             oldString={oldString}
             newString={newString}
             originalFile={originalFile}
+            replaceAll={replaceAll}
           />
         </Modal>
       )}
@@ -818,6 +825,7 @@ function EditToolResult({
 
   const showValidationWarning =
     enabled && validationErrors && !isToolIgnored("Edit");
+  const replaceAll = result?.replaceAll ?? input?.replace_all ?? false;
 
   // Count total lines in all hunks
   const totalLines = useMemo(() => {
@@ -954,6 +962,7 @@ function EditToolResult({
               filePath={filePath}
               oldString={inputWithAugment.old_string}
               newString={inputWithAugment.new_string}
+              replaceAll={inputWithAugment.replace_all ?? false}
             />
           </Modal>
         )}
@@ -1051,6 +1060,7 @@ function EditToolResult({
             oldString={result.oldString ?? input?.old_string ?? ""}
             newString={result.newString ?? input?.new_string ?? ""}
             originalFile={result.originalFile}
+            replaceAll={replaceAll}
           />
         </Modal>
       )}

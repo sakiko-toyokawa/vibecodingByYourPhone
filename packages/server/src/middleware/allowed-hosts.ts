@@ -13,6 +13,7 @@
  * - localhost, 127.0.0.1, ::1, [::1]
  * - Private IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
  * - *.ts.net (Tailscale, including nested subdomains)
+ * - tauri.localhost (Tauri desktop app webview origin)
  *
  * Plus ALLOWED_HOSTS env var and in-app settings (comma-separated hostnames, or "*" to allow all).
  */
@@ -83,6 +84,9 @@ export function isAllowedHostname(hostname: string): boolean {
   if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
   if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
   if (/^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
+
+  // Tauri desktop app webview origin
+  if (h === "tauri.localhost") return true;
 
   // Tailscale (*.ts.net — supports nested subdomains like foo.bar.ts.net)
   if (h.endsWith(".ts.net")) return true;

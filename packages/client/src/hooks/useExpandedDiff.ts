@@ -14,6 +14,8 @@ interface UseExpandedDiffOptions {
   newString: string;
   /** Complete file content from SDK Edit result (never truncated, verified up to 150KB+) */
   originalFile: string;
+  structuredPatch?: PatchHunk[];
+  replaceAll?: boolean;
 }
 
 /**
@@ -39,6 +41,8 @@ export function useExpandedDiff(options: UseExpandedDiffOptions) {
         options.oldString,
         options.newString,
         options.originalFile,
+        options.structuredPatch,
+        options.replaceAll ?? false,
       );
       setResult({
         structuredPatch: data.structuredPatch as PatchHunk[],
@@ -55,6 +59,8 @@ export function useExpandedDiff(options: UseExpandedDiffOptions) {
     options.oldString,
     options.newString,
     options.originalFile,
+    options.structuredPatch,
+    options.replaceAll,
   ]);
 
   return { loading, error, result, fetchExpandedDiff };

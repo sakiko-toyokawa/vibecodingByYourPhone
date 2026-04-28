@@ -57,7 +57,11 @@ import {
 } from "../subscriptions.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { UploadManager } from "../uploads/manager.js";
-import type { EventBus, IEventBus, FocusedSessionWatchManager } from "../watcher/index.js";
+import type {
+  EventBus,
+  FocusedSessionWatchManager,
+  IEventBus,
+} from "../watcher/index.js";
 import {
   type WsConnectionPolicy,
   isPolicySrpRequired,

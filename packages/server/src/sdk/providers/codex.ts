@@ -681,9 +681,9 @@ export class CodexProvider implements AgentProvider {
 
     // Prevent the parent Codex/Codex Desktop session from leaking its own
     // thread-scoped runtime context into the app-server child process.
-    delete env.CODEX_THREAD_ID;
-    delete env.CODEX_CI;
-    delete env.CODEX_SHELL;
+    env.CODEX_THREAD_ID = undefined;
+    env.CODEX_CI = undefined;
+    env.CODEX_SHELL = undefined;
 
     if (this.config.baseUrl) {
       env.OPENAI_BASE_URL = this.config.baseUrl;

@@ -1,0 +1,74 @@
+{
+  "version": "1.0",
+  "task": {
+    "id": "awf-001",
+    "title": "移动端 AI 任务完成本地推送通知",
+    "description": "为移动端（Tauri mobile）创建类似浏览器推送新闻一样的本地通知：\n1. AI 回答完问题时在手机顶部弹出通知\n2. AI 请求人类执行/同意时弹出通知\n3.通知需包含会话标题和简要内容\n4.点击通知可跳转到对应会话",
+    "type": "feature",
+    "status": "completed",
+    "priority": "high",
+    "createdAt": "2026-04-27T00:00:00Z",
+    "updatedAt": "2026-04-27T00:00:00Z",
+    "assignee": "coder",
+    "branch": "feature/awf-001-mobile-native-notifications",
+    "baseBranch": "main"
+  },
+  "decomposition": {
+    "completed": true,
+    "steps": [
+      {
+        "id": 1,
+        "title": "移动端 Rust 侧集成 tauri-plugin-notification",
+        "description": "在 packages/mobile/src-tauri/ 中添加 Tauri 通知插件：\n- Cargo.toml 添加 tauri-plugin-notification = \"2\"\n- lib.rs 注册 .plugin(tauri_plugin_notification::init())\n- tauri.conf.json 添加插件配置\n- AndroidManifest.xml 添加 POST_NOTIFICATIONS 权限",
+        "verify": "mobile 可以编译成功 (cargo check 或 tauri android dev)"
+      },
+      {
+        "id": 2,
+        "title": "创建 useMobileNativeNotifications hook",
+        "description": "在 packages/client/src/hooks/useMobileNativeNotifications.ts 创建 hook：\n- 检测 mobile Tauri 环境（__TAURI_INTERNALS__ 存在且 __DESKTOP_TOKEN__ 不存在）\n- 监听 activityBus 的 process-state-changed 和 session-updated 事件\n- 维护 sessionId -> title 的内存 map\n- 检测 in-turn -> idle（AI 完成）和 * -> waiting-input（需要确认）\n- 应用可见时抑制通知（document.visibilityState）\n- 使用 @tauri-apps/plugin-notification 发送通知\n- 防抖：同一 session 5 秒内不重复通知",
+        "verify": "hook 文件存在，类型检查通过，无 lint 错误"
+      },
+      {
+        "id": 3,
+        "title": "在 App.tsx 中集成 mobile 通知 hook",
+        "description": "在 packages/client/src/App.tsx 中导入并调用 useMobileNativeNotifications()，与现有的 useDesktopNativeNotifications 并存。",
+        "verify": "App.tsx 编译通过"
+      },
+      {
+        "id": 4,
+        "title": "移动端设置页面添加通知开关和 i18n",
+        "description": "- 修改 NotificationsSettings.tsx：在 isMobile 为 true 时也显示原生通知开关\n- 复用 UI_KEYS.desktopNativeNotifications 设置项（或创建新 key）\n- 在 en.json / zh-CN.json 中添加 mobileNativeNotifyTitle / mobileNativeNotifyDescription 等文案\n- 通知内容包含会话标题",
+        "verify": "设置页面在移动端显示通知开关，文案正确"
+      },
+      {
+        "id": 5,
+        "title": "编译验证和类型检查",
+        "description": "运行 pnpm typecheck 和 pnpm lint，修复所有错误。",
+        "verify": "typecheck 和 lint 全部通过"
+      }
+    ]
+  },
+  "coding": {
+    "completed": true,
+    "commits": [
+      "132a2b5",
+      "5d1d060",
+      "2edf5e3",
+      "2c5edeb"
+    ],
+    "prUrl": ""
+  },
+  "review": {
+    "round": 1,
+    "maxRounds": 3,
+    "status": "completed",
+    "lastResult": "Codex reviewed working tree diff and flagged 5 issues (P1/P2). All issues are from pre-existing uncommitted changes in the working tree (desktop integration, Gemini auth, Claude-Ollama provider grouping, file URL routing) — none are related to the mobile native notification feature implemented on this branch.",
+    "history": [
+      {
+        "round": 1,
+        "result": "issues-unrelated",
+        "notes": "Review found desktop integration regressions and other pre-existing issues, but zero issues in the mobile notification feature scope. Feature branch commits are clean."
+      }
+    ]
+  }
+}

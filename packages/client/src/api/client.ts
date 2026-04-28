@@ -126,31 +126,46 @@ export interface SessionOptions {
 
 export type { UploadedFile } from "@yep-anywhere/shared";
 
-const API_BASE = "/api";
+function getApiBase(): string {
+  if (typeof window !== "undefined" && window.__YEP_SERVER_URL__) {
+    return `${window.__YEP_SERVER_URL__}/api`;
+  }
+  return "/api";
+}
 
 /**
- * Desktop auth token read from URL query parameter (?desktop_token=...).
+ * Desktop auth token read from URL query parameter (?desktop_token=...)
+ * or injected by the Tauri desktop app via window.__DESKTOP_TOKEN__.
  * When present, sent as X-Desktop-Token header on every API request.
- * The Tauri desktop app passes this token to authenticate the iframe
- * without cookies or sessions — the token is valid for the server's lifetime.
+ * The token is valid for the server's lifetime.
  */
 let desktopAuthToken: string | null = null;
 if (typeof window !== "undefined") {
-  const params = new URLSearchParams(window.location.search);
-  const token = params.get("desktop_token");
-  if (token) {
-    desktopAuthToken = token;
-    // Strip token from URL to keep it out of history/bookmarks
-    params.delete("desktop_token");
-    const cleanUrl = params.toString()
-      ? `${window.location.pathname}?${params.toString()}${window.location.hash}`
-      : `${window.location.pathname}${window.location.hash}`;
-    window.history.replaceState({}, "", cleanUrl);
+  // Check injected token first (desktop mode)
+  if (window.__DESKTOP_TOKEN__) {
+    desktopAuthToken = window.__DESKTOP_TOKEN__;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("desktop_token");
+    if (token) {
+      desktopAuthToken = token;
+      // Strip token from URL to keep it out of history/bookmarks
+      params.delete("desktop_token");
+      const cleanUrl = params.toString()
+        ? `${window.location.pathname}?${params.toString()}${window.location.hash}`
+        : `${window.location.pathname}${window.location.hash}`;
+      window.history.replaceState({}, "", cleanUrl);
+    }
   }
 }
 
-/** Get the desktop auth token (if running inside Tauri iframe). */
+/** Get the desktop auth token (if running inside Tauri desktop app). */
 export function getDesktopAuthToken(): string | null {
+  // Injected token takes priority (desktop mode) — read dynamically
+  // because window.__DESKTOP_TOKEN__ is set after the module loads.
+  if (typeof window !== "undefined" && window.__DESKTOP_TOKEN__) {
+    return window.__DESKTOP_TOKEN__;
+  }
   return desktopAuthToken;
 }
 
@@ -193,11 +208,12 @@ export async function fetchJSON<T>(
     "Content-Type": "application/json",
     "X-Yep-Anywhere": "true",
   };
-  if (desktopAuthToken) {
-    headers["X-Desktop-Token"] = desktopAuthToken;
+  const token = getDesktopAuthToken();
+  if (token) {
+    headers["X-Desktop-Token"] = token;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${getApiBase()}${path}`, {
     ...options,
     credentials: "include",
     headers: {
@@ -755,6 +771,14 @@ export const api = {
     oldString: string,
     newString: string,
     originalFile: string,
+    structuredPatch?: Array<{
+      oldStart: number;
+      oldLines: number;
+      newStart: number;
+      newLines: number;
+      lines: string[];
+    }>,
+    replaceAll = false,
   ) =>
     fetchJSON<{
       structuredPatch: Array<{
@@ -767,7 +791,14 @@ export const api = {
       diffHtml: string;
     }>(`/projects/${projectId}/diff/expand`, {
       method: "POST",
-      body: JSON.stringify({ filePath, oldString, newString, originalFile }),
+      body: JSON.stringify({
+        filePath,
+        oldString,
+        newString,
+        originalFile,
+        structuredPatch,
+        replaceAll,
+      }),
     }),
 
   // Git status API

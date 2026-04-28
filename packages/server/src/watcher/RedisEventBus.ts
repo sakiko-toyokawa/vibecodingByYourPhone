@@ -1,6 +1,6 @@
-import Redis from "ioredis";
-import type { IEventBus } from "./IEventBus.js";
+import { Redis } from "ioredis";
 import type { BusEvent, EventHandler } from "./EventBus.js";
+import type { IEventBus } from "./IEventBus.js";
 
 export interface RedisEventBusOptions {
   redisUrl: string;
@@ -19,7 +19,7 @@ export class RedisEventBus implements IEventBus {
     this.subscriber = new Redis(options.redisUrl);
 
     this.subscriber.subscribe(this.channelName);
-    this.subscriber.on("message", (_channel, message) => {
+    this.subscriber.on("message", (_channel: string, message: string) => {
       const event = JSON.parse(message) as BusEvent;
       for (const handler of this.localSubscribers) {
         try {

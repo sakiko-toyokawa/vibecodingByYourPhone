@@ -58,12 +58,20 @@ export async function installCodex(): Promise<void> {
   return invoke("install_codex");
 }
 
+export async function installGemini(): Promise<void> {
+  return invoke("install_gemini");
+}
+
 export async function checkAgentInstalled(agent: string): Promise<boolean> {
   return invoke("check_agent_installed", { agent });
 }
 
 export async function checkClaudeAuth(): Promise<boolean> {
   return invoke("check_claude_auth");
+}
+
+export async function checkGeminiAuth(): Promise<boolean> {
+  return invoke("check_gemini_auth");
 }
 
 export async function spawnPty(

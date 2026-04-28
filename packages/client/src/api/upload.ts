@@ -247,6 +247,12 @@ export function buildUploadUrl(
     return `${protocol}//${url.host}/api/projects/${projectId}/sessions/${sessionId}/upload/ws`;
   }
 
+  if (typeof window !== "undefined" && window.__YEP_SERVER_URL__) {
+    const url = new URL(window.__YEP_SERVER_URL__);
+    const protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${url.host}/api/projects/${projectId}/sessions/${sessionId}/upload/ws`;
+  }
+
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.host;
   return `${protocol}//${host}/api/projects/${projectId}/sessions/${sessionId}/upload/ws`;

@@ -47,9 +47,9 @@ import type { ISessionReader } from "./sessions/types.js";
 import type { ExternalSessionTracker } from "./supervisor/ExternalSessionTracker.js";
 import type { Supervisor } from "./supervisor/Supervisor.js";
 import type { Project } from "./supervisor/types.js";
-import { FileWatcher, SourceWatcher } from "./watcher/index.js";
 import type { IEventBus } from "./watcher/IEventBus.js";
 import { createEventBus } from "./watcher/createEventBus.js";
+import { FileWatcher, SourceWatcher } from "./watcher/index.js";
 
 export interface ServicesContainer {
   config: ReturnType<typeof loadConfig>;
@@ -333,14 +333,15 @@ export async function initializeServices(): Promise<ServicesContainer> {
   pushService.setVapidKeys(vapidKeys);
   console.log("[Push] VAPID keys loaded, push notifications enabled");
 
-  // Detect ADB and create emulator bridge service (lazy start)
+  // Detect ADB and create emulator bridge service (lazy start).
+  // Always create the service even without ADB so the DI container has a
+  // registered instance and routes that depend on it don't crash the server.
   const adbPath = detectAdb();
-  let deviceBridgeService: DeviceBridgeService | undefined;
+  const deviceBridgeService = new DeviceBridgeService({
+    adbPath: adbPath ?? "",
+    dataDir: config.dataDir,
+  });
   if (adbPath) {
-    deviceBridgeService = new DeviceBridgeService({
-      adbPath,
-      dataDir: config.dataDir,
-    });
     console.log(`[DeviceBridge] ADB detected at ${adbPath}`);
     if (deviceBridgeService.hasBinary()) {
       console.log(

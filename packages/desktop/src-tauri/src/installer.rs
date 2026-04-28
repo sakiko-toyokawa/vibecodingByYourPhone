@@ -1,9 +1,9 @@
 use serde::Serialize;
 use std::fs;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::process::Command;
 
-use crate::config;
+use crate::{bundle, config};
 
 #[derive(Clone, Serialize)]
 struct InstallProgress {
@@ -40,15 +40,39 @@ fn emit_progress(app: &AppHandle, agent: &str, status: &str, message: &str) {
 
 #[tauri::command]
 pub async fn install_yep_server(app: AppHandle) -> Result<(), String> {
-    let bun = bun_path(&app)?;
     let data_dir = config::data_dir();
+    let server_pkg = data_dir.join("node_modules").join("yepanywhere");
+
+    // Try bundled resources first (offline install)
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let bundled = resource_dir.join("yepanywhere-server");
+        if bundled.exists() {
+            let _ = fs::remove_dir_all(&server_pkg);
+            config::copy_dir_all(&bundled, &server_pkg)?;
+            if let Err(err) = bundle::validate_server_package_dir(&server_pkg) {
+                let _ = fs::remove_dir_all(&server_pkg);
+                let message = format!("Bundled Yep Anywhere server is incomplete: {err}");
+                emit_progress(&app, "yep", "error", &message);
+                return Err(message);
+            }
+            emit_progress(&app, "yep", "done", "Yep Anywhere server installed (bundled)");
+            return Ok(());
+        }
+    }
+
+    // Fallback: download from npm
+    let bun = bun_path(&app)?;
     fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    let tmp_dir = data_dir.join("tmp");
+    fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
 
     emit_progress(&app, "yep", "installing", "Installing Yep Anywhere server...");
 
     let output = Command::new(&bun)
         .args(["install", "yepanywhere"])
         .current_dir(&data_dir)
+        .env("TMP", tmp_dir.to_string_lossy().as_ref())
+        .env("TEMP", tmp_dir.to_string_lossy().as_ref())
         .output()
         .await
         .map_err(|e| format!("Failed to run bun install: {e}"))?;
@@ -68,12 +92,16 @@ pub async fn install_claude(app: AppHandle) -> Result<(), String> {
     let bun = bun_path(&app)?;
     let data_dir = config::data_dir();
     fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    let tmp_dir = data_dir.join("tmp");
+    fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
 
     emit_progress(&app, "claude", "installing", "Installing Claude Code...");
 
     let output = Command::new(&bun)
         .args(["install", "@anthropic-ai/claude-code"])
         .current_dir(&data_dir)
+        .env("TMP", tmp_dir.to_string_lossy().as_ref())
+        .env("TEMP", tmp_dir.to_string_lossy().as_ref())
         .output()
         .await
         .map_err(|e| format!("Failed to run bun install: {e}"))?;
@@ -90,6 +118,40 @@ pub async fn install_claude(app: AppHandle) -> Result<(), String> {
     }
 
     emit_progress(&app, "claude", "done", "Claude Code installed");
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn install_gemini(app: AppHandle) -> Result<(), String> {
+    let bun = bun_path(&app)?;
+    let data_dir = config::data_dir();
+    fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    let tmp_dir = data_dir.join("tmp");
+    fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
+
+    emit_progress(&app, "gemini", "installing", "Installing Gemini CLI...");
+
+    let output = Command::new(&bun)
+        .args(["install", "@google/gemini-cli"])
+        .current_dir(&data_dir)
+        .env("TMP", tmp_dir.to_string_lossy().as_ref())
+        .env("TEMP", tmp_dir.to_string_lossy().as_ref())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run bun install: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        emit_progress(
+            &app,
+            "gemini",
+            "error",
+            &format!("Install failed: {stderr}"),
+        );
+        return Err(format!("bun install failed: {stderr}"));
+    }
+
+    emit_progress(&app, "gemini", "done", "Gemini CLI installed");
     Ok(())
 }
 
@@ -204,6 +266,9 @@ pub async fn install_codex(app: AppHandle) -> Result<(), String> {
 pub async fn check_agent_installed(agent: String) -> Result<bool, String> {
     match agent.as_str() {
         "claude" => {
+            if config::which_in_path("claude").is_some() {
+                return Ok(true);
+            }
             let path = config::data_dir()
                 .join("node_modules")
                 .join(".bin")
@@ -211,11 +276,24 @@ pub async fn check_agent_installed(agent: String) -> Result<bool, String> {
             Ok(path.exists())
         }
         "codex" => {
+            if config::which_in_path("codex").is_some() {
+                return Ok(true);
+            }
             let path = config::bin_dir().join(if cfg!(windows) {
                 "codex.exe"
             } else {
                 "codex"
             });
+            Ok(path.exists())
+        }
+        "gemini" => {
+            if config::which_in_path("gemini").is_some() {
+                return Ok(true);
+            }
+            let path = config::data_dir()
+                .join("node_modules")
+                .join(".bin")
+                .join("gemini");
             Ok(path.exists())
         }
         "yep" => {
@@ -238,20 +316,39 @@ pub async fn check_agent_installed(agent: String) -> Result<bool, String> {
 /// and parsing the JSON output. Returns true if `loggedIn` is true.
 #[tauri::command]
 pub async fn check_claude_auth(app: AppHandle) -> Result<bool, String> {
-    let bun = bun_path(&app)?;
+    let _ = app;
     let data_dir = config::data_dir();
-    let script = data_dir
-        .join("node_modules")
-        .join("@anthropic-ai")
-        .join("claude-code")
-        .join("cli.js");
+    let tmp_dir = data_dir.join("tmp");
+    fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
+
+    // Prefer system PATH claude, fallback to data dir npm package
+    #[cfg(windows)]
+    let script = config::which_in_path("claude")
+        .unwrap_or_else(|| data_dir.join("node_modules").join("@anthropic-ai").join("claude-code").join("bin").join("claude.exe"));
+    #[cfg(not(windows))]
+    let script = config::which_in_path("claude")
+        .unwrap_or_else(|| data_dir.join("node_modules").join("@anthropic-ai").join("claude-code").join("cli.js"));
 
     if !script.exists() {
         return Ok(false);
     }
 
+    #[cfg(windows)]
+    let output = Command::new(&script)
+        .args(["auth", "status"])
+        .env("TMP", tmp_dir.to_string_lossy().as_ref())
+        .env("TEMP", tmp_dir.to_string_lossy().as_ref())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run claude auth status: {e}"))?;
+
+    #[cfg(not(windows))]
+    let bun = bun_path(&app)?;
+    #[cfg(not(windows))]
     let output = Command::new(&bun)
         .args([script.to_string_lossy().as_ref(), "auth", "status"])
+        .env("TMP", tmp_dir.to_string_lossy().as_ref())
+        .env("TEMP", tmp_dir.to_string_lossy().as_ref())
         .output()
         .await
         .map_err(|e| format!("Failed to run claude auth status: {e}"))?;
@@ -266,4 +363,52 @@ pub async fn check_claude_auth(app: AppHandle) -> Result<bool, String> {
     };
 
     Ok(text.contains("\"loggedIn\": true") || text.contains("\"loggedIn\":true"))
+}
+
+/// Check if Gemini is already authenticated by running `gemini auth status`.
+/// Returns true if the output indicates the user is logged in.
+#[tauri::command]
+pub async fn check_gemini_auth(app: AppHandle) -> Result<bool, String> {
+    let data_dir = config::data_dir();
+    let tmp_dir = data_dir.join("tmp");
+    fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
+
+    // Prefer system PATH gemini, fallback to data dir npm package via bun
+    let output = if let Some(gemini_path) = config::which_in_path("gemini") {
+        Command::new(&gemini_path)
+            .args(["auth", "status"])
+            .env("TMP", tmp_dir.to_string_lossy().as_ref())
+            .env("TEMP", tmp_dir.to_string_lossy().as_ref())
+            .output()
+            .await
+            .map_err(|e| format!("Failed to run gemini auth status: {e}"))?
+    } else {
+        let script = data_dir
+            .join("node_modules")
+            .join("@google")
+            .join("gemini-cli")
+            .join("dist")
+            .join("index.js");
+        if !script.exists() {
+            return Ok(false);
+        }
+        let bun = bun_path(&app)?;
+        Command::new(&bun)
+            .args([script.to_string_lossy().as_ref(), "auth", "status"])
+            .env("TMP", tmp_dir.to_string_lossy().as_ref())
+            .env("TEMP", tmp_dir.to_string_lossy().as_ref())
+            .output()
+            .await
+            .map_err(|e| format!("Failed to run gemini auth status: {e}"))?
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let text = if stdout.contains("authenticated") || stdout.contains("logged in") {
+        stdout
+    } else {
+        stderr
+    };
+
+    Ok(text.contains("authenticated") || text.contains("logged in"))
 }

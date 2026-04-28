@@ -38,6 +38,10 @@ export class ProviderRegistry {
   allNames(): string[] {
     return Array.from(this.byName.keys());
   }
+
+  getByGroup(group: string): ProviderDescriptor | null {
+    return this.descriptors.find((d) => d.group === group) ?? null;
+  }
 }
 
 export const providerRegistry = new ProviderRegistry();

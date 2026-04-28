@@ -2,20 +2,12 @@ import * as fs from "node:fs";
 import { stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { UrlProjectId } from "@yep-anywhere/shared";
+import type { IProviderAdapter } from "../providers/adapter.js";
+import type { ProviderScanner } from "../providers/descriptor.js";
+import { providerRegistry } from "../providers/registry.js";
 import type { Project } from "../supervisor/types.js";
 
-type WatchProvider = "claude" | "codex" | "gemini";
 type ChangeSource = "fs-watch" | "poll";
-
-interface CodexSessionInfo {
-  id: string;
-  filePath: string;
-}
-
-interface GeminiSessionInfo {
-  id: string;
-  filePath: string;
-}
 
 interface SessionWatchTarget {
   key: string;
@@ -25,7 +17,7 @@ interface SessionWatchTarget {
   subscribers: Map<number, (event: FocusedSessionWatchEvent) => void>;
   filePath: string | null;
   fileName: string | null;
-  provider: WatchProvider | null;
+  provider: string | null;
   knownMtimeMs: number | null;
   knownSize: number | null;
   watcher: fs.FSWatcher | null;
@@ -46,7 +38,7 @@ export interface FocusedSessionWatchEvent {
   type: "session-watch-change";
   sessionId: string;
   projectId: UrlProjectId;
-  provider: WatchProvider;
+  provider: string;
   path: string;
   source: ChangeSource;
   timestamp: string;
@@ -57,19 +49,15 @@ export interface FocusedSessionWatchManagerOptions {
     getProject(projectId: string): Promise<Project | null>;
     getOrCreateProject(projectId: string): Promise<Project | null>;
   };
-  codexScanner: {
-    getSessionsForProject(projectPath: string): Promise<CodexSessionInfo[]>;
-  };
-  geminiScanner: {
-    getSessionsForProject(projectPath: string): Promise<GeminiSessionInfo[]>;
-  };
+  /** Extra scanners keyed by provider group (e.g. "codex", "gemini") */
+  extraScanners?: Map<string, ProviderScanner>;
   pollMs?: number;
   debounceMs?: number;
 }
 
 interface ResolvedSessionFile {
   filePath: string;
-  provider: WatchProvider;
+  provider: string;
 }
 
 /**
@@ -82,8 +70,7 @@ export class FocusedSessionWatchManager {
   private static readonly LOG_EVENTS =
     process.env.SESSION_FOCUSED_WATCH_LOG_EVENTS === "true";
   private readonly scanner: FocusedSessionWatchManagerOptions["scanner"];
-  private readonly codexScanner: FocusedSessionWatchManagerOptions["codexScanner"];
-  private readonly geminiScanner: FocusedSessionWatchManagerOptions["geminiScanner"];
+  private readonly extraScanners: Map<string, ProviderScanner>;
   private readonly pollMs: number;
   private readonly debounceMs: number;
   private readonly targets = new Map<string, SessionWatchTarget>();
@@ -91,8 +78,7 @@ export class FocusedSessionWatchManager {
 
   constructor(options: FocusedSessionWatchManagerOptions) {
     this.scanner = options.scanner;
-    this.codexScanner = options.codexScanner;
-    this.geminiScanner = options.geminiScanner;
+    this.extraScanners = options.extraScanners ?? new Map();
     this.pollMs = Math.max(250, options.pollMs ?? 1500);
     this.debounceMs = Math.max(50, options.debounceMs ?? 200);
   }
@@ -352,40 +338,43 @@ export class FocusedSessionWatchManager {
     );
 
     for (const provider of providerCandidates) {
-      if (provider === "claude") {
-        const dirs = [project.sessionDir, ...(project.mergedSessionDirs ?? [])];
-        for (const dir of dirs) {
-          const candidate = join(dir, `${target.sessionId}.jsonl`);
-          if (await this.fileExists(candidate)) {
-            return { filePath: candidate, provider };
+      try {
+        const descriptor = providerRegistry.getOrNull(
+          provider,
+        ) as IProviderAdapter | null;
+        if (!descriptor) continue;
+
+        // Try direct file path resolution
+        const candidates = descriptor.getSessionFileCandidates?.(
+          project,
+          target.sessionId,
+        );
+        if (candidates) {
+          for (const candidate of candidates) {
+            if (await this.fileExists(candidate)) {
+              return { filePath: candidate, provider };
+            }
+          }
+          continue;
+        }
+
+        // Try scanner-based lookup
+        const scanner =
+          this.extraScanners.get(descriptor.group) ?? descriptor.getScanner?.();
+        if (scanner) {
+          const sessions = await scanner.getSessionsForProject(project.path);
+          const match = sessions.find(
+            (session) => session.id === target.sessionId,
+          );
+          if (match) {
+            return { filePath: match.filePath, provider };
           }
         }
-        continue;
-      }
-
-      if (provider === "codex") {
-        const sessions = await this.codexScanner.getSessionsForProject(
-          project.path,
+      } catch (err) {
+        console.error(
+          `[FocusedSessionWatchManager] Error resolving session for provider ${provider}:`,
+          err,
         );
-        const match = sessions.find(
-          (session) => session.id === target.sessionId,
-        );
-        if (match) {
-          return { filePath: match.filePath, provider };
-        }
-        continue;
-      }
-
-      if (provider === "gemini") {
-        const sessions = await this.geminiScanner.getSessionsForProject(
-          project.path,
-        );
-        const match = sessions.find(
-          (session) => session.id === target.sessionId,
-        );
-        if (match) {
-          return { filePath: match.filePath, provider };
-        }
       }
     }
 
@@ -395,29 +384,25 @@ export class FocusedSessionWatchManager {
   private getProviderCandidates(
     providerHint: string | undefined,
     projectProvider: string | undefined,
-  ): WatchProvider[] {
-    const candidates: WatchProvider[] = [];
-    const pushCandidate = (candidate: WatchProvider | null) => {
+  ): string[] {
+    const candidates: string[] = [];
+    const pushCandidate = (candidate: string | null) => {
       if (!candidate || candidates.includes(candidate)) return;
       candidates.push(candidate);
     };
 
     pushCandidate(this.normalizeProvider(providerHint));
     pushCandidate(this.normalizeProvider(projectProvider));
-    pushCandidate("claude");
-    pushCandidate("codex");
-    pushCandidate("gemini");
+    for (const descriptor of providerRegistry.list()) {
+      pushCandidate(descriptor.group);
+    }
     return candidates;
   }
 
-  private normalizeProvider(
-    provider: string | undefined,
-  ): WatchProvider | null {
+  private normalizeProvider(provider: string | undefined): string | null {
     if (!provider) return null;
-    if (provider === "codex" || provider === "codex-oss") return "codex";
-    if (provider === "gemini" || provider === "gemini-acp") return "gemini";
-    if (provider === "claude" || provider === "opencode") return "claude";
-    return null;
+    const descriptor = providerRegistry.getOrNull(provider);
+    return descriptor?.group ?? null;
   }
 
   private async fileExists(filePath: string): Promise<boolean> {

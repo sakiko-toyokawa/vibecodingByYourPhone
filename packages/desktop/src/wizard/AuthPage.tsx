@@ -9,6 +9,7 @@ import {
   onPtyOutput,
   onPtyExit,
   checkClaudeAuth,
+  checkGeminiAuth,
 } from "../tauri";
 
 interface Props {
@@ -16,25 +17,52 @@ interface Props {
   onNext: () => void;
 }
 
+const AUTH_AGENTS = ["claude", "gemini"];
+
 export function AuthPage({ agents, onNext }: Props) {
   const termRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const [started, setStarted] = useState(false);
   const [exited, setExited] = useState(false);
-  const [alreadyAuthed, setAlreadyAuthed] = useState<boolean | null>(null);
+  const [authStatus, setAuthStatus] = useState<Record<string, boolean>>({});
+  const [currentAgent, setCurrentAgent] = useState<string | null>(null);
 
-  const hasClaude = agents.includes("claude");
+  const relevantAgents = agents.filter((a) => AUTH_AGENTS.includes(a));
 
-  // Check if already authenticated on mount
+  // Check auth status for all relevant agents on mount
   useEffect(() => {
-    if (!hasClaude) return;
-    checkClaudeAuth()
-      .then((authed) => setAlreadyAuthed(authed))
-      .catch(() => setAlreadyAuthed(false));
-  }, [hasClaude]);
+    if (relevantAgents.length === 0) return;
 
+    Promise.all(
+      relevantAgents.map(async (agent) => {
+        try {
+          if (agent === "claude") {
+            return await checkClaudeAuth();
+          }
+          if (agent === "gemini") {
+            return await checkGeminiAuth();
+          }
+          return false;
+        } catch {
+          return false;
+        }
+      }),
+    ).then((results) => {
+      const map: Record<string, boolean> = {};
+      relevantAgents.forEach((agent, i) => {
+        map[agent] = results[i];
+      });
+      setAuthStatus(map);
+    });
+  }, []);
+
+  // Find the next agent that needs auth
+  const pendingAgent = relevantAgents.find((a) => !authStatus[a]);
+  const allAuthed = relevantAgents.every((a) => authStatus[a]);
+
+  // Terminal setup: recreate when currentAgent changes
   useEffect(() => {
-    if (!termRef.current || alreadyAuthed) return;
+    if (!termRef.current || !currentAgent) return;
 
     const term = new Terminal({
       theme: {
@@ -70,6 +98,11 @@ export function AuthPage({ agents, onNext }: Props) {
     const unlistenExit = onPtyExit(() => {
       setExited(true);
       term.writeln("\r\n[Process exited]");
+      if (currentAgent) {
+        setAuthStatus((prev) => ({ ...prev, [currentAgent]: true }));
+        setCurrentAgent(null);
+        setStarted(false);
+      }
     });
 
     // Resize handler
@@ -81,19 +114,37 @@ export function AuthPage({ agents, onNext }: Props) {
       unlistenExit.then((fn) => fn());
       resizeObserver.disconnect();
       term.dispose();
+      terminalRef.current = null;
     };
-  }, [alreadyAuthed]);
+  }, [currentAgent]);
 
   const startAuth = async () => {
+    if (!pendingAgent) return;
     setStarted(true);
+    setExited(false);
+    setCurrentAgent(pendingAgent);
     try {
-      await spawnPty("claude", ["auth", "login"]);
+      await spawnPty(pendingAgent, ["auth", "login"]);
     } catch (e) {
       terminalRef.current?.writeln(`\r\nError: ${e}`);
     }
   };
 
-  const canContinue = !hasClaude || alreadyAuthed || exited;
+  const needsAuth = relevantAgents.length > 0 && !allAuthed;
+  const canContinue = !needsAuth || (currentAgent && exited) || allAuthed;
+
+  // UI text based on current state
+  let statusText: string;
+  if (relevantAgents.length === 0) {
+    statusText = "No agents require authentication. You can skip this step.";
+  } else if (allAuthed) {
+    statusText = "You're already signed in to all agents. You can continue to the next step.";
+  } else if (pendingAgent) {
+    const name = pendingAgent === "claude" ? "Claude" : "Gemini";
+    statusText = `Click the button below, then press Enter in the terminal to open your browser and sign in to ${name}.`;
+  } else {
+    statusText = "";
+  }
 
   return (
     <div style={{ width: "100%", maxWidth: 700 }}>
@@ -107,14 +158,48 @@ export function AuthPage({ agents, onNext }: Props) {
           marginBottom: 16,
         }}
       >
-        {!hasClaude
-          ? "No agents require authentication. You can skip this step."
-          : alreadyAuthed
-            ? "You're already signed in to Claude. You can continue to the next step."
-            : "Click the button below, then press Enter in the terminal to open your browser and sign in."}
+        {statusText}
       </p>
 
-      {hasClaude && !alreadyAuthed && alreadyAuthed !== null && (
+      {/* Auth status list */}
+      {relevantAgents.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            marginBottom: 16,
+          }}
+        >
+          {relevantAgents.map((agent) => (
+            <div
+              key={agent}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 14,
+              }}
+            >
+              <span
+                style={{
+                  color: authStatus[agent]
+                    ? "var(--success)"
+                    : "var(--text-secondary)",
+                }}
+              >
+                {authStatus[agent] ? "●" : "○"}
+              </span>
+              <span>
+                {agent === "claude" ? "Claude Code" : "Gemini CLI"}
+                {authStatus[agent] ? " — signed in" : " — not signed in"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {needsAuth && pendingAgent && (
         <>
           <div
             ref={termRef}
@@ -133,7 +218,7 @@ export function AuthPage({ agents, onNext }: Props) {
               onClick={startAuth}
               style={{ width: "100%", marginBottom: 12 }}
             >
-              Start Sign In
+              Sign in to {pendingAgent === "claude" ? "Claude" : "Gemini"}
             </button>
           )}
         </>

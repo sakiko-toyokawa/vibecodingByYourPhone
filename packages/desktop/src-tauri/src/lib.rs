@@ -1,3 +1,4 @@
+mod bundle;
 mod config;
 mod installer;
 mod pty;
@@ -69,8 +70,10 @@ pub fn run() {
             installer::install_yep_server,
             installer::install_claude,
             installer::install_codex,
+            installer::install_gemini,
             installer::check_agent_installed,
             installer::check_claude_auth,
+            installer::check_gemini_auth,
             pty::spawn_pty,
             pty::write_pty,
             pty::resize_pty,

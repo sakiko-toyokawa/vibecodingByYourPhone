@@ -45,6 +45,7 @@ import {
   isValidSshHostAlias,
   normalizeSshHostAlias,
 } from "../utils/sshHostAlias.js";
+import type { IEventBus } from "../watcher/IEventBus.js";
 import type { EventBus } from "../watcher/index.js";
 
 /**
@@ -104,7 +105,7 @@ export interface SessionsDeps {
   externalTracker?: ExternalSessionTracker;
   notificationService?: NotificationService;
   sessionMetadataService?: SessionMetadataService;
-  eventBus?: EventBus;
+  eventBus?: IEventBus;
   codexScanner?: CodexSessionScanner;
   codexSessionsDir?: string;
   /** Optional shared Codex reader factory for cross-provider session lookups */

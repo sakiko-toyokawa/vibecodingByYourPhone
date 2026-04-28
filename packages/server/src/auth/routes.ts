@@ -74,6 +74,27 @@ export function createAuthRoutes(deps: AuthRoutesDeps): Hono {
       authFilePath: authService.getFilePath(),
     };
 
+    // Desktop token bypass — valid X-Desktop-Token counts as authenticated
+    if (desktopAuthToken) {
+      const headerToken = c.req.header("x-desktop-token");
+      if (
+        headerToken &&
+        headerToken.length === desktopAuthToken.length &&
+        crypto.timingSafeEqual(
+          Buffer.from(headerToken),
+          Buffer.from(desktopAuthToken),
+        )
+      ) {
+        return c.json({
+          ...base,
+          enabled: isEnabled,
+          authenticated: true,
+          setupRequired: false,
+          disabledByEnv: false,
+        });
+      }
+    }
+
     // If auth is disabled by env var, it overrides settings
     if (authDisabled) {
       return c.json({

@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import { opencodeProvider } from "../sdk/providers/opencode.js";
 import type { AgentProvider } from "../sdk/providers/types.js";
 import { normalizeOpenCodeSession } from "../sessions/normalization.js";
@@ -50,6 +51,10 @@ export class OpenCodeProviderDescriptor
     return "other";
   }
 
+  getSessionFilePattern(): RegExp {
+    return /\.json$/;
+  }
+
   normalizeSession(loaded: LoadedSession): Session {
     return normalizeOpenCodeSession(loaded);
   }
@@ -64,5 +69,9 @@ export class OpenCodeProviderDescriptor
 
   getAgentProvider(): AgentProvider | null {
     return opencodeProvider;
+  }
+
+  getScanner(): null {
+    return null;
   }
 }

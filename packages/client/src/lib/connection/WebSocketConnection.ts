@@ -21,6 +21,15 @@ import type {
 } from "./types";
 import { WebSocketCloseError } from "./types";
 
+function sanitizeUrlForLogging(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return rawUrl.replace(/\?.*$/, "");
+  }
+}
+
 /**
  * Connection to yepanywhere server using WebSocket transport.
  *
@@ -53,8 +62,19 @@ export class WebSocketConnection implements Connection {
   }
 
   private getWsUrl(): string {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const base = `${protocol}//${window.location.host}/api/ws`;
+    let protocol: string;
+    let host: string;
+
+    if (typeof window !== "undefined" && window.__YEP_SERVER_URL__) {
+      const url = new URL(window.__YEP_SERVER_URL__);
+      protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      host = url.host;
+    } else {
+      protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      host = window.location.host;
+    }
+
+    const base = `${protocol}//${host}/api/ws`;
     // Pass desktop token as query param since WebSocket can't set custom headers
     const token = getDesktopAuthToken();
     if (token) {
@@ -83,7 +103,10 @@ export class WebSocketConnection implements Connection {
   private connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       const wsUrl = this.getWsUrl();
-      console.log("[WebSocketConnection] Connecting to", wsUrl);
+      console.log(
+        "[WebSocketConnection] Connecting to",
+        sanitizeUrlForLogging(wsUrl),
+      );
 
       const ws = new WebSocket(wsUrl);
       ws.binaryType = "arraybuffer";

@@ -308,6 +308,107 @@ function resolveFilePath(
   return resolved;
 }
 
+function isPatchHunk(value: unknown): value is PatchHunk {
+  if (!value || typeof value !== "object") return false;
+  const hunk = value as Partial<PatchHunk>;
+  return (
+    typeof hunk.oldStart === "number" &&
+    typeof hunk.oldLines === "number" &&
+    typeof hunk.newStart === "number" &&
+    typeof hunk.newLines === "number" &&
+    Array.isArray(hunk.lines) &&
+    hunk.lines.every((line) => typeof line === "string")
+  );
+}
+
+function applyStructuredPatchToFile(
+  originalFile: string,
+  structuredPatch: PatchHunk[],
+): string {
+  const originalLines = originalFile.split("\n");
+  const nextLines: string[] = [];
+  const hunks = [...structuredPatch].sort((a, b) => {
+    if (a.oldStart !== b.oldStart) return a.oldStart - b.oldStart;
+    return a.newStart - b.newStart;
+  });
+
+  let cursor = 0;
+  for (const hunk of hunks) {
+    const hunkStart = Math.max(0, hunk.oldStart - 1);
+    if (hunkStart < cursor) {
+      throw new Error("Structured patch contains overlapping hunks");
+    }
+
+    nextLines.push(...originalLines.slice(cursor, hunkStart));
+
+    let current = hunkStart;
+    for (const line of hunk.lines) {
+      const prefix = line[0];
+      const content = line.slice(1);
+
+      if (prefix === " ") {
+        if (current >= originalLines.length) {
+          throw new Error("Structured patch context exceeds file length");
+        }
+        nextLines.push(originalLines[current] ?? "");
+        current++;
+        continue;
+      }
+
+      if (prefix === "-") {
+        if (current >= originalLines.length) {
+          throw new Error("Structured patch deletion exceeds file length");
+        }
+        current++;
+        continue;
+      }
+
+      if (prefix === "+") {
+        nextLines.push(content);
+      }
+    }
+
+    cursor = current;
+  }
+
+  nextLines.push(...originalLines.slice(cursor));
+  return nextLines.join("\n");
+}
+
+function applyStringEditToFile(
+  originalFile: string,
+  oldString: string,
+  newString: string,
+  replaceAll = false,
+): string {
+  if (oldString.length === 0) {
+    throw new Error(
+      "Cannot expand diff for an insertion-only edit without structured patch data",
+    );
+  }
+
+  const firstMatch = originalFile.indexOf(oldString);
+  if (firstMatch === -1) {
+    throw new Error("Original text not found in original file");
+  }
+
+  if (replaceAll) {
+    return originalFile.split(oldString).join(newString);
+  }
+
+  const nextMatch = originalFile.indexOf(
+    oldString,
+    firstMatch + oldString.length,
+  );
+  if (nextMatch !== -1) {
+    throw new Error(
+      "Cannot expand diff because the edited text appears multiple times; structured patch data is required",
+    );
+  }
+
+  return originalFile.replace(oldString, newString);
+}
+
 export function createFilesRoutes(deps: FilesDeps): Hono {
   const routes = new Hono();
 
@@ -510,6 +611,8 @@ export function createFilesRoutes(deps: FilesDeps): Hono {
       oldString: string;
       newString: string;
       originalFile: string;
+      structuredPatch?: PatchHunk[];
+      replaceAll?: boolean;
     };
     try {
       body = await c.req.json();
@@ -517,25 +620,56 @@ export function createFilesRoutes(deps: FilesDeps): Hono {
       return c.json({ error: "Invalid JSON body" }, 400);
     }
 
-    const { filePath, oldString, newString, originalFile } = body;
+    const {
+      filePath,
+      oldString,
+      newString,
+      originalFile,
+      structuredPatch,
+      replaceAll = false,
+    } = body;
 
     if (
       !filePath ||
       typeof oldString !== "string" ||
       typeof newString !== "string" ||
-      typeof originalFile !== "string"
+      typeof originalFile !== "string" ||
+      typeof replaceAll !== "boolean" ||
+      (structuredPatch !== undefined &&
+        (!Array.isArray(structuredPatch) ||
+          !structuredPatch.every((hunk) => isPatchHunk(hunk))))
     ) {
       return c.json(
         {
           error:
-            "Missing required fields: filePath, oldString, newString, originalFile",
+            "Missing or invalid fields: filePath, oldString, newString, originalFile, structuredPatch, replaceAll",
         },
         400,
       );
     }
 
-    // Compute the new file content by applying the edit
-    const newFullContent = originalFile.replace(oldString, newString);
+    let newFullContent: string;
+    try {
+      newFullContent =
+        structuredPatch && structuredPatch.length > 0
+          ? applyStructuredPatchToFile(originalFile, structuredPatch)
+          : applyStringEditToFile(
+              originalFile,
+              oldString,
+              newString,
+              replaceAll,
+            );
+    } catch (err) {
+      return c.json(
+        {
+          error:
+            err instanceof Error
+              ? err.message
+              : "Failed to apply edit to original file",
+        },
+        400,
+      );
+    }
 
     // Compute augment with large context (entire file)
     const augment = await computeEditAugment(

@@ -50,6 +50,7 @@ export const UI_KEYS = {
   sidebarExpanded: "yep-anywhere-sidebar-expanded",
   funPhrases: "yep-anywhere-fun-phrases-enabled",
   streamingEnabled: "yep-anywhere-streaming-enabled",
+  desktopNativeNotifications: "yep-anywhere-desktop-native-notifications",
   developerMode: "yep-anywhere-developer-mode",
   schemaValidation: "yep-anywhere-schema-validation",
   emulatorMaxFps: "yep-anywhere-emulator-max-fps",

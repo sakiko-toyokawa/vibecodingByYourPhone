@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 
 export interface ServerInfoOptions {
-  host: string;
-  port: number;
+  host?: string;
+  port?: number;
+  getServerInfo?: () => { host: string; port: number };
   installId?: string;
   /** Whether device bridge streaming is available (ADB detected + sidecar binary exists) */
   deviceBridgeAvailable?: boolean;
@@ -32,14 +33,18 @@ export function createServerInfoRoutes(options: ServerInfoOptions) {
   const app = new Hono();
 
   app.get("/", (c) => {
+    const current = options.getServerInfo?.() ?? {
+      host: options.host ?? "127.0.0.1",
+      port: options.port ?? 0,
+    };
     const info: ServerInfo = {
-      host: options.host,
-      port: options.port,
-      boundToAllInterfaces: options.host === "0.0.0.0" || options.host === "::",
+      host: current.host,
+      port: current.port,
+      boundToAllInterfaces: current.host === "0.0.0.0" || current.host === "::",
       localhostOnly:
-        options.host === "127.0.0.1" ||
-        options.host === "localhost" ||
-        options.host === "::1",
+        current.host === "127.0.0.1" ||
+        current.host === "localhost" ||
+        current.host === "::1",
       installId: options.installId,
       capabilities: {
         deviceBridge: options.deviceBridgeAvailable ?? false,

@@ -23,6 +23,7 @@ const mockFactories: Record<
   codex: (c) => new MockCodexProvider(c),
   "codex-oss": (c) => new MockCodexOSSProvider(c),
   gemini: (c) => new MockGeminiProvider(c),
+  "gemini-acp": (c) => new MockGeminiProvider(c),
   opencode: (c) => new MockOpenCodeProvider(c),
 };
 

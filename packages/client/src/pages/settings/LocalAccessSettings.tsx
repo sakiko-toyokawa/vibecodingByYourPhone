@@ -208,11 +208,16 @@ export function LocalAccessSettings() {
       });
 
       if (result.redirectUrl) {
-        // Server changed port, redirect to new URL preserving current path
-        const newUrl = new URL(result.redirectUrl);
-        newUrl.pathname = window.location.pathname;
-        newUrl.search = window.location.search;
-        window.location.href = newUrl.toString();
+        if (typeof window !== "undefined" && window.__YEP_SERVER_URL__) {
+          // Desktop mode: port change requires app restart, just clear changes
+          setHasChanges(false);
+        } else {
+          // Browser mode: redirect to new URL preserving current path
+          const newUrl = new URL(result.redirectUrl);
+          newUrl.pathname = window.location.pathname;
+          newUrl.search = window.location.search;
+          window.location.href = newUrl.toString();
+        }
       } else {
         setHasChanges(false);
       }

@@ -1,5 +1,5 @@
-import type { IEventBus } from "./IEventBus.js";
 import { EventBus } from "./EventBus.js";
+import type { IEventBus } from "./IEventBus.js";
 import { RedisEventBus } from "./RedisEventBus.js";
 
 export interface EventBusConfig {

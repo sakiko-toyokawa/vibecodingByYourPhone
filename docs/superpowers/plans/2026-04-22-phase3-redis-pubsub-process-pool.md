@@ -6,6 +6,18 @@
 
 ---
 
+## 执行状态
+
+| Task | 状态 | 备注 |
+|------|------|------|
+| Task 1: IEventBus + Redis | 已完成 | `IEventBus.ts`, `RedisEventBus.ts`, `createEventBus.ts` 已创建并集成 |
+| Task 2: 扩展 IProviderAdapter | 已完成 | 新增 `extractSessionFromFileChange`, `getSessionFileCandidates`, `getSessionFilePattern`, `extractSessionIdFromPath`, `readProjectIdFromFile`；SessionIndexService, scanner, FocusedSessionWatchManager, ExternalSessionTracker 已消除 provider 硬编码 |
+| Task 3: provider-resolution.ts | 已完成 | `normalizeProviderGroup` 已使用 Registry；`getSourceForGroup` 已支持通用 extra source；`ProviderGroup` 和 `SessionSource.kind` 已改为 `string` |
+| Task 4: ProcessPool | 已完成 | `ProcessPool.ts` 已存在（容量管理 + 优雅抢占），Supervisor 已接入。Warm pool 设计未实施（与 SDK 单会话单进程模型不符） |
+| Task 5: 验证 | 已完成 | `pnpm typecheck` 通过，`pnpm lint` 通过。无项目测试文件需删除 |
+
+---
+
 ## 当前状态分析
 
 ### 已完成（Phase 2）

@@ -1,7 +1,9 @@
 import {
   CODEX_SESSIONS_DIR,
   CodexSessionScanner,
+  codexSessionScanner,
 } from "../projects/codex-scanner.js";
+import { encodeProjectId } from "../projects/paths.js";
 import { codexProvider } from "../sdk/providers/codex.js";
 import type { AgentProvider } from "../sdk/providers/types.js";
 import { CodexSessionReader } from "../sessions/codex-reader.js";
@@ -10,6 +12,7 @@ import type { ISessionReader } from "../sessions/types.js";
 import type { LoadedSession } from "../sessions/types.js";
 import type { Project } from "../supervisor/types.js";
 import type { Session } from "../supervisor/types.js";
+import { readFirstLine } from "../utils/jsonl.js";
 import type { IProviderAdapter } from "./adapter.js";
 import type {
   FileType,
@@ -67,6 +70,37 @@ export class CodexProviderDescriptor
     return "other";
   }
 
+  getSessionFilePattern(): RegExp {
+    return /\.jsonl$/;
+  }
+
+  extractSessionIdFromPath(relativePath: string): string | null {
+    const filename = relativePath.split(/[\\/]/).pop();
+    if (!filename || !filename.endsWith(".jsonl")) return null;
+    const base = filename.slice(0, -6);
+    const match = base.match(/([0-9a-fA-F-]{36})$/);
+    return match?.[1] ?? null;
+  }
+
+  async readProjectIdFromFile(
+    filePath: string,
+  ): Promise<import("@yep-anywhere/shared").UrlProjectId | null> {
+    const firstLine = await readFirstLine(filePath);
+    if (!firstLine) return null;
+    try {
+      const parsed = JSON.parse(firstLine) as {
+        type?: string;
+        payload?: { cwd?: string; timestamp?: string };
+      };
+      if (parsed.type !== "session_meta" || !parsed.payload?.cwd) {
+        return null;
+      }
+      return encodeProjectId(parsed.payload.cwd);
+    } catch {
+      return null;
+    }
+  }
+
   normalizeSession(loaded: LoadedSession): Session {
     return normalizeCodexSession(loaded);
   }
@@ -81,5 +115,9 @@ export class CodexProviderDescriptor
 
   getAgentProvider(): AgentProvider | null {
     return codexProvider;
+  }
+
+  getScanner(): ProviderScanner {
+    return codexSessionScanner;
   }
 }

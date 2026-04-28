@@ -3,7 +3,8 @@ import type {
   NetworkBindingService,
   NetworkInterface,
 } from "../services/NetworkBindingService.js";
-import type { EventBus, IEventBus } from "../watcher/EventBus.js";
+import type { EventBus } from "../watcher/EventBus.js";
+import type { IEventBus } from "../watcher/IEventBus.js";
 
 export interface NetworkBindingRoutesOptions {
   /** The NetworkBindingService instance */

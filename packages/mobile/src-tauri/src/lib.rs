@@ -31,6 +31,32 @@ fn exit_app(app_handle: tauri::AppHandle) {
     app_handle.exit(0);
 }
 
+/// Test notification command — called from JS to verify the notification plugin works.
+/// Debug logging command — prints to logcat so we can trace notification events in release builds.
+#[tauri::command]
+fn notify_debug_log(msg: String) {
+    println!("[NotifyDebug] {}", msg);
+}
+
+#[tauri::command]
+fn test_notification(app_handle: tauri::AppHandle) {
+    println!("[Rust] test_notification called");
+    #[cfg(target_os = "android")]
+    {
+        use tauri_plugin_notification::NotificationExt;
+        let result = app_handle
+            .notification()
+            .builder()
+            .title("Rust 测试通知")
+            .body("如果你看到这个，说明 Rust 层的 notification plugin 工作正常")
+            .show();
+        match result {
+            Ok(_) => println!("[Rust] Notification.show() returned OK"),
+            Err(e) => println!("[Rust] Notification.show() FAILED: {}", e),
+        }
+    }
+}
+
 /// Extract query string from an app link URL and convert to hash fragment.
 ///
 /// Input:  https://yepanywhere.com/open?u=username&p=password&r=relay_url
@@ -64,7 +90,7 @@ fn handle_deep_link(app: &tauri::AppHandle, url_str: &str) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![set_system_bars, exit_app])
+        .invoke_handler(tauri::generate_handler![set_system_bars, exit_app, test_notification, notify_debug_log])
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {

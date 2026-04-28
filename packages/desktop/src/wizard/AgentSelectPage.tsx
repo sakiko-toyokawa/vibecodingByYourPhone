@@ -15,6 +15,11 @@ const AVAILABLE_AGENTS = [
     name: "Codex CLI",
     description: "OpenAI's coding agent",
   },
+  {
+    id: "gemini",
+    name: "Gemini CLI",
+    description: "Google's AI coding agent",
+  },
 ];
 
 export function AgentSelectPage({ agents, onAgentsChange, onNext }: Props) {

@@ -25,19 +25,6 @@
   "plugins": {
     "deep-link": {
       "mobile": [{ "host": "yepanywhere.com", "pathPrefix": ["/open"] }]
-    },
-    "notification": {
-      "mobile": {
-        "channels": [
-          {
-            "id": "yep-anywhere",
-            "name": "Yep Anywhere",
-            "description": "AI session notifications",
-            "importance": "high",
-            "visibility": "public"
-          }
-        ]
-      }
     }
   }
 }

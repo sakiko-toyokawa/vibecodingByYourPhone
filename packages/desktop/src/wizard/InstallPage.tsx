@@ -3,6 +3,8 @@ import {
   installYepServer,
   installClaude,
   installCodex,
+  installGemini,
+  checkAgentInstalled,
   onInstallProgress,
   type InstallProgress,
 } from "../tauri";
@@ -29,6 +31,9 @@ export function InstallPage({ agents, onNext }: Props) {
     }
     if (agents.includes("codex")) {
       t.push({ id: "codex", label: "Codex CLI", status: "pending" });
+    }
+    if (agents.includes("gemini")) {
+      t.push({ id: "gemini", label: "Gemini CLI", status: "pending" });
     }
     return t;
   });
@@ -63,11 +68,25 @@ export function InstallPage({ agents, onNext }: Props) {
     (async () => {
       try {
         await installYepServer();
-        if (agents.includes("claude")) {
-          await installClaude();
-        }
-        if (agents.includes("codex")) {
-          await installCodex();
+        for (const agent of agents) {
+          const installed = await checkAgentInstalled(agent);
+          if (installed) {
+            setTasks((prev) =>
+              prev.map((t) =>
+                t.id === agent
+                  ? { ...t, status: "done", message: "Already installed" }
+                  : t,
+              ),
+            );
+            continue;
+          }
+          if (agent === "claude") {
+            await installClaude();
+          } else if (agent === "codex") {
+            await installCodex();
+          } else if (agent === "gemini") {
+            await installGemini();
+          }
         }
       } catch (e) {
         setError(String(e));

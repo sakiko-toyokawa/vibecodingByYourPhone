@@ -56,23 +56,55 @@ pub async fn spawn_pty(app: AppHandle, command: String, args: Vec<String>) -> Re
         exe_dir.join(bin_name)
     };
 
+    #[cfg(windows)]
+    {
+        let _ = &bun;
+    }
+
     let data_dir = config::data_dir();
 
     // For known commands (claude, codex), resolve to their actual scripts/binaries
     // and run them with the bundled bun. For unknown commands, run directly.
     let cmd = match command.as_str() {
         "claude" => {
-            let script = data_dir
+            #[cfg(windows)]
+            let app_script = data_dir
+                .join("node_modules")
+                .join("@anthropic-ai")
+                .join("claude-code")
+                .join("bin")
+                .join("claude.exe");
+            #[cfg(not(windows))]
+            let app_script = data_dir
                 .join("node_modules")
                 .join("@anthropic-ai")
                 .join("claude-code")
                 .join("cli.js");
-            let mut c = CommandBuilder::new(&bun);
-            c.arg(&script);
+
+            let app_exists = app_script.exists();
+            let script = if app_exists {
+                app_script
+            } else {
+                config::which_in_path("claude").unwrap_or(app_script)
+            };
+            let use_bun = cfg!(not(windows)) && app_exists;
+
+            let mut c = if use_bun {
+                let mut c = CommandBuilder::new(&bun);
+                c.arg(&script);
+                c
+            } else {
+                CommandBuilder::new(&script)
+            };
+
             for arg in &args {
                 c.arg(arg);
             }
+            let tmp_dir = data_dir.join("tmp");
+            let _ = std::fs::create_dir_all(&tmp_dir);
             c.cwd(dirs::home_dir().unwrap_or_else(|| "/".into()));
+            c.env("TMP", tmp_dir.to_string_lossy().as_ref());
+            c.env("TEMP", tmp_dir.to_string_lossy().as_ref());
             c
         }
         _ => {

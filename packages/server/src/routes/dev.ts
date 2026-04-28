@@ -1,5 +1,9 @@
 import { Hono } from "hono";
-import type { EventBus, IEventBus, SourceChangeEvent } from "../watcher/index.js";
+import type {
+  EventBus,
+  IEventBus,
+  SourceChangeEvent,
+} from "../watcher/index.js";
 
 export interface DevDeps {
   eventBus: IEventBus;

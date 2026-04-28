@@ -1,3 +1,5 @@
+@import "./provider-themes.css";
+@import "./provider-animations.css";
 @import "./renderers.css";
 @import "./tool-rows.css";
 @import "./emulator.css";

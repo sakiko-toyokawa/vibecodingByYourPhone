@@ -2,7 +2,6 @@ import { type ChildProcess, execSync, spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { createInterface } from "node:readline";
 import type {
   DeviceICECandidate,
   DeviceICECandidateEvent,
@@ -667,6 +666,7 @@ export class DeviceBridgeService {
   private readHandshake(child: ChildProcess): Promise<SidecarHandshake> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
+        cleanup();
         reject(new Error("Sidecar handshake timed out (5s)"));
       }, 5000);
 
@@ -674,31 +674,58 @@ export class DeviceBridgeService {
         reject(new Error("Sidecar process has no stdout"));
         return;
       }
-      const rl = createInterface({ input: child.stdout });
-      rl.once("line", (line) => {
+
+      let buffer = "";
+      let resolved = false;
+
+      const cleanup = () => {
         clearTimeout(timeout);
-        rl.close();
-        try {
-          const data = JSON.parse(line) as SidecarHandshake;
-          if (!data.port) {
-            reject(new Error(`Invalid handshake: ${line}`));
-          } else {
-            resolve(data);
+        child.stdout?.off("data", onData);
+        child.off("error", onError);
+        child.off("exit", onExit);
+      };
+
+      const onData = (chunk: Buffer) => {
+        if (resolved) return;
+        buffer += chunk.toString();
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          resolved = true;
+          cleanup();
+          try {
+            const data = JSON.parse(trimmed) as SidecarHandshake;
+            if (!data.port) {
+              reject(new Error(`Invalid handshake: ${trimmed}`));
+            } else {
+              resolve(data);
+            }
+          } catch {
+            reject(new Error(`Failed to parse handshake: ${trimmed}`));
           }
-        } catch {
-          reject(new Error(`Failed to parse handshake: ${line}`));
+          return;
         }
-      });
+      };
 
-      child.on("error", (err) => {
-        clearTimeout(timeout);
+      const onError = (err: Error) => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
         reject(err);
-      });
+      };
 
-      child.on("exit", (code) => {
-        clearTimeout(timeout);
+      const onExit = (code: number | null) => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
         reject(new Error(`Sidecar exited during handshake (code=${code})`));
-      });
+      };
+
+      child.stdout.on("data", onData);
+      child.on("error", onError);
+      child.on("exit", onExit);
     });
   }
 

@@ -46,7 +46,12 @@ export const corsMiddleware = cors({
   origin: (origin) => (isAllowedOrigin(origin) ? origin : null),
   credentials: true,
   allowMethods: ["GET", "POST", "PUT", "DELETE"],
-  allowHeaders: ["Content-Type", "Authorization", "X-Yep-Anywhere"],
+  allowHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Yep-Anywhere",
+    "X-Desktop-Token",
+  ],
 });
 
 // Only require header on mutating requests (SSE uses native EventSource which can't send headers)

@@ -15,7 +15,7 @@
     "build": "pnpm -r build",
     "build:bundle": "tsx scripts/build-bundle.ts",
     "build:stable": "pnpm --filter client build:stable",
-    "typecheck": "pnpm --filter shared build && pnpm -r --filter '!@yep-anywhere/mobile' exec tsc --noEmit",
+    "typecheck": "pnpm --filter shared build && pnpm -r --filter \"!@yep-anywhere/mobile\" exec tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
     "prepare": "husky",

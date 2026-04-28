@@ -5,20 +5,21 @@ import {
   type UrlProjectId,
   asDirProjectId,
 } from "@yep-anywhere/shared";
-import { encodeProjectId } from "../projects/paths.js";
 import type { ProjectScanner } from "../projects/scanner.js";
+import type { IProviderAdapter } from "../providers/adapter.js";
+import { providerRegistry } from "../providers/registry.js";
 import { readFirstLine } from "../utils/jsonl.js";
 import { BatchProcessor } from "../watcher/BatchProcessor.js";
 import type {
   BusEvent,
   EventBus,
   FileChangeEvent,
-  IEventBus,
   SessionAbortedEvent,
   SessionCreatedEvent,
   SessionStatusEvent,
   SessionUpdatedEvent,
 } from "../watcher/EventBus.js";
+import type { IEventBus } from "../watcher/IEventBus.js";
 import type { Supervisor } from "./Supervisor.js";
 import type {
   ContextUsage,
@@ -352,17 +353,22 @@ export class ExternalSessionTracker {
       return;
     }
 
-    if (event.provider === "codex") {
-      await this.handleCodexFileChange(event);
-      return;
+    const descriptor = providerRegistry.getOrNull(
+      event.provider,
+    ) as IProviderAdapter | null;
+
+    // Extract sessionId: provider-specific extraction or from path
+    let sessionId =
+      descriptor?.extractSessionIdFromPath?.(event.relativePath) ?? null;
+    let parsedPath: {
+      sessionId: string;
+      dirProjectId: DirProjectId;
+    } | null = null;
+    if (!sessionId) {
+      parsedPath = this.parseSessionPath(event.relativePath);
+      if (!parsedPath) return;
+      sessionId = parsedPath.sessionId;
     }
-
-    // Parse sessionId and projectId from path
-    // Format: projects/<projectId>/<sessionId>.jsonl
-    const parsed = this.parseSessionPath(event.relativePath);
-    if (!parsed) return;
-
-    const { sessionId, dirProjectId } = parsed;
 
     // Check if we own this session
     const process = this.supervisor.getProcessForSession(sessionId);
@@ -386,8 +392,30 @@ export class ExternalSessionTracker {
       return;
     }
 
-    // We don't own it and it's not in grace period - mark as external
-    this.markExternal(sessionId, { provider: event.provider, dirProjectId });
+    // Extract projectId: provider-specific (read file) or from path
+    if (descriptor?.readProjectIdFromFile) {
+      const projectId = await descriptor.readProjectIdFromFile(event.path);
+      if (projectId) {
+        this.markExternal(sessionId, { provider: event.provider, projectId });
+        if (descriptor?.group === "codex") {
+          await this.ensureCodexSessionCreated(
+            sessionId,
+            event.path,
+            projectId,
+          );
+        }
+      }
+    } else {
+      const dirProjectId =
+        parsedPath?.dirProjectId ??
+        this.parseSessionPath(event.relativePath)?.dirProjectId;
+      if (dirProjectId) {
+        this.markExternal(sessionId, {
+          provider: event.provider,
+          dirProjectId,
+        });
+      }
+    }
   }
 
   private parseSessionPath(
@@ -425,51 +453,6 @@ export class ExternalSessionTracker {
     const dirProjectId = asDirProjectId(projectParts.join("/"));
 
     return { sessionId, dirProjectId };
-  }
-
-  private async handleCodexFileChange(event: FileChangeEvent): Promise<void> {
-    const sessionId = this.extractCodexSessionId(event.relativePath);
-    if (!sessionId) return;
-
-    const process = this.supervisor.getProcessForSession(sessionId);
-    if (process) {
-      this.removeExternal(sessionId);
-      // Still parse to detect title/messageCount changes for owned sessions
-      if (this.getSessionSummary) {
-        const getSessionSummary = this.getSessionSummary;
-        const projectId = process.projectId;
-        this.sessionParser.enqueue(sessionId, async () => {
-          return getSessionSummary(sessionId, projectId);
-        });
-      }
-      return;
-    }
-
-    if (this.isInAbortGracePeriod(sessionId)) {
-      return;
-    }
-
-    const projectId = await this.readCodexProjectIdFromFile(event.path);
-    if (!projectId) return;
-
-    this.markExternal(sessionId, { provider: event.provider, projectId });
-    await this.ensureCodexSessionCreated(sessionId, event.path, projectId);
-  }
-
-  private extractCodexSessionId(relativePath: string): string | null {
-    const filename = relativePath.split(path.sep).pop();
-    if (!filename || !filename.endsWith(".jsonl")) return null;
-    const base = filename.slice(0, -6);
-    const match = base.match(/([0-9a-fA-F-]{36})$/);
-    return match?.[1] ?? null;
-  }
-
-  private async readCodexProjectIdFromFile(
-    filePath: string,
-  ): Promise<UrlProjectId | null> {
-    const meta = await this.readCodexSessionMeta(filePath);
-    if (!meta) return null;
-    return encodeProjectId(meta.cwd);
   }
 
   private async readCodexSessionMeta(

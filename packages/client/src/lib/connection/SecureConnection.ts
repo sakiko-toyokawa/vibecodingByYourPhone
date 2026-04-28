@@ -59,6 +59,15 @@ import {
   WebSocketCloseError,
 } from "./types";
 
+function sanitizeUrlForLogging(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return rawUrl.replace(/\?.*$/, "");
+  }
+}
+
 /** Connection authentication state */
 type ConnectionState =
   | "disconnected"
@@ -615,7 +624,10 @@ export class SecureConnection implements Connection {
         return;
       }
 
-      console.log("[SecureConnection] Connecting to", this.wsUrl);
+      console.log(
+        "[SecureConnection] Connecting to",
+        sanitizeUrlForLogging(this.wsUrl),
+      );
       this.connectionState = "connecting";
 
       const ws = new WebSocket(this.wsUrl);
@@ -764,7 +776,10 @@ export class SecureConnection implements Connection {
       throw new Error("Missing relay config or stored session for reconnect");
     }
 
-    console.log("[SecureConnection] Connecting to relay:", this.relayUrl);
+    console.log(
+      "[SecureConnection] Connecting to relay:",
+      sanitizeUrlForLogging(this.relayUrl),
+    );
     this.connectionState = "connecting";
 
     const ws = new WebSocket(this.relayUrl);

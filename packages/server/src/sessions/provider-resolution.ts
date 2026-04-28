@@ -3,12 +3,12 @@ import type { ISessionIndexService } from "../indexes/types.js";
 import { canonicalizeProjectPath } from "../projects/paths.js";
 import { providerRegistry } from "../providers/registry.js";
 import type { Project, SessionSummary } from "../supervisor/types.js";
-import { CodexSessionReader } from "./codex-reader.js";
-import { GeminiSessionReader } from "./gemini-reader.js";
+import type { CodexSessionReader } from "./codex-reader.js";
+import type { GeminiSessionReader } from "./gemini-reader.js";
 import { ClaudeSessionReader } from "./reader.js";
 import type { ISessionReader } from "./types.js";
 
-type ProviderGroup = "claude" | "codex" | "gemini" | "opencode";
+type ProviderGroup = string;
 
 export interface ProviderProjectCatalog {
   codexPaths: Set<string>;
@@ -30,7 +30,7 @@ export interface SessionSource {
   provider: ProviderName;
   reader: ISessionReader;
   sessionDir: string;
-  kind: "primary" | "codex" | "gemini";
+  kind: string;
 }
 
 export interface ResolvedSessionSummary {
@@ -43,15 +43,7 @@ function normalizeProviderGroup(
 ): ProviderGroup | null {
   if (!provider) return null;
   const descriptor = providerRegistry.getOrNull(provider);
-  if (descriptor) {
-    return descriptor.group as ProviderGroup;
-  }
-  // Fallback when providers not registered (e.g., in tests)
-  if (provider === "claude" || provider === "claude-ollama") return "claude";
-  if (provider === "codex" || provider === "codex-oss") return "codex";
-  if (provider === "gemini" || provider === "gemini-acp") return "gemini";
-  if (provider === "opencode") return "opencode";
-  return null;
+  return (descriptor?.group as ProviderGroup) ?? null;
 }
 
 function mayHaveCodexSessions(
@@ -73,62 +65,6 @@ function mayHaveGeminiSessions(
   }
   const provider = normalizeProviderGroup(project.provider);
   return provider === "claude" || provider === "codex";
-}
-
-function createClaudeSource(
-  project: Project,
-  deps: ProviderResolutionDeps,
-): SessionSource {
-  return {
-    provider: project.provider,
-    reader: deps.readerFactory(project),
-    sessionDir: project.sessionDir,
-    kind: "primary",
-  };
-}
-
-function createCodexSource(
-  project: Project,
-  deps: ProviderResolutionDeps,
-): SessionSource | null {
-  const reader =
-    deps.codexReaderFactory?.(project.path) ??
-    (deps.codexSessionsDir
-      ? new CodexSessionReader({
-          sessionsDir: deps.codexSessionsDir,
-          projectPath: project.path,
-        })
-      : null);
-  if (!reader) return null;
-  return {
-    provider: "codex",
-    reader,
-    sessionDir: deps.codexSessionsDir ?? project.sessionDir,
-    kind: "codex",
-  };
-}
-
-function createGeminiSource(
-  project: Project,
-  deps: ProviderResolutionDeps,
-  catalog?: ProviderProjectCatalog,
-): SessionSource | null {
-  const reader =
-    deps.geminiReaderFactory?.(project.path) ??
-    (deps.geminiSessionsDir
-      ? new GeminiSessionReader({
-          sessionsDir: deps.geminiSessionsDir,
-          projectPath: project.path,
-          hashToCwd: catalog?.geminiHashToCwd ?? deps.geminiHashToCwd,
-        })
-      : null);
-  if (!reader) return null;
-  return {
-    provider: "gemini",
-    reader,
-    sessionDir: deps.geminiSessionsDir ?? project.sessionDir,
-    kind: "gemini",
-  };
 }
 
 function buildCandidateGroups(
@@ -164,35 +100,56 @@ function getSourceForGroup(
   group: ProviderGroup,
   catalog?: ProviderProjectCatalog,
 ): SessionSource | null {
-  const descriptor = providerRegistry.list().find((d) => d.group === group);
-
-  if (!descriptor) {
-    // Fallback when providers not registered (e.g., in tests)
-    switch (group) {
-      case "claude":
-      case "opencode":
-        return createClaudeSource(project, deps);
-      case "codex":
-        return createCodexSource(project, deps);
-      case "gemini":
-        return createGeminiSource(project, deps, catalog);
-      default:
-        return null;
-    }
-  }
+  const descriptor = providerRegistry.getByGroup(group);
+  if (!descriptor) return null;
 
   const isPrimary = normalizeProviderGroup(project.provider) === group;
 
   if (isPrimary) {
-    return createClaudeSource(project, deps);
+    return {
+      provider: project.provider,
+      reader: deps.readerFactory(project),
+      sessionDir: project.sessionDir,
+      kind: "primary",
+    };
   }
 
-  // Extra sources: use existing helpers to preserve test injection via deps factories
-  return group === "codex"
-    ? createCodexSource(project, deps)
-    : group === "gemini"
-      ? createGeminiSource(project, deps, catalog)
-      : null;
+  // Extra sources: prefer test-injected factories for known providers, then fallback to descriptor
+  if (group === "codex") {
+    const reader =
+      deps.codexReaderFactory?.(project.path) ??
+      descriptor.createExtraReader(project.path);
+    if (!reader) return null;
+    return {
+      provider: "codex",
+      reader,
+      sessionDir: deps.codexSessionsDir ?? descriptor.getSessionDir(),
+      kind: group,
+    };
+  }
+
+  if (group === "gemini") {
+    const reader =
+      deps.geminiReaderFactory?.(project.path) ??
+      descriptor.createExtraReader(project.path);
+    if (!reader) return null;
+    return {
+      provider: "gemini",
+      reader,
+      sessionDir: deps.geminiSessionsDir ?? descriptor.getSessionDir(),
+      kind: group,
+    };
+  }
+
+  // Generic extra source for any other provider
+  const reader = descriptor.createExtraReader(project.path);
+  if (!reader) return null;
+  return {
+    provider: (descriptor.names[0] ?? group) as ProviderName,
+    reader,
+    sessionDir: descriptor.getSessionDir(),
+    kind: group,
+  };
 }
 
 function getSessionSources(
@@ -240,9 +197,10 @@ async function listSessionsForSource(
 
   if (
     source.kind === "primary" &&
-    normalizeProviderGroup(project.provider) === "claude"
+    project.mergedSessionDirs &&
+    project.mergedSessionDirs.length > 0
   ) {
-    for (const dir of project.mergedSessionDirs ?? []) {
+    for (const dir of project.mergedSessionDirs) {
       const mergedReader = new ClaudeSessionReader({ sessionDir: dir });
       const merged = await deps.sessionIndexService.getSessionsWithCache(
         dir,

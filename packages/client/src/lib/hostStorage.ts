@@ -37,6 +37,10 @@ export interface SavedHostsStorage {
   hosts: SavedHost[];
 }
 
+function normalizeRelayUrl(relayUrl: string): string {
+  return relayUrl.trim().replace(/\/+$/, "");
+}
+
 /** Load saved hosts from localStorage */
 export function loadSavedHosts(): SavedHostsStorage {
   try {
@@ -83,11 +87,12 @@ export function upsertRelayHost(params: {
   srpUsername: string;
   session?: StoredSession;
 }): SavedHost {
-  const existing = getHostByRelayUsername(params.relayUsername);
+  const normalizedRelayUrl = normalizeRelayUrl(params.relayUrl);
+  const existing = getRelayHost(normalizedRelayUrl, params.relayUsername);
   const host: SavedHost = existing
     ? {
         ...existing,
-        relayUrl: params.relayUrl,
+        relayUrl: normalizedRelayUrl,
         srpUsername: params.srpUsername,
         session: params.session ?? existing.session,
         lastConnected: params.session
@@ -136,6 +141,21 @@ export function getHostByRelayUsername(
   );
 }
 
+/** Find a relay host by relay URL + relay username */
+export function getRelayHost(
+  relayUrl: string,
+  relayUsername: string,
+): SavedHost | undefined {
+  const normalizedRelayUrl = normalizeRelayUrl(relayUrl);
+  const data = loadSavedHosts();
+  return data.hosts.find(
+    (h) =>
+      h.mode === "relay" &&
+      h.relayUsername === relayUsername &&
+      normalizeRelayUrl(h.relayUrl ?? "") === normalizedRelayUrl,
+  );
+}
+
 /** Find a host by ID */
 export function getHostById(id: string): SavedHost | undefined {
   const data = loadSavedHosts();
@@ -149,11 +169,12 @@ export function createRelayHost(params: {
   srpUsername: string;
   displayName?: string;
 }): SavedHost {
+  const normalizedRelayUrl = normalizeRelayUrl(params.relayUrl);
   return {
     id: generateUUID(),
     displayName: params.displayName ?? params.relayUsername,
     mode: "relay",
-    relayUrl: params.relayUrl,
+    relayUrl: normalizedRelayUrl,
     relayUsername: params.relayUsername,
     srpUsername: params.srpUsername,
     createdAt: new Date().toISOString(),

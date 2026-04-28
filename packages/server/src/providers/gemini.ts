@@ -78,6 +78,10 @@ export class GeminiProviderDescriptor
     return "other";
   }
 
+  getSessionFilePattern(): RegExp {
+    return /\.json$/;
+  }
+
   normalizeSession(loaded: LoadedSession): Session {
     return normalizeGeminiSession(loaded);
   }
@@ -92,5 +96,9 @@ export class GeminiProviderDescriptor
 
   getAgentProvider(): AgentProvider | null {
     return geminiACPProvider;
+  }
+
+  getScanner(): ProviderScanner {
+    return this.scanner;
   }
 }

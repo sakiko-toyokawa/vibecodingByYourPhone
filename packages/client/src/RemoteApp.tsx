@@ -30,6 +30,7 @@ import {
 } from "./contexts/RemoteConnectionContext";
 import { SchemaValidationProvider } from "./contexts/SchemaValidationContext";
 import { ToastProvider } from "./contexts/ToastContext";
+import { useMobileNativeNotifications } from "./hooks/useMobileNativeNotifications";
 import { useNeedsAttentionBadge } from "./hooks/useNeedsAttentionBadge";
 import { useSyncNotifyInAppSetting } from "./hooks/useNotifyInApp";
 import { useReloadNotifications } from "./hooks/useReloadNotifications";
@@ -50,6 +51,7 @@ interface Props {
  */
 export function ConnectedAppContent({ children }: { children: ReactNode }) {
   useRemoteActivityBusConnection();
+  useMobileNativeNotifications();
   const { currentRelayUsername } = useRemoteConnection();
   const { version: versionInfo } = useVersion();
   const [dismissedRelayResumeWarning, setDismissedRelayResumeWarning] =

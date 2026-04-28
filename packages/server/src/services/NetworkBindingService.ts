@@ -64,6 +64,7 @@ export class NetworkBindingService {
   private filePath: string;
   private savePromise: Promise<void> | null = null;
   private pendingSave = false;
+  private runtimeLocalhostPort: number | null = null;
 
   /** CLI override for port (takes precedence over saved settings) */
   readonly cliPortOverride: number | null;
@@ -171,6 +172,21 @@ export class NetworkBindingService {
   }
 
   /**
+   * Get the active localhost port currently bound by the server.
+   * Falls back to configured/default state until the server reports its runtime port.
+   */
+  getActiveLocalhostPort(): number {
+    return this.runtimeLocalhostPort ?? this.getLocalhostPort();
+  }
+
+  /**
+   * Update the active localhost port after the server finishes binding.
+   */
+  setRuntimeLocalhostPort(port: number | null): void {
+    this.runtimeLocalhostPort = port;
+  }
+
+  /**
    * Check if localhost port is overridden by CLI.
    */
   isLocalhostPortOverridden(): boolean {
@@ -219,7 +235,7 @@ export class NetworkBindingService {
     const networkConfig = this.getNetworkConfig();
     return {
       localhost: {
-        port: this.getLocalhostPort(),
+        port: this.getActiveLocalhostPort(),
         overriddenByCli: this.isLocalhostPortOverridden(),
       },
       network: {

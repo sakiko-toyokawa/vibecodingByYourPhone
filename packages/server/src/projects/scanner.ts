@@ -7,8 +7,9 @@ import {
   type UrlProjectId,
 } from "@yep-anywhere/shared";
 import type { ProjectMetadataService } from "../metadata/index.js";
-import type { Project } from "../supervisor/types.js";
 import { providerRegistry } from "../providers/registry.js";
+import type { Project } from "../supervisor/types.js";
+import type { IEventBus } from "../watcher/IEventBus.js";
 import type { EventBus, FileChangeEvent } from "../watcher/index.js";
 import { CODEX_SESSIONS_DIR, CodexSessionScanner } from "./codex-scanner.js";
 import { GEMINI_TMP_DIR, GeminiSessionScanner } from "./gemini-scanner.js";
@@ -32,7 +33,7 @@ export interface ScannerOptions {
   enableGemini?: boolean; // whether to include Gemini projects (default: true)
   projectMetadataService?: ProjectMetadataService; // for persisting added projects
   /** Optional EventBus for watcher-driven cache invalidation */
-  eventBus?: EventBus;
+  eventBus?: IEventBus;
   /** Project snapshot TTL in milliseconds (default: 5000) */
   cacheTtlMs?: number;
 }
@@ -198,12 +199,11 @@ export class ProjectScanner {
 
     // Any session file delta can affect project existence/count/lastActivity.
     this.invalidateCache();
-    const group = providerRegistry.getOrNull(event.provider)?.group;
-    if (group === "codex") {
-      this.codexScanner?.invalidateCache();
-    } else if (group === "gemini") {
-      this.geminiScanner?.invalidateCache();
-    }
+    const descriptor = providerRegistry.getOrNull(event.provider);
+    const scanner = (
+      descriptor as import("../providers/adapter.js").IProviderAdapter | null
+    )?.getScanner?.();
+    scanner?.invalidateCache();
   }
 
   private async scanProjects(): Promise<Project[]> {
@@ -456,7 +456,7 @@ export class ProjectScanner {
    */
   async getOrCreateProject(
     projectId: string,
-    preferredProvider?: "claude" | "codex" | "gemini",
+    preferredProvider?: ProviderName,
   ): Promise<Project | null> {
     let resolvedProjectId = projectId;
 

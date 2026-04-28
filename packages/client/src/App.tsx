@@ -5,8 +5,10 @@ import { ReloadBanner } from "./components/ReloadBanner";
 import { OnboardingWizard } from "./components/onboarding";
 import { AuthProvider } from "./contexts/AuthContext";
 import { InboxProvider } from "./contexts/InboxContext";
+import { ProviderThemeProvider } from "./contexts/ProviderThemeContext";
 import { SchemaValidationProvider } from "./contexts/SchemaValidationContext";
 import { ToastProvider } from "./contexts/ToastContext";
+import { useActiveProvider } from "./hooks/useActiveProvider";
 import { useActivityBusConnection } from "./hooks/useActivityBusConnection";
 import { useDesktopNativeNotifications } from "./hooks/useDesktopNativeNotifications";
 import { useMobileNativeNotifications } from "./hooks/useMobileNativeNotifications";
@@ -16,8 +18,6 @@ import { useOnboarding } from "./hooks/useOnboarding";
 import { useReloadNotifications } from "./hooks/useReloadNotifications";
 import { I18nProvider } from "./i18n";
 import { initClientLogCollection } from "./lib/diagnostics";
-import { ProviderThemeProvider } from "./contexts/ProviderThemeContext";
-import { useActiveProvider } from "./hooks/useActiveProvider";
 
 interface Props {
   children: ReactNode;

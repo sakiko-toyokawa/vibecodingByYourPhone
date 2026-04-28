@@ -18,7 +18,11 @@ import {
   type AutoResumeError,
   useRemoteConnection,
 } from "../contexts/RemoteConnectionContext";
-import { getHostById, getHostByRelayUsername } from "../lib/hostStorage";
+import {
+  getHostById,
+  getHostByRelayUsername,
+  getRelayHost,
+} from "../lib/hostStorage";
 
 type ConnectionState =
   | "checking"
@@ -158,7 +162,11 @@ export function RelayConnectionGate() {
     }
 
     // Look up saved host by relay username
-    const host = getHostByRelayUsername(relayUsername);
+    const currentHost = currentHostId ? getHostById(currentHostId) : null;
+    const host =
+      currentHost?.relayUsername === relayUsername && currentHost.relayUrl
+        ? getRelayHost(currentHost.relayUrl, relayUsername)
+        : getHostByRelayUsername(relayUsername);
     console.log(
       `[RelayConnectionGate] Looking up host for "${relayUsername}":`,
       host
@@ -256,7 +264,14 @@ export function RelayConnectionGate() {
           onRetry={() => {
             setState("connecting");
             setError(null);
-            const host = getHostByRelayUsername(relayUsername ?? "");
+            const currentHost = currentHostId
+              ? getHostById(currentHostId)
+              : null;
+            const host =
+              currentHost?.relayUsername === (relayUsername ?? "") &&
+              currentHost.relayUrl
+                ? getRelayHost(currentHost.relayUrl, relayUsername ?? "")
+                : getHostByRelayUsername(relayUsername ?? "");
             if (host?.relayUrl && host.relayUsername && host.session) {
               connectViaRelay({
                 relayUrl: host.relayUrl,
