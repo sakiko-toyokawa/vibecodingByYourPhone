@@ -4,6 +4,28 @@
 @import "./tool-rows.css";
 @import "./emulator.css";
 
+/* Apply provider-specific fonts */
+body {
+  font-family: var(--font-body), -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-display), var(--font-body), -apple-system,
+    BlinkMacSystemFont, sans-serif;
+}
+
+code,
+pre,
+.mono {
+  font-family: var(--font-mono), "Courier New", monospace;
+}
+
 /* ==========================================================================
    CSS Design Tokens - Claude Anywhere Multi-Theme Support
    ========================================================================== */
