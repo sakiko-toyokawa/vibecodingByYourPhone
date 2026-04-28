@@ -3,6 +3,7 @@ import type {
   AgentStatus as AgentStatusType,
   AppContentBlock,
   AppMessage,
+  ProviderName,
 } from "@yep-anywhere/shared";
 
 // Re-export shared types
@@ -160,4 +161,5 @@ export interface Project {
   activeOwnedCount: number;
   activeExternalCount: number;
   lastActivity: string | null;
+  provider?: ProviderName;
 }
