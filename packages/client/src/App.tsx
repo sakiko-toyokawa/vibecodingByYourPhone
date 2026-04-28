@@ -16,6 +16,8 @@ import { useOnboarding } from "./hooks/useOnboarding";
 import { useReloadNotifications } from "./hooks/useReloadNotifications";
 import { I18nProvider } from "./i18n";
 import { initClientLogCollection } from "./lib/diagnostics";
+import { ProviderThemeProvider } from "./contexts/ProviderThemeContext";
+import { useActiveProvider } from "./hooks/useActiveProvider";
 
 interface Props {
   children: ReactNode;
@@ -25,6 +27,8 @@ interface Props {
  * Inner component that uses hooks requiring InboxContext.
  */
 function AppContent({ children }: Props) {
+  const activeProvider = useActiveProvider();
+
   // Manage SSE connection based on auth state (prevents 401s on login page)
   useActivityBusConnection();
 
@@ -54,27 +58,29 @@ function AppContent({ children }: Props) {
   } = useReloadNotifications();
 
   return (
-    <>
-      <ConnectionBar />
-      {isManualReloadMode && pendingReloads.backend && (
-        <ReloadBanner
-          target="backend"
-          onReload={reloadBackend}
-          onDismiss={() => dismiss("backend")}
-          unsafeToRestart={unsafeToRestart}
-          activeWorkers={workerActivity.activeWorkers}
-        />
-      )}
-      {isManualReloadMode && pendingReloads.frontend && (
-        <ReloadBanner
-          target="frontend"
-          onReload={reloadFrontend}
-          onDismiss={() => dismiss("frontend")}
-        />
-      )}
-      {children}
-      <FloatingActionButton />
-    </>
+    <ProviderThemeProvider activeProvider={activeProvider}>
+      <>
+        <ConnectionBar />
+        {isManualReloadMode && pendingReloads.backend && (
+          <ReloadBanner
+            target="backend"
+            onReload={reloadBackend}
+            onDismiss={() => dismiss("backend")}
+            unsafeToRestart={unsafeToRestart}
+            activeWorkers={workerActivity.activeWorkers}
+          />
+        )}
+        {isManualReloadMode && pendingReloads.frontend && (
+          <ReloadBanner
+            target="frontend"
+            onReload={reloadFrontend}
+            onDismiss={() => dismiss("frontend")}
+          />
+        )}
+        {children}
+        <FloatingActionButton />
+      </>
+    </ProviderThemeProvider>
   );
 }
 
