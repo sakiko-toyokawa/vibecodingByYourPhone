@@ -76,7 +76,10 @@ export function cspPlugin(options: CspPluginOptions = {}): Plugin {
         }
 
         // style-src: Allow self + inline styles (Vite injects styles, plus critical CSS)
-        directives.push("style-src 'self' 'unsafe-inline'");
+        // Google Fonts stylesheet for provider theme fonts
+        directives.push(
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        );
 
         // connect-src: API calls and WebSocket connections
         if (isDev) {
@@ -94,8 +97,8 @@ export function cspPlugin(options: CspPluginOptions = {}): Plugin {
         // img-src: Allow self, data URIs (icons), and blob (uploads/previews)
         directives.push("img-src 'self' data: blob:");
 
-        // font-src: Only self
-        directives.push("font-src 'self'");
+        // font-src: Self + Google Fonts CDN for provider theme fonts
+        directives.push("font-src 'self' https://fonts.gstatic.com");
 
         // media-src: Allow self and blob for audio/video
         directives.push("media-src 'self' blob:");
