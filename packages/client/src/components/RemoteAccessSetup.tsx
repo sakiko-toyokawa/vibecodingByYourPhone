@@ -316,14 +316,14 @@ export function RemoteAccessSetup({
 
   if (loading) {
     return (
-      <div className="remote-access-setup">
-        <div className="remote-access-header">
+      <div className="flex flex-col gap-4 p-4">
+        <div className="flex items-center justify-between">
           <div>
             <h3>{title}</h3>
             <p>{description}</p>
           </div>
         </div>
-        <div className="remote-access-loading">
+        <div className="flex items-center justify-center py-8 text-sm text-[var(--text-muted)]">
           {t("remoteSetupLoading" as never)}
         </div>
       </div>
@@ -372,25 +372,26 @@ export function RemoteAccessSetup({
   const canToggleOn = hasCredentials || (username && password);
 
   return (
-    <div className="remote-access-setup">
-      <div className="remote-access-header">
+    <div className="flex flex-col gap-4 p-4">
+      <div className="flex items-center justify-between">
         <div>
           <h3>{title}</h3>
           <p>{description}</p>
         </div>
-        <label className="toggle-switch">
+        <label className="relative inline-block w-11 h-6 shrink-0 cursor-pointer">
           <input
             type="checkbox"
+            className="peer opacity-0 w-0 h-0"
             checked={isEnabled}
             onChange={(e) => handleToggle(e.target.checked)}
             disabled={isSaving || (!isEnabled && !canToggleOn)}
           />
-          <span className="toggle-slider" />
+          <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-colors duration-200 rounded-full peer-checked:bg-[var(--accent-color,#3b82f6)] peer-checked:border-[var(--accent-color,#3b82f6)] before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-0.5 before:bottom-0.5 before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full peer-checked:before:translate-x-5 peer-checked:before:bg-white" />
         </label>
       </div>
 
-      <form onSubmit={handleSave} className="remote-access-form">
-        <div className="form-field">
+      <form onSubmit={handleSave} className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
           <label htmlFor="remote-username">
             {t("remoteSetupUsername" as never)}
           </label>
@@ -409,7 +410,7 @@ export function RemoteAccessSetup({
           />
         </div>
 
-        <div className="form-field">
+        <div className="flex flex-col gap-1">
           <label htmlFor="remote-password">
             {hasCredentials
               ? t("remoteSetupNewPassword" as never)
@@ -428,7 +429,7 @@ export function RemoteAccessSetup({
         </div>
 
         {password && (
-          <div className="form-field">
+          <div className="flex flex-col gap-1">
             <label htmlFor="remote-confirm">
               {t("remoteSetupConfirmPassword" as never)}
             </label>
@@ -444,7 +445,7 @@ export function RemoteAccessSetup({
           </div>
         )}
 
-        <div className="form-field">
+        <div className="flex flex-col gap-1">
           <label htmlFor="relay-select">
             {t("remoteSetupRelayServer" as never)}
           </label>
@@ -453,7 +454,7 @@ export function RemoteAccessSetup({
             value={relayOption}
             onChange={(e) => setRelayOption(e.target.value as RelayOption)}
             disabled={isSaving}
-            className="form-select"
+            className="cursor-pointer rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <option value="default">
               {t("remoteSetupRelayDefault" as never)}
@@ -465,7 +466,7 @@ export function RemoteAccessSetup({
         </div>
 
         {relayOption === "custom" && (
-          <div className="form-field">
+          <div className="flex flex-col gap-1">
             <label htmlFor="custom-relay-url">
               {t("remoteSetupCustomRelayUrl" as never)}
             </label>
@@ -480,32 +481,38 @@ export function RemoteAccessSetup({
           </div>
         )}
 
-        <div className="remote-access-status">
-          <span className="status-label">
+        <div className="flex flex-col gap-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] p-3">
+          <span className="text-xs font-medium text-[var(--text-muted)]">
             {t("remoteSetupStatus" as never)}
           </span>
           <span className={`status-indicator ${status.className}`}>
             {status.text}
           </span>
           {relayStatus?.error && (
-            <span className="status-error-detail">{relayStatus.error}</span>
+            <span className="text-xs text-[var(--error-color)]">
+              {relayStatus.error}
+            </span>
           )}
         </div>
 
         {(error || hookError) && (
-          <p className="form-error">{error || hookError}</p>
+          <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-[var(--error-color)]">
+            {error || hookError}
+          </p>
         )}
 
         {isEnabled && username && (
-          <div className="remote-access-connect">
-            <span className="connect-label">
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-medium text-[var(--text-muted)]">
               {t("remoteSetupConnectFrom" as never)}
             </span>
-            <div className="connect-url-row">
-              <code className="connect-url">{connectUrl}</code>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 rounded-md bg-[var(--bg-code)] px-2 py-1 font-mono text-xs">
+                {connectUrl}
+              </code>
               <button
                 type="button"
-                className="copy-button"
+                className="flex items-center justify-center rounded-md bg-transparent p-1 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                 onClick={() => handleCopyUrl(connectUrl)}
                 title={t("remoteSetupCopyUrl" as never)}
               >
@@ -518,10 +525,10 @@ export function RemoteAccessSetup({
         )}
 
         {canShowQRCode && (
-          <div className="remote-access-qr">
+          <div className="flex flex-col items-center gap-2">
             <button
               type="button"
-              className="qr-toggle-button"
+              className="text-xs text-[var(--link-color)] hover:underline"
               onClick={() => setShowQRCode(!showQRCode)}
             >
               {showQRCode
@@ -529,9 +536,9 @@ export function RemoteAccessSetup({
                 : t("remoteSetupShowQr" as never)}
             </button>
             {showQRCode && qrCodeUrl && (
-              <div className="qr-code-container">
+              <div className="rounded-md border border-[var(--border-color)] bg-white p-3">
                 <QRCode value={qrCodeUrl} size={200} />
-                <p className="qr-code-hint">
+                <p className="text-center text-[10px] text-[var(--text-dimmed)]">
                   {t("remoteSetupQrHint" as never)}
                 </p>
               </div>
@@ -539,15 +546,15 @@ export function RemoteAccessSetup({
           </div>
         )}
 
-        <div className="remote-access-sessions">
-          <div className="sessions-header">
-            <span className="sessions-title">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-[var(--text-primary)]">
               {t("remoteSetupSessions" as never, { count: sessions.length })}
             </span>
             {sessions.length > 0 && (
               <button
                 type="button"
-                className="revoke-all-button"
+                className="text-xs text-[var(--error-color)] hover:underline"
                 onClick={() => revokeAllSessions()}
                 disabled={isSaving}
               >
@@ -556,11 +563,11 @@ export function RemoteAccessSetup({
             )}
           </div>
           {sessions.length === 0 ? (
-            <p className="sessions-empty">
+            <p className="text-sm text-[var(--text-dimmed)]">
               {t("remoteSetupNoSessions" as never)}
             </p>
           ) : (
-            <ul className="sessions-list">
+            <ul className="list-none m-0 flex flex-col gap-2 p-0">
               {sessions.map((session) => {
                 const { browser, os } = session.userAgent
                   ? parseUserAgent(session.userAgent)
@@ -571,19 +578,22 @@ export function RemoteAccessSetup({
                 const hasDeviceInfo = session.userAgent || session.origin;
 
                 return (
-                  <li key={session.sessionId} className="session-item">
-                    <div className="session-info">
+                  <li
+                    key={session.sessionId}
+                    className="flex items-center justify-between rounded-sm bg-[var(--bg-secondary)] p-2"
+                  >
+                    <div className="flex flex-col gap-1 text-[10px] text-[var(--text-muted)]">
                       {hasDeviceInfo ? (
                         <>
-                          <span className="session-device">
+                          <span className="font-medium text-[var(--text-primary)]">
                             {browser} · {os}
                           </span>
                           {session.origin && (
-                            <code className="session-origin">
+                            <code className="rounded-sm bg-[var(--bg-tertiary)] px-1.5 py-0.5 font-mono text-[10px]">
                               {session.origin}
                             </code>
                           )}
-                          <span className="session-dates">
+                          <span className="text-[10px] text-[var(--text-muted)]">
                             {t("remoteSetupCreated" as never, {
                               date: formatRelativeDateWithT(
                                 session.createdAt,
@@ -601,11 +611,11 @@ export function RemoteAccessSetup({
                         </>
                       ) : (
                         <>
-                          <span className="session-created">
+                          <span className="text-[10px] text-[var(--text-muted)]">
                             {t("remoteSetupCreatedLabel" as never)}{" "}
                             {new Date(session.createdAt).toLocaleDateString()}
                           </span>
-                          <span className="session-last-used">
+                          <span className="text-[10px] text-[var(--text-muted)]">
                             {t("remoteSetupLastUsedLabel" as never)}{" "}
                             {new Date(session.lastUsed).toLocaleDateString()}
                           </span>
@@ -614,7 +624,7 @@ export function RemoteAccessSetup({
                     </div>
                     <button
                       type="button"
-                      className="revoke-button"
+                      className="cursor-pointer rounded-sm border border-[var(--border-color)] bg-transparent px-2 py-1 text-[10px] text-[var(--error-color)] transition-colors hover:bg-red-50 disabled:opacity-50"
                       onClick={() => revokeSession(session.sessionId)}
                       disabled={isSaving}
                     >
@@ -627,10 +637,10 @@ export function RemoteAccessSetup({
           )}
         </div>
 
-        <div className="remote-access-actions">
+        <div className="flex items-center justify-end gap-2 pt-2">
           <button
             type="submit"
-            className="settings-button"
+            className="rounded-md border border-[var(--border-color)] bg-transparent px-4 py-2 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
             disabled={isSaving || !hasChanges}
           >
             {isSaving
