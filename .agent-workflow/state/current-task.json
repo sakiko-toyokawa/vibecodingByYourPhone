@@ -5,7 +5,7 @@
     "title": "修复旧样式覆盖 Tailwind 样式并优化单屏布局",
     "description": "1. 解决项目旧前端样式覆盖新建 tailwind 样式的问题，旧样式在启动 client pnpm dev 后依旧存在，需要确保新 Tailwind 样式正确显示。2. 调整整体样式保证所有内容能在单个屏幕内完整显示，消除横向滚动条。",
     "type": "bugfix",
-    "status": "reviewing",
+    "status": "completed",
     "priority": "high",
     "createdAt": "2026-04-29T00:00:00Z",
     "updatedAt": "2026-04-29T00:00:00Z",
