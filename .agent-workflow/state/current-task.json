@@ -50,11 +50,11 @@
   },
   "coding": {
     "completed": true,
-    "commits": ["655cce4", "70a6ff7"],
+    "commits": ["655cce4", "70a6ff7", "7593af6"],
     "prUrl": ""
   },
   "review": {
-    "round": 1,
+    "round": 2,
     "maxRounds": 3,
     "status": "reviewing",
     "lastResult": "parse-failure-issues-fixed",
@@ -63,6 +63,11 @@
         "round": 1,
         "result": "parse-failure-issues-fixed",
         "notes": "Codex output lacked VERDICT line (parse failure). Review flagged 3 issues in working tree components (PushNotificationToggle, RemoteAccessSetup, SessionMenu) — none in the scope of awf-002's index.css changes. All 3 issues were fixed in commit 70a6ff7."
+      },
+      {
+        "round": 2,
+        "result": "parse-failure-issues-fixed",
+        "notes": "Codex output lacked VERDICT line (parse failure). Review flagged 2 P3 issues in NewSessionForm.tsx (missing provider-option-dot and mode-option-dot classes). Both fixed in commit 7593af6."
       }
     ]
   }
