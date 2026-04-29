@@ -610,22 +610,12 @@ export function NewSessionForm({
           />
           <button
             type="button"
-            className="toolbar-button"
+            className="flex items-center justify-center rounded-md p-2 text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
             onClick={() => fileInputRef.current?.click()}
             disabled={isStarting}
             aria-label={t("newSessionAttachFiles")}
           >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              aria-hidden="true"
-            >
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-            </svg>
+            <span className="text-sm">📎</span>
           </button>
           <VoiceInputButton
             ref={voiceButtonRef}
@@ -633,12 +623,12 @@ export function NewSessionForm({
             onInterimTranscript={handleInterimTranscript}
             onListeningStart={() => textareaRef.current?.focus()}
             disabled={isStarting}
-            className="toolbar-button"
+            className="flex items-center justify-center rounded-md p-2 text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
           />
           {supportsThinkingToggle && (
             <button
               type="button"
-              className={`toolbar-button thinking-toggle-button ${thinkingMode !== "off" ? `active ${thinkingMode}` : ""}`}
+              className={`flex items-center justify-center rounded-md p-2 text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] border border-transparent ${thinkingMode !== "off" ? "border-[var(--app-yep-green)] text-[var(--app-yep-green)]" : ""}`}
               onClick={cycleThinkingMode}
               disabled={isStarting}
               title={
@@ -650,44 +640,7 @@ export function NewSessionForm({
               }
               aria-label={t("newSessionThinkingMode", { mode: thinkingMode })}
             >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-                {thinkingMode === "auto" && (
-                  <g>
-                    <circle
-                      cx="19"
-                      cy="5"
-                      r="5.5"
-                      fill="currentColor"
-                      stroke="none"
-                    />
-                    <text
-                      x="19"
-                      y="5"
-                      textAnchor="middle"
-                      dominantBaseline="central"
-                      fill="var(--bg-primary, #1a1a2e)"
-                      fontSize="8"
-                      fontWeight="700"
-                      fontFamily="system-ui, sans-serif"
-                      stroke="none"
-                    >
-                      A
-                    </text>
-                  </g>
-                )}
-              </svg>
+              <span className="text-sm">💡</span>
             </button>
           )}
         </div>
@@ -695,32 +648,37 @@ export function NewSessionForm({
           type="button"
           onClick={handleStartSession}
           disabled={isStarting || !hasContent}
-          className="send-button"
+          className="flex items-center justify-center rounded-full bg-[var(--app-yep-green)] text-white w-10 h-10 transition-opacity hover:opacity-90 disabled:opacity-50"
           aria-label={t("newSessionStartAction")}
         >
           {isStarting ? (
-            <span className="send-spinner" />
+            <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
           ) : (
-            <span className="send-icon">↑</span>
+            <span className="text-lg">↑</span>
           )}
         </button>
       </div>
       {pendingFiles.length > 0 && (
-        <div className="pending-files-list">
+        <div className="flex flex-wrap gap-2 mt-2">
           {pendingFiles.map((pf) => {
             const progress = uploadProgress[pf.id];
             return (
-              <div key={pf.id} className="pending-file-chip">
+              <div
+                key={pf.id}
+                className="flex items-center gap-2 rounded-md bg-[var(--bg-tertiary)] px-2 py-1"
+              >
                 {pf.previewUrl && (
                   <img
                     src={pf.previewUrl}
                     alt=""
-                    className="pending-file-preview"
+                    className="w-8 h-8 rounded object-cover"
                   />
                 )}
-                <div className="pending-file-info">
-                  <span className="pending-file-name">{pf.file.name}</span>
-                  <span className="pending-file-size">
+                <div className="flex flex-col">
+                  <span className="text-xs font-medium text-[var(--text-primary)]">
+                    {pf.file.name}
+                  </span>
+                  <span className="text-[10px] text-[var(--text-dimmed)]">
                     {progress
                       ? `${Math.round((progress.uploaded / progress.total) * 100)}%`
                       : formatSize(pf.file.size)}
@@ -729,24 +687,13 @@ export function NewSessionForm({
                 {!isStarting && (
                   <button
                     type="button"
-                    className="pending-file-remove"
+                    className="flex items-center justify-center w-5 h-5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-dimmed)] transition-colors"
                     onClick={() => handleRemoveFile(pf.id)}
                     aria-label={t("newSessionRemoveFile", {
                       name: pf.file.name,
                     })}
                   >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      aria-hidden="true"
-                    >
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
+                    <span className="text-sm">✕</span>
                   </button>
                 )}
               </div>
@@ -784,7 +731,7 @@ export function NewSessionForm({
       {!providersLoading && availableProviders.length > 1 && (
         <div className="new-session-provider-section">
           <h3>{t("newSessionProviderTitle")}</h3>
-          <div className="provider-options">
+          <div className="flex flex-col gap-2">
             {providers.map((p) => {
               const isAvailable = p.installed && (p.authenticated || p.enabled);
               const isSelected = selectedProvider === p.name;
@@ -792,7 +739,7 @@ export function NewSessionForm({
                 <button
                   key={p.name}
                   type="button"
-                  className={`provider-option ${isSelected ? "selected" : ""} ${!isAvailable ? "disabled" : ""}`}
+                  className={`flex items-center gap-3 p-3 rounded-md border border-[var(--border-color)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] ${isSelected ? "bg-[var(--bg-hover)] border-[var(--app-yep-green)]" : ""} ${!isAvailable ? "opacity-50 cursor-not-allowed" : ""}`}
                   onClick={() => isAvailable && handleProviderSelect(p.name)}
                   disabled={isStarting || !isAvailable}
                   title={
@@ -806,13 +753,15 @@ export function NewSessionForm({
                       : p.displayName
                   }
                 >
-                  <span className={`provider-option-dot provider-${p.name}`} />
-                  <div className="provider-option-content">
-                    <span className="provider-option-label">
+                  <span
+                    className={`w-3 h-3 rounded-full shrink-0 provider-option-dot provider-${p.name}`}
+                  />
+                  <div className="flex flex-col flex-1">
+                    <span className="text-sm font-medium text-[var(--text-primary)]">
                       {p.displayName}
                     </span>
                     {!isAvailable && (
-                      <span className="provider-option-status">
+                      <span className="text-xs text-[var(--text-dimmed)]">
                         {!p.installed
                           ? t("newSessionProviderStatusNotInstalled")
                           : t("newSessionProviderStatusNotAuthenticated")}
@@ -845,20 +794,20 @@ export function NewSessionForm({
       {!executorsLoading && remoteExecutors.length > 0 && (
         <div className="new-session-executor-section">
           <h3>{t("newSessionRunOnTitle")}</h3>
-          <div className="executor-options">
+          <div className="flex flex-col gap-2">
             <button
               key="local"
               type="button"
-              className={`executor-option ${selectedExecutor === null ? "selected" : ""}`}
+              className={`flex items-center gap-3 p-3 rounded-md border border-[var(--border-color)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] ${selectedExecutor === null ? "bg-[var(--bg-hover)] border-[var(--app-yep-green)]" : ""}`}
               onClick={() => setSelectedExecutor(null)}
               disabled={isStarting}
             >
-              <span className="executor-option-dot executor-local" />
-              <div className="executor-option-content">
-                <span className="executor-option-label">
+              <span className="w-3 h-3 rounded-full shrink-0 bg-[var(--app-yep-green)]" />
+              <div className="flex flex-col flex-1">
+                <span className="text-sm font-medium text-[var(--text-primary)]">
                   {t("newSessionRunOnLocal")}
                 </span>
-                <span className="executor-option-desc">
+                <span className="text-xs text-[var(--text-dimmed)]">
                   {t("newSessionRunOnLocalDesc")}
                 </span>
               </div>
@@ -867,14 +816,16 @@ export function NewSessionForm({
               <button
                 key={host}
                 type="button"
-                className={`executor-option ${selectedExecutor === host ? "selected" : ""}`}
+                className={`flex items-center gap-3 p-3 rounded-md border border-[var(--border-color)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] ${selectedExecutor === host ? "bg-[var(--bg-hover)] border-[var(--app-yep-green)]" : ""}`}
                 onClick={() => setSelectedExecutor(host)}
                 disabled={isStarting}
               >
-                <span className="executor-option-dot executor-remote" />
-                <div className="executor-option-content">
-                  <span className="executor-option-label">{host}</span>
-                  <span className="executor-option-desc">
+                <span className="w-3 h-3 rounded-full shrink-0 bg-[var(--provider-codex)]" />
+                <div className="flex flex-col flex-1">
+                  <span className="text-sm font-medium text-[var(--text-primary)]">
+                    {host}
+                  </span>
+                  <span className="text-xs text-[var(--text-dimmed)]">
                     {t("newSessionRunOnRemoteDesc")}
                   </span>
                 </div>
@@ -888,19 +839,23 @@ export function NewSessionForm({
       {supportsPermissionMode && (
         <div className="new-session-mode-section">
           <h3>{t("newSessionModeTitle")}</h3>
-          <div className="mode-options">
+          <div className="flex flex-col gap-2">
             {MODE_ORDER.map((m) => (
               <button
                 key={m}
                 type="button"
-                className={`mode-option ${mode === m ? "selected" : ""}`}
+                className={`flex items-center gap-3 p-3 rounded-md border border-[var(--border-color)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] ${mode === m ? "bg-[var(--bg-hover)] border-[var(--app-yep-green)]" : ""}`}
                 onClick={() => handleModeSelect(m)}
                 disabled={isStarting}
               >
-                <span className={`mode-option-dot mode-${m}`} />
-                <div className="mode-option-content">
-                  <span className="mode-option-label">{modeLabels[m]}</span>
-                  <span className="mode-option-desc">
+                <span
+                  className={`w-3 h-3 rounded-full shrink-0 mode-option-dot mode-${m}`}
+                />
+                <div className="flex flex-col flex-1">
+                  <span className="text-sm font-medium text-[var(--text-primary)]">
+                    {modeLabels[m]}
+                  </span>
+                  <span className="text-xs text-[var(--text-dimmed)]">
                     {modeDescriptions[m]}
                   </span>
                 </div>

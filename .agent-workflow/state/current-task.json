@@ -50,14 +50,20 @@
   },
   "coding": {
     "completed": true,
-    "commits": ["655cce4"],
+    "commits": ["655cce4", "70a6ff7"],
     "prUrl": ""
   },
   "review": {
-    "round": 0,
+    "round": 1,
     "maxRounds": 3,
-    "status": "pending",
-    "lastResult": null,
-    "history": []
+    "status": "reviewing",
+    "lastResult": "parse-failure-issues-fixed",
+    "history": [
+      {
+        "round": 1,
+        "result": "parse-failure-issues-fixed",
+        "notes": "Codex output lacked VERDICT line (parse failure). Review flagged 3 issues in working tree components (PushNotificationToggle, RemoteAccessSetup, SessionMenu) — none in the scope of awf-002's index.css changes. All 3 issues were fixed in commit 70a6ff7."
+      }
+    ]
   }
 }
