@@ -21,16 +21,18 @@ function formatBytes(bytes: number): string {
  */
 function WebFetchToolUse({ input }: { input: WebFetchInput }) {
   return (
-    <div className="webfetch-tool-use">
+    <div className="flex flex-col gap-2">
       <a
         href={input.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="webfetch-url"
+        className="break-all text-[var(--link-color)] no-underline hover:underline"
       >
         {input.url}
       </a>
-      {input.prompt && <div className="webfetch-prompt">{input.prompt}</div>}
+      {input.prompt && (
+        <div className="text-lg text-[var(--text-muted)]">{input.prompt}</div>
+      )}
     </div>
   );
 }
@@ -70,7 +72,7 @@ function WebFetchToolResult({
   if (isError) {
     const errorResult = result as unknown as { content?: unknown } | undefined;
     return (
-      <div className="webfetch-error">
+      <div className="rounded bg-[var(--bg-error,rgba(207,34,46,0.1))] p-2 text-[var(--error-color)]">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="WebFetch" errors={validationErrors} />
         )}
@@ -82,7 +84,9 @@ function WebFetchToolResult({
   }
 
   if (!result) {
-    return <div className="webfetch-empty">No content</div>;
+    return (
+      <div className="text-lg italic text-[var(--text-muted)]">No content</div>
+    );
   }
 
   const lines = result.result?.split("\n") || [];
@@ -92,26 +96,28 @@ function WebFetchToolResult({
 
   const statusClass =
     result.code >= 200 && result.code < 300
-      ? "badge-success"
+      ? "bg-[var(--bg-success,rgba(26,127,55,0.15))] text-[var(--success-color)]"
       : result.code >= 400
-        ? "badge-error"
-        : "badge-warning";
+        ? "bg-[var(--bg-error,rgba(207,34,46,0.15))] text-[var(--error-color)]"
+        : "bg-[var(--bg-warning,rgba(154,103,0,0.15))] text-[var(--warning-color)]";
 
   return (
-    <div className="webfetch-result">
-      <div className="webfetch-header">
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-3">
         <a
           href={result.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="webfetch-url"
+          className="break-all text-[var(--link-color)] no-underline hover:underline"
         >
           {result.url}
         </a>
-        <span className={`badge ${statusClass}`}>
+        <span
+          className={`inline-block rounded px-2 py-0.5 text-sm font-medium ${statusClass}`}
+        >
           {result.code} {result.codeText}
         </span>
-        <span className="webfetch-meta">
+        <span className="text-sm text-[var(--text-muted)]">
           {formatBytes(result.bytes)} &middot; {result.durationMs}ms
         </span>
         {showValidationWarning && validationErrors && (
@@ -120,13 +126,13 @@ function WebFetchToolResult({
       </div>
       {result.result && (
         <>
-          <pre className="webfetch-content code-block">
+          <pre className="m-0 max-h-[400px] overflow-y-auto overflow-x-auto rounded-md border border-[var(--border-color)] bg-[var(--bg-code)] p-3">
             <code>{displayLines.join("\n")}</code>
           </pre>
           {needsCollapse && (
             <button
               type="button"
-              className="expand-button"
+              className="cursor-pointer rounded border border-[var(--border-color)] bg-transparent px-4 py-2 text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary,var(--text-primary))] active:bg-[var(--bg-tertiary)]"
               onClick={() => setIsExpanded(!isExpanded)}
             >
               {isExpanded ? "Show less" : `Show all ${lines.length} lines`}

@@ -56,18 +56,54 @@ function SettingsCategoryItem({
   return (
     <button
       type="button"
-      className={`settings-category-item ${isActive ? "active" : ""}`}
+      className={`flex w-full cursor-pointer py-1.5 text-left text-[13px] transition-colors duration-150 ${
+        isActive
+          ? "text-[var(--accent-rust)]"
+          : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+      }`}
       onClick={onClick}
     >
-      <span className="settings-category-icon">{category.icon}</span>
-      <div className="settings-category-text">
-        <span className="settings-category-label">{category.label}</span>
-        <span className="settings-category-description">
-          {category.description}
-        </span>
-      </div>
-      <span className="settings-category-chevron">›</span>
+      <span className="truncate">{category.label}</span>
     </button>
+  );
+}
+
+function SettingsNavList({
+  categories,
+  activeCategory,
+  onCategoryClick,
+  title,
+}: {
+  categories: SettingsCategory[];
+  activeCategory?: string;
+  onCategoryClick: (id: string) => void;
+  title: string;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-col">
+      <div className="mb-6">
+        <h1
+          className="text-3xl text-[var(--text-primary)]"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          {title}
+        </h1>
+      </div>
+      <div className="mb-3 text-xs font-medium uppercase tracking-[0.16em] text-[var(--text-muted)]">
+        {t("settingsConfigurationLabel")}
+      </div>
+      <div className="flex flex-col gap-0.5">
+        {categories.map((cat) => (
+          <SettingsCategoryItem
+            key={cat.id}
+            category={cat}
+            isActive={activeCategory === cat.id}
+            onClick={() => onCategoryClick(cat.id)}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -125,8 +161,8 @@ export function SettingsLayout() {
     if (!category) {
       // Show category list
       return (
-        <div className="main-content-mobile">
-          <div className="main-content-mobile-inner">
+        <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-hidden">
+          <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-hidden">
             <PageHeader
               title={t("pageTitleSettings")}
               onOpenSidebar={openSidebar}
@@ -134,18 +170,13 @@ export function SettingsLayout() {
               isWideScreen={isWideScreen}
               isSidebarCollapsed={isSidebarCollapsed}
             />
-            <main className="page-scroll-container">
-              <div className="page-content-inner">
-                <div className="settings-category-list">
-                  {categories.map((cat) => (
-                    <SettingsCategoryItem
-                      key={cat.id}
-                      category={cat}
-                      isActive={false}
-                      onClick={() => handleCategoryClick(cat.id)}
-                    />
-                  ))}
-                </div>
+            <main className="flex-1 min-h-0 min-w-0 w-full overflow-x-hidden overflow-y-auto [-webkit-overflow-scrolling:touch]">
+              <div className="box-border min-w-0 w-full px-6 py-8 md:px-10 md:py-10">
+                <SettingsNavList
+                  categories={categories}
+                  onCategoryClick={handleCategoryClick}
+                  title={t("pageTitleSettings")}
+                />
               </div>
             </main>
           </div>
@@ -156,16 +187,16 @@ export function SettingsLayout() {
     // Show category detail with back button
     const currentCategory = categories.find((c) => c.id === category);
     return (
-      <div className="main-content-mobile">
-        <div className="main-content-mobile-inner">
+      <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-hidden">
+        <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-hidden">
           <PageHeader
             title={currentCategory?.label || t("pageTitleSettings")}
             onOpenSidebar={openSidebar}
             showBack
             onBack={handleBack}
           />
-          <main className="page-scroll-container">
-            <div className="page-content-inner">
+          <main className="flex-1 min-h-0 min-w-0 w-full overflow-x-hidden overflow-y-auto [-webkit-overflow-scrolling:touch]">
+            <div className="box-border min-w-0 w-full px-6 py-8 md:px-10 md:py-10">
               {CategoryComponent && <CategoryComponent />}
             </div>
           </main>
@@ -176,8 +207,8 @@ export function SettingsLayout() {
 
   // Desktop: two-column layout with category list on left, content on right
   return (
-    <div className="main-content-wrapper">
-      <div className="main-content-constrained">
+    <div className="flex min-h-0 min-w-0 flex-1 justify-center overflow-hidden">
+      <div className="flex h-dvh w-full flex-col">
         <PageHeader
           title={t("pageTitleSettings")}
           onOpenSidebar={openSidebar}
@@ -185,21 +216,20 @@ export function SettingsLayout() {
           isWideScreen={isWideScreen}
           isSidebarCollapsed={isSidebarCollapsed}
         />
-        <main className="page-scroll-container">
-          <div className="settings-two-column">
-            <nav className="settings-category-nav">
-              <div className="settings-category-list">
-                {categories.map((cat) => (
-                  <SettingsCategoryItem
-                    key={cat.id}
-                    category={cat}
-                    isActive={effectiveCategory === cat.id}
-                    onClick={() => handleCategoryClick(cat.id)}
-                  />
-                ))}
-              </div>
+        <main className="flex-1 min-h-0 min-w-0 w-full overflow-x-hidden overflow-y-auto [-webkit-overflow-scrolling:touch]">
+          <div
+            className="flex min-h-0 gap-10 px-6 py-8 md:px-10 md:py-10"
+            style={{ maxWidth: "calc(220px + 900px + 40px)" }}
+          >
+            <nav className="w-[220px] shrink-0 overflow-y-auto border-r border-[var(--border-subtle)] pr-6">
+              <SettingsNavList
+                categories={categories}
+                activeCategory={effectiveCategory}
+                onCategoryClick={handleCategoryClick}
+                title={t("pageTitleSettings")}
+              />
             </nav>
-            <div className="settings-content-panel">
+            <div className="min-w-0 max-w-[900px] flex-1 overflow-y-auto">
               {CategoryComponent && <CategoryComponent />}
             </div>
           </div>

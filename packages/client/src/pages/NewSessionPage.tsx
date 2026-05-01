@@ -39,7 +39,11 @@ export function NewSessionPage() {
 
   // Guard against missing projectId (no projects available)
   if (!effectiveProjectId && !projectsLoading && projects.length === 0) {
-    return <div className="error">{t("newSessionNoProjects")}</div>;
+    return (
+      <div className="text-[var(--error-color)] p-2 bg-[var(--bg-error,rgba(207,34,46,0.1))] rounded">
+        {t("newSessionNoProjects")}
+      </div>
+    );
   }
 
   // Render loading/error states
@@ -47,14 +51,16 @@ export function NewSessionPage() {
     return (
       <div
         className={
-          isWideScreen ? "main-content-wrapper" : "main-content-mobile"
+          isWideScreen
+            ? "flex justify-center min-w-0 h-[100dvh] overflow-hidden"
+            : "flex-1 flex flex-col min-h-0"
         }
       >
         <div
           className={
             isWideScreen
-              ? "main-content-constrained"
-              : "main-content-mobile-inner"
+              ? "w-full flex flex-col h-[100dvh]"
+              : "flex-1 flex flex-col min-h-0"
           }
         >
           <PageHeader
@@ -64,12 +70,14 @@ export function NewSessionPage() {
             isWideScreen={isWideScreen}
             isSidebarCollapsed={isSidebarCollapsed}
           />
-          <main className="page-scroll-container">
-            <div className="page-content-inner">
+          <main className="flex-1 overflow-y-auto min-h-0">
+            <div className="px-6 py-8 md:px-10 md:py-10 max-w-[1200px] mx-auto">
               {loading ? (
-                <div className="loading">{t("newSessionLoading")}</div>
+                <div className="text-[var(--text-muted)] italic">
+                  {t("newSessionLoading")}
+                </div>
               ) : (
-                <div className="error">
+                <div className="text-[var(--error-color)] p-2 bg-[var(--bg-error,rgba(207,34,46,0.1))] rounded">
                   {t("newSessionErrorPrefix")} {error?.message}
                 </div>
               )}
@@ -82,13 +90,17 @@ export function NewSessionPage() {
 
   return (
     <div
-      className={isWideScreen ? "main-content-wrapper" : "main-content-mobile"}
+      className={
+        isWideScreen
+          ? "flex justify-center min-w-0 h-[100dvh] overflow-hidden"
+          : "flex-1 flex flex-col min-h-0"
+      }
     >
       <div
         className={
           isWideScreen
-            ? "main-content-constrained"
-            : "main-content-mobile-inner"
+            ? "w-full flex flex-col h-[100dvh]"
+            : "flex-1 flex flex-col min-h-0"
         }
       >
         <PageHeader
@@ -108,8 +120,8 @@ export function NewSessionPage() {
           isSidebarCollapsed={isSidebarCollapsed}
         />
 
-        <main className="page-scroll-container">
-          <div className="page-content-inner">
+        <main className="flex-1 overflow-y-auto min-h-0">
+          <div className="px-6 py-8 md:px-10 md:py-10 max-w-[1200px] mx-auto">
             {effectiveProjectId && (
               <NewSessionForm projectId={effectiveProjectId} />
             )}

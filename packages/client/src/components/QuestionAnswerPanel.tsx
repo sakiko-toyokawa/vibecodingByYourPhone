@@ -191,9 +191,9 @@ export function QuestionAnswerPanel({
 
   if (!questions.length) {
     return (
-      <div className="question-panel-wrapper">
-        <div className="question-panel">
-          <div className="question-panel-empty">
+      <div className="relative">
+        <div className="flex flex-col gap-3 p-3 bg-[var(--bg-secondary)] border border-[var(--primary-color)] rounded-[var(--radius-md)] max-h-[50vh] overflow-y-auto">
+          <div className="text-[var(--text-muted)] italic">
             {t("questionPanelNoQuestions")}
           </div>
         </div>
@@ -202,37 +202,28 @@ export function QuestionAnswerPanel({
   }
 
   return (
-    <div className="question-panel-wrapper">
+    <div className="relative">
       {/* Floating toggle button */}
       <button
         type="button"
-        className="question-panel-toggle"
+        className="absolute -top-3 left-1/2 -translate-x-1/2 z-[1] w-8 h-6 flex items-center justify-center bg-[var(--bg-code)] border border-[var(--border-color)] rounded-[var(--radius-md)] text-[var(--text-muted)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] hover:border-[var(--text-muted)]"
         onClick={() => setCollapsed(!collapsed)}
         aria-label={
           collapsed ? t("questionPanelExpand") : t("questionPanelCollapse")
         }
         aria-expanded={!collapsed}
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={collapsed ? "chevron-up" : "chevron-down"}
-          aria-hidden="true"
+        <span
+          className={`transition-transform duration-200 ${collapsed ? "rotate-180" : ""}`}
         >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
+          &#x25bc;
+        </span>
       </button>
 
       {!collapsed && (
-        <div className="question-panel">
+        <div className="flex flex-col gap-3 p-3 bg-[var(--bg-secondary)] border border-[var(--primary-color)] rounded-[var(--radius-md)] max-h-[50vh] overflow-y-auto max-sm:p-2">
           {/* Tab bar */}
-          <div className="question-tabs">
+          <div className="flex gap-2 flex-wrap max-sm:gap-1">
             {questions.map((q, idx) => {
               const isActive = idx === currentTab;
               const isAnswered = !!answers[q.question];
@@ -240,10 +231,14 @@ export function QuestionAnswerPanel({
                 <button
                   key={q.question}
                   type="button"
-                  className={`question-tab ${isActive ? "active" : ""} ${isAnswered ? "answered" : ""}`}
+                  className={`flex items-center gap-1 px-3 py-2 bg-[var(--bg-code)] border border-[var(--border-input)] rounded-[var(--radius-md)] [font-size:var(--font-size-sm)] text-[var(--text-muted)] cursor-pointer hover:bg-[var(--bg-tertiary)] hover:border-[var(--border-input)] max-sm:px-2 max-sm:py-1 max-sm:[font-size:var(--font-size-xs)] ${isActive ? "bg-[var(--primary-color)] border-[var(--primary-color)] text-black font-medium" : ""} ${isAnswered ? "border-[var(--success-color)]" : ""} ${isAnswered && !isActive ? "text-[var(--success-color)]" : ""}`}
                   onClick={() => setCurrentTab(idx)}
                 >
-                  {isAnswered && <span className="question-tab-check">✓</span>}
+                  {isAnswered && (
+                    <span className="text-[var(--success-color)]">
+                      &#x2713;
+                    </span>
+                  )}
                   {q.header}
                 </button>
               );
@@ -252,34 +247,38 @@ export function QuestionAnswerPanel({
 
           {/* Current question */}
           {currentQuestion && (
-            <div className="question-content">
-              <div className="question-text">{currentQuestion.question}</div>
+            <div className="flex flex-col gap-3">
+              <div className="[font-size:var(--font-size-base)] text-[var(--text-primary)] leading-snug">
+                {currentQuestion.question}
+              </div>
 
-              <div className="question-options-list">
+              <div className="flex flex-col gap-2">
                 {currentQuestion.options.map((option) => {
                   const isSelected = currentAnswer === option.label;
                   return (
                     <button
                       key={option.label}
                       type="button"
-                      className={`question-option-btn ${isSelected ? "selected" : ""}`}
+                      className={`flex items-start gap-3 p-3 bg-[var(--bg-code)] border border-[var(--border-input)] rounded-[var(--radius-md)] text-left cursor-pointer transition-all duration-150 hover:bg-[var(--bg-tertiary)] hover:border-[var(--border-input)] max-sm:p-2 ${isSelected ? "border-[var(--primary-color)] bg-[rgba(96,165,250,0.1)]" : ""}`}
                       onClick={() => handleSelectOption(option.label)}
                     >
-                      <span className="question-option-radio">
+                      <span
+                        className={`text-[var(--text-dimmed)] font-mono text-base shrink-0 mt-px ${isSelected ? "text-[var(--primary-color)]" : ""}`}
+                      >
                         {currentQuestion.multiSelect
                           ? isSelected
-                            ? "☑"
-                            : "☐"
+                            ? "\u2611"
+                            : "\u2610"
                           : isSelected
-                            ? "●"
-                            : "○"}
+                            ? "\u25cf"
+                            : "\u25cb"}
                       </span>
-                      <div className="question-option-text">
-                        <span className="question-option-label">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium text-[var(--text-primary)]">
                           {option.label}
                         </span>
                         {option.description && (
-                          <span className="question-option-desc">
+                          <span className="[font-size:var(--font-size-sm)] text-[var(--text-muted)]">
                             {option.description}
                           </span>
                         )}
@@ -291,14 +290,16 @@ export function QuestionAnswerPanel({
                 {/* Other option */}
                 <button
                   type="button"
-                  className={`question-option-btn other ${isOtherSelected ? "selected" : ""}`}
+                  className={`flex items-start gap-3 p-3 bg-[var(--bg-code)] border border-[var(--border-input)] rounded-[var(--radius-md)] text-left cursor-pointer transition-all duration-150 hover:bg-[var(--bg-tertiary)] hover:border-[var(--border-input)] max-sm:p-2 ${isOtherSelected ? "border-[var(--primary-color)] bg-[rgba(96,165,250,0.1)]" : ""}`}
                   onClick={() => handleSelectOption("__other__")}
                 >
-                  <span className="question-option-radio">
-                    {isOtherSelected ? "●" : "○"}
+                  <span
+                    className={`text-[var(--text-dimmed)] font-mono text-base shrink-0 mt-px ${isOtherSelected ? "text-[var(--primary-color)]" : ""}`}
+                  >
+                    {isOtherSelected ? "\u25cf" : "\u25cb"}
                   </span>
-                  <div className="question-option-text">
-                    <span className="question-option-label">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-[var(--text-primary)]">
                       {t("questionPanelOther")}
                     </span>
                   </div>
@@ -306,10 +307,11 @@ export function QuestionAnswerPanel({
 
                 {/* Other text input */}
                 {isOtherSelected && (
-                  <div className="question-other-input">
+                  <div className="ml-[calc(1rem+var(--space-3))] mt-2">
                     <input
                       ref={otherInputRef}
                       type="text"
+                      className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-input)] rounded-[var(--radius-md)] text-[var(--text-primary)] [font-size:var(--font-size-base)] outline-none focus:border-[var(--primary-color)] placeholder:text-[var(--text-muted)]"
                       placeholder={t("questionPanelTypeAnswer")}
                       value={otherTexts[currentQuestion.question] || ""}
                       onChange={(e) => handleOtherTextChange(e.target.value)}
@@ -321,36 +323,42 @@ export function QuestionAnswerPanel({
           )}
 
           {/* Actions */}
-          <div className="question-actions">
+          <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border-subtle)] max-sm:flex-row">
             <button
               type="button"
-              className="question-btn deny"
+              className="flex items-center justify-center gap-2 px-3 py-2 border-none rounded-[var(--radius-md)] [font-size:var(--font-size-sm)] font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed bg-[var(--error-color)] text-white hover:opacity-90"
               onClick={handleDeny}
               disabled={submitting}
             >
               {t("questionPanelCancel")}
-              <kbd>esc</kbd>
+              <kbd className="font-mono [font-size:var(--font-size-xs)] px-1 py-0.5 bg-black/20 rounded">
+                esc
+              </kbd>
             </button>
 
             {isLastQuestion ? (
               <button
                 type="button"
-                className="question-btn submit"
+                className="flex items-center justify-center gap-2 px-3 py-2 border-none rounded-[var(--radius-md)] [font-size:var(--font-size-sm)] font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed bg-[var(--success-color)] text-white hover:opacity-90"
                 onClick={handleSubmit}
                 disabled={!allAnswered || submitting}
               >
                 {t("questionPanelSubmit")}
-                <kbd>↵</kbd>
+                <kbd className="font-mono [font-size:var(--font-size-xs)] px-1 py-0.5 bg-black/20 rounded">
+                  \u21b5
+                </kbd>
               </button>
             ) : (
               <button
                 type="button"
-                className="question-btn next"
+                className="flex items-center justify-center gap-2 px-3 py-2 border-none rounded-[var(--radius-md)] [font-size:var(--font-size-sm)] font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed bg-[var(--bg-tertiary)] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
                 onClick={advanceToNext}
                 disabled={!currentAnswer || submitting}
               >
                 {t("questionPanelNext")}
-                <kbd>↵</kbd>
+                <kbd className="font-mono [font-size:var(--font-size-xs)] px-1 py-0.5 bg-black/20 rounded">
+                  \u21b5
+                </kbd>
               </button>
             )}
           </div>

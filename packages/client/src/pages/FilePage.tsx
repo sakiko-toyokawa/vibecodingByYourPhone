@@ -14,11 +14,16 @@ export function FilePage() {
 
   if (!projectId) {
     return (
-      <div className="file-page file-page-error">
-        <div className="file-page-error-content">
-          <h1>{t("fileInvalidUrl" as never)}</h1>
+      <div className="flex flex-col items-center justify-center h-screen bg-[var(--bg-surface)]">
+        <div className="text-center text-[var(--text-muted)]">
+          <h1 className="m-0 mb-4 text-xl text-[var(--text-primary)]">
+            {t("fileInvalidUrl" as never)}
+          </h1>
           <p>{t("fileMissingProjectId" as never)}</p>
-          <Link to="/projects" className="file-page-back-link">
+          <Link
+            to="/projects"
+            className="inline-flex items-center gap-2 rounded p-1 [font-size:var(--font-size-base)] text-[var(--link-color)] no-underline transition-colors hover:bg-[var(--bg-hover)]"
+          >
             {t("fileGoToProjects" as never)}
           </Link>
         </div>
@@ -28,11 +33,16 @@ export function FilePage() {
 
   if (!filePath) {
     return (
-      <div className="file-page file-page-error">
-        <div className="file-page-error-content">
-          <h1>{t("fileInvalidUrl" as never)}</h1>
+      <div className="flex flex-col items-center justify-center h-screen bg-[var(--bg-surface)]">
+        <div className="text-center text-[var(--text-muted)]">
+          <h1 className="m-0 mb-4 text-xl text-[var(--text-primary)]">
+            {t("fileInvalidUrl" as never)}
+          </h1>
           <p>{t("fileMissingPath" as never)}</p>
-          <Link to={`/projects/${projectId}`} className="file-page-back-link">
+          <Link
+            to={`/projects/${projectId}`}
+            className="inline-flex items-center gap-2 rounded p-1 [font-size:var(--font-size-base)] text-[var(--link-color)] no-underline transition-colors hover:bg-[var(--bg-hover)]"
+          >
             {t("fileGoToProject" as never)}
           </Link>
         </div>
@@ -41,18 +51,18 @@ export function FilePage() {
   }
 
   return (
-    <div className="file-page">
-      <div className="file-page-nav">
+    <div className="flex flex-col h-screen bg-[var(--bg-surface)]">
+      <div className="flex items-center border-b border-[var(--border-color)] bg-[var(--bg-secondary)] px-6 py-4">
         <Link
           to={`/projects/${projectId}`}
-          className="file-page-back-link"
+          className="inline-flex items-center gap-2 rounded p-1 [font-size:var(--font-size-base)] text-[var(--link-color)] no-underline transition-colors hover:bg-[var(--bg-hover)]"
           title={t("fileBackToProject" as never)}
         >
           <BackIcon />
           <span>{t("fileBackToProject" as never)}</span>
         </Link>
       </div>
-      <div className="file-page-content">
+      <div className="flex-1 overflow-hidden">
         <FileViewer projectId={projectId} filePath={filePath} standalone />
       </div>
     </div>

@@ -10,9 +10,13 @@ import type { KillShellInput, KillShellResult, ToolRenderer } from "./types";
  */
 function KillShellToolUse({ input }: { input: KillShellInput }) {
   return (
-    <div className="killshell-tool-use">
-      <span className="killshell-label">Killing shell</span>
-      <code className="killshell-id">{input.shell_id}</code>
+    <div className="flex items-center gap-2">
+      <span className="text-[var(--text-secondary,var(--text-muted))]">
+        Killing shell
+      </span>
+      <code className="rounded-[3px] bg-[var(--bg-code)] px-1 py-0.5 [font-family:var(--font-mono)] text-base text-[var(--text-muted)]">
+        {input.shell_id}
+      </code>
     </div>
   );
 }
@@ -51,7 +55,7 @@ function KillShellToolResult({
   if (isError) {
     const errorResult = result as unknown as { content?: unknown } | undefined;
     return (
-      <div className="killshell-error">
+      <div className="rounded bg-[var(--bg-error,rgba(207,34,46,0.1))] p-2 text-[var(--error-color)]">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="KillShell" errors={validationErrors} />
         )}
@@ -63,17 +67,23 @@ function KillShellToolResult({
   }
 
   if (!result) {
-    return <div className="killshell-empty">No result</div>;
+    return (
+      <div className="text-lg italic text-[var(--text-muted)]">No result</div>
+    );
   }
 
   return (
-    <div className="killshell-result">
+    <div className="flex items-center gap-2">
       {showValidationWarning && validationErrors && (
         <SchemaWarning toolName="KillShell" errors={validationErrors} />
       )}
-      <span className="killshell-message">{result.message}</span>
+      <span className="text-[var(--text-secondary,var(--text-muted))]">
+        {result.message}
+      </span>
       {result.shell_id && (
-        <code className="killshell-id">{result.shell_id}</code>
+        <code className="rounded-[3px] bg-[var(--bg-code)] px-1 py-0.5 [font-family:var(--font-mono)] text-base text-[var(--text-muted)]">
+          {result.shell_id}
+        </code>
       )}
     </div>
   );

@@ -242,9 +242,14 @@ export function LocalAccessSettings() {
 
     if (isLoading) {
       return (
-        <section className="settings-section">
-          <h2>{t("settingsLocalAccessTitle")}</h2>
-          <p className="settings-section-description">
+        <section className="flex flex-col gap-8 mb-12">
+          <h2
+            style={{ fontFamily: "var(--font-display)" }}
+            className="text-[2rem] text-[var(--text-primary)] mb-2"
+          >
+            {t("settingsLocalAccessTitle")}
+          </h2>
+          <p className="mb-[var(--space-3)] text-sm text-[var(--text-muted)]">
             {t("localAccessLoading")}
           </p>
         </section>
@@ -255,16 +260,21 @@ export function LocalAccessSettings() {
     const showPasswordFields = requirePassword;
 
     return (
-      <section className="settings-section">
-        <h2>{t("settingsLocalAccessTitle")}</h2>
-        <p className="settings-section-description">
+      <section className="flex flex-col gap-8 mb-12">
+        <h2
+          style={{ fontFamily: "var(--font-display)" }}
+          className="text-[2rem] text-[var(--text-primary)] mb-2"
+        >
+          {t("settingsLocalAccessTitle")}
+        </h2>
+        <p className="mb-[var(--space-3)] text-sm text-[var(--text-muted)]">
           {t("localAccessDescription")}
         </p>
 
         {/* Current status */}
-        <div className="settings-group">
-          <div className="settings-item">
-            <div className="settings-item-info">
+        <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
+          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+            <div className="flex flex-col gap-1">
               <strong>{t("localAccessStatusTitle")}</strong>
               <p>
                 {serverInfo
@@ -315,13 +325,13 @@ export function LocalAccessSettings() {
               </p>
             </div>
             {serverInfo?.localhostOnly && !binding?.network.enabled && (
-              <span className="settings-status-badge settings-status-detected">
+              <span className="px-[var(--space-1)] py-[var(--space-2)] rounded-[var(--radius-sm)] text-sm font-medium bg-[var(--bg-hover)] text-[var(--text-secondary)]">
                 {t("localAccessBadgeLocalOnly")}
               </span>
             )}
             {(serverInfo?.boundToAllInterfaces || binding?.network.enabled) &&
               !auth.authEnabled && (
-                <span className="settings-status-badge settings-status-warning">
+                <span className="px-[var(--space-1)] py-[var(--space-2)] rounded-[var(--radius-sm)] text-sm font-medium bg-[var(--warning-badge-bg)] text-white">
                   {t("localAccessBadgeNetworkExposed")}
                 </span>
               )}
@@ -330,28 +340,28 @@ export function LocalAccessSettings() {
 
         {/* Network Configuration */}
         <form
-          className="settings-group"
+          className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]"
           onSubmit={(e) => {
             e.preventDefault();
             handleApplyChanges();
           }}
         >
-          <div className="settings-item">
-            <div className="settings-item-info">
+          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+            <div className="flex flex-col gap-1">
               <strong>{t("localAccessListeningPortTitle")}</strong>
               <p>{t("localAccessListeningPortDescription")}</p>
             </div>
             {binding?.localhost.overriddenByCli ? (
-              <span className="settings-value-readonly">
+              <span className="text-sm text-[var(--text-primary)]">
                 {binding.localhost.port}{" "}
-                <span className="settings-hint">
+                <span className="text-sm text-[var(--text-muted)]">
                   {t("localAccessSetViaPort")}
                 </span>
               </span>
             ) : (
               <input
                 type="number"
-                className="settings-input-small"
+                className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)] w-24"
                 value={localhostPort}
                 onChange={(e) => {
                   setLocalhostPort(e.target.value);
@@ -364,36 +374,38 @@ export function LocalAccessSettings() {
             )}
           </div>
 
-          <div className="settings-item">
-            <div className="settings-item-info">
+          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+            <div className="flex flex-col gap-1">
               <strong>{t("localAccessNetworkTitle")}</strong>
               <p>{t("localAccessNetworkDescription")}</p>
             </div>
             {binding?.network.overriddenByCli ? (
-              <span className="settings-value-readonly">
+              <span className="text-sm text-[var(--text-primary)]">
                 {binding.network.host}:{binding.network.port}{" "}
-                <span className="settings-hint">
+                <span className="text-sm text-[var(--text-muted)]">
                   {t("localAccessSetViaHost")}
                 </span>
               </span>
             ) : (
-              <label className="toggle-switch">
+              <label className="relative inline-block h-6 w-11 shrink-0 cursor-pointer">
                 <input
                   type="checkbox"
+                  className="peer sr-only"
                   checked={networkEnabled}
                   onChange={(e) => {
                     setNetworkEnabled(e.target.checked);
                     updateHasChanges({ networkEnabled: e.target.checked });
                   }}
                 />
-                <span className="toggle-slider" />
+                <span className="absolute inset-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-hover)] transition-all duration-200 peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:bg-[var(--accent-color,#3b82f6)]" />
+                <span className="absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-[var(--text-muted)] transition-all duration-200 peer-checked:translate-x-5 peer-checked:bg-white" />
               </label>
             )}
           </div>
 
           {networkEnabled && !binding?.network.overriddenByCli && binding && (
-            <div className="settings-item">
-              <div className="settings-item-info">
+            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+              <div className="flex flex-col gap-1">
                 <strong>{t("localAccessInterfaceTitle")}</strong>
                 <p>{t("localAccessInterfaceDescription")}</p>
               </div>
@@ -426,14 +438,14 @@ export function LocalAccessSettings() {
           {networkEnabled &&
             !binding?.network.overriddenByCli &&
             selectedInterface === "custom" && (
-              <div className="settings-item">
-                <div className="settings-item-info">
+              <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+                <div className="flex flex-col gap-1">
                   <strong>{t("localAccessCustomIpTitle")}</strong>
                   <p>{t("localAccessCustomIpDescription")}</p>
                 </div>
                 <input
                   type="text"
-                  className="settings-input"
+                  className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
                   placeholder="192.168.1.100"
                   value={customIp}
                   onChange={(e) => setCustomIp(e.target.value)}
@@ -442,32 +454,34 @@ export function LocalAccessSettings() {
             )}
 
           {/* Allowed Hosts — applies even on localhost (reverse proxy may use different hostname) */}
-          <div className="settings-item">
-            <div className="settings-item-info">
+          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+            <div className="flex flex-col gap-1">
               <strong>{t("localAccessAllowAllHostsTitle")}</strong>
               <p>{t("localAccessAllowAllHostsDescription")}</p>
             </div>
-            <label className="toggle-switch">
+            <label className="relative inline-block h-6 w-11 shrink-0 cursor-pointer">
               <input
                 type="checkbox"
+                className="peer sr-only"
                 checked={allowAllHostsToggle}
                 onChange={(e) => {
                   setAllowAllHostsToggle(e.target.checked);
                   updateHasChanges({ allowAll: e.target.checked });
                 }}
               />
-              <span className="toggle-slider" />
+              <span className="absolute inset-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-hover)] transition-all duration-200 peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:bg-[var(--accent-color,#3b82f6)]" />
+              <span className="absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-[var(--text-muted)] transition-all duration-200 peer-checked:translate-x-5 peer-checked:bg-white" />
             </label>
           </div>
           {!allowAllHostsToggle && (
-            <div className="settings-item">
-              <div className="settings-item-info">
+            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+              <div className="flex flex-col gap-1">
                 <strong>{t("localAccessAllowedHostsTitle")}</strong>
                 <p>{t("localAccessAllowedHostsDescription")}</p>
               </div>
               <input
                 type="text"
-                className="settings-input"
+                className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
                 placeholder={t("localAccessAllowedHostsPlaceholder")}
                 value={allowedHostsText}
                 onChange={(e) => {
@@ -477,25 +491,29 @@ export function LocalAccessSettings() {
               />
             </div>
           )}
-          <p className="form-hint">{t("localAccessAllowedHostsHint")}</p>
+          <p className="text-xs text-[var(--text-muted)] mt-1">
+            {t("localAccessAllowedHostsHint")}
+          </p>
 
           {/* Require Password toggle */}
           {!auth.authDisabledByEnv && (
-            <div className="settings-item">
-              <div className="settings-item-info">
+            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+              <div className="flex flex-col gap-1">
                 <strong>{t("localAccessRequirePasswordTitle")}</strong>
                 <p>{t("localAccessRequirePasswordDescription")}</p>
               </div>
-              <label className="toggle-switch">
+              <label className="relative inline-block h-6 w-11 shrink-0 cursor-pointer">
                 <input
                   type="checkbox"
+                  className="peer sr-only"
                   checked={requirePassword}
                   onChange={(e) => {
                     setRequirePassword(e.target.checked);
                     updateHasChanges({ requirePw: e.target.checked });
                   }}
                 />
-                <span className="toggle-slider" />
+                <span className="absolute inset-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-hover)] transition-all duration-200 peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:bg-[var(--accent-color,#3b82f6)]" />
+                <span className="absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-[var(--text-muted)] transition-all duration-200 peer-checked:translate-x-5 peer-checked:bg-white" />
               </label>
             </div>
           )}
@@ -515,8 +533,8 @@ export function LocalAccessSettings() {
                 }}
                 tabIndex={-1}
               />
-              <div className="settings-item">
-                <div className="settings-item-info">
+              <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+                <div className="flex flex-col gap-1">
                   <strong>{t("localAccessPasswordTitle")}</strong>
                   <p>
                     {auth.authEnabled
@@ -526,7 +544,7 @@ export function LocalAccessSettings() {
                 </div>
                 <input
                   type="password"
-                  className="settings-input"
+                  className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
                   value={authPassword}
                   onChange={(e) => {
                     setAuthPassword(e.target.value);
@@ -541,13 +559,13 @@ export function LocalAccessSettings() {
                 />
               </div>
               {authPassword.length > 0 && (
-                <div className="settings-item">
-                  <div className="settings-item-info">
+                <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+                  <div className="flex flex-col gap-1">
                     <strong>{t("localAccessConfirmPasswordTitle")}</strong>
                   </div>
                   <input
                     type="password"
-                    className="settings-input"
+                    className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
                     value={authPasswordConfirm}
                     onChange={(e) => setAuthPasswordConfirm(e.target.value)}
                     autoComplete="new-password"
@@ -556,7 +574,9 @@ export function LocalAccessSettings() {
                 </div>
               )}
               {!auth.authEnabled && (
-                <p className="form-hint">{t("localAccessPasswordResetHint")}</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1">
+                  {t("localAccessPasswordResetHint")}
+                </p>
               )}
             </>
           )}
@@ -565,35 +585,43 @@ export function LocalAccessSettings() {
           {auth.hasDesktopToken &&
             !requirePassword &&
             !auth.authDisabledByEnv && (
-              <div className="settings-item">
-                <div className="settings-item-info">
+              <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+                <div className="flex flex-col gap-1">
                   <strong>{t("localAccessLocalhostOpenTitle")}</strong>
                   <p>{t("localAccessLocalhostOpenDescription")}</p>
                 </div>
-                <label className="toggle-switch">
+                <label className="relative inline-block h-6 w-11 shrink-0 cursor-pointer">
                   <input
                     type="checkbox"
+                    className="peer sr-only"
                     checked={localhostOpenToggle}
                     onChange={(e) => {
                       setLocalhostOpenToggle(e.target.checked);
                       updateHasChanges({ localhostOpen: e.target.checked });
                     }}
                   />
-                  <span className="toggle-slider" />
+                  <span className="absolute inset-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-hover)] transition-all duration-200 peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:bg-[var(--accent-color,#3b82f6)]" />
+                  <span className="absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-[var(--text-muted)] transition-all duration-200 peer-checked:translate-x-5 peer-checked:bg-white" />
                 </label>
               </div>
             )}
 
           {auth.authDisabledByEnv && (
-            <p className="form-warning">{t("localAccessAuthDisabled")}</p>
+            <p className="text-[var(--warning-color,#f59e0b)] text-sm p-[var(--space-2)] bg-[color-mix(in_srgb,var(--warning-color,#f59e0b)_10%,transparent)] rounded-[var(--radius-md)]">
+              {t("localAccessAuthDisabled")}
+            </p>
           )}
 
           {/* Apply button - always visible */}
-          <div className="settings-item">
-            {formError && <p className="form-error">{formError}</p>}
+          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+            {formError && (
+              <p className="text-[var(--error-color)] text-sm p-[var(--space-2)] bg-[rgba(199,78,57,0.1)] rounded-[var(--radius-md)]">
+                {formError}
+              </p>
+            )}
             <button
               type="submit"
-              className="settings-button"
+              className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
               disabled={!hasChanges || isApplying || applying}
             >
               {isApplying || applying
@@ -605,15 +633,15 @@ export function LocalAccessSettings() {
 
         {/* Logout - shown when auth is enabled */}
         {auth.authEnabled && auth.isAuthenticated && (
-          <div className="settings-group">
-            <div className="settings-item">
-              <div className="settings-item-info">
+          <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
+            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+              <div className="flex flex-col gap-1">
                 <strong>{t("remoteAccessLogoutTitle")}</strong>
                 <p>{t("localAccessLogoutDescription")}</p>
               </div>
               <button
                 type="button"
-                className="settings-button settings-button-danger"
+                className="px-[var(--space-3)] py-[var(--space-2)] rounded-[var(--radius-sm)] text-sm cursor-pointer transition-colors duration-150 whitespace-nowrap border bg-[var(--error-color)] border-[var(--error-color)] text-white hover:bg-[var(--error-hover,#b91c1c)] hover:border-[var(--error-hover,#b91c1c)] disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={auth.logout}
               >
                 {t("remoteAccessLogout")}
@@ -628,37 +656,44 @@ export function LocalAccessSettings() {
   // Remote mode (SRP auth)
   if (remoteConnection) {
     return (
-      <section className="settings-section">
-        <h2>{t("settingsLocalAccessTitle")}</h2>
-        <p className="settings-section-description">
+      <section className="flex flex-col gap-8 mb-12">
+        <h2
+          style={{ fontFamily: "var(--font-display)" }}
+          className="text-[2rem] text-[var(--text-primary)] mb-2"
+        >
+          {t("settingsLocalAccessTitle")}
+        </h2>
+        <p className="mb-[var(--space-3)] text-sm text-[var(--text-muted)]">
           {t("localAccessRemoteDescription")}
         </p>
-        <div className="settings-group">
-          <div className="settings-item">
-            <div className="settings-item-info">
+        <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
+          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+            <div className="flex flex-col gap-1">
               <strong>{t("remoteAccessLogoutTitle")}</strong>
               <p>{t("localAccessRemoteLogoutDescription")}</p>
             </div>
             <button
               type="button"
-              className="settings-button settings-button-danger"
+              className="px-[var(--space-3)] py-[var(--space-2)] rounded-[var(--radius-sm)] text-sm cursor-pointer transition-colors duration-150 whitespace-nowrap border bg-[var(--error-color)] border-[var(--error-color)] text-white hover:bg-[var(--error-hover,#b91c1c)] hover:border-[var(--error-hover,#b91c1c)] disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => remoteConnection.disconnect()}
             >
               {t("remoteAccessLogout")}
             </button>
           </div>
-          <div className="settings-item">
-            <div className="settings-item-info">
+          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+            <div className="flex flex-col gap-1">
               <strong>{t("localAccessRelayDebugTitle")}</strong>
               <p>{t("localAccessRelayDebugDescription")}</p>
             </div>
-            <label className="toggle-switch">
+            <label className="relative inline-block h-6 w-11 shrink-0 cursor-pointer">
               <input
                 type="checkbox"
+                className="peer sr-only"
                 checked={relayDebugEnabled}
                 onChange={(e) => setRelayDebugEnabled(e.target.checked)}
               />
-              <span className="toggle-slider" />
+              <span className="absolute inset-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-hover)] transition-all duration-200 peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:bg-[var(--accent-color,#3b82f6)]" />
+              <span className="absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-[var(--text-muted)] transition-all duration-200 peer-checked:translate-x-5 peer-checked:bg-white" />
             </label>
           </div>
         </div>

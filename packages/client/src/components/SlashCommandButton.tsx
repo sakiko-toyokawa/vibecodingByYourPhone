@@ -70,11 +70,15 @@ export function SlashCommandButton({
   }
 
   return (
-    <div className="slash-command-container">
+    <div className="relative">
       <button
         ref={buttonRef}
         type="button"
-        className={`slash-command-button ${isOpen ? "active" : ""}`}
+        className={`flex min-w-7 items-center justify-center rounded-md border px-2 py-1 text-sm font-semibold leading-none transition-colors ${
+          isOpen
+            ? "border-[var(--border-input)] bg-[var(--bg-hover)] text-[var(--text-primary)]"
+            : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:border-[var(--border-input)] hover:bg-[var(--bg-hover)]"
+        } disabled:cursor-not-allowed disabled:opacity-50`}
         onClick={() => setIsOpen(!isOpen)}
         disabled={disabled}
         title="Slash commands"
@@ -82,12 +86,12 @@ export function SlashCommandButton({
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
-        <span className="slash-icon">/</span>
+        <span>/</span>
       </button>
       {isOpen && (
         <div
           ref={menuRef}
-          className="slash-command-menu"
+          className="absolute bottom-full left-0 z-100 mb-1 max-h-60 min-w-40 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
           role="menu"
           aria-label="Slash commands"
         >
@@ -95,7 +99,7 @@ export function SlashCommandButton({
             <button
               key={command}
               type="button"
-              className="slash-command-item"
+              className="block w-full px-3 py-2 text-left [font-family:var(--font-mono)] text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
               onClick={() => handleCommandClick(command)}
               role="menuitem"
             >

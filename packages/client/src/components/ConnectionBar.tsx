@@ -33,5 +33,16 @@ export function ConnectionBar() {
   const status =
     connectionState === "reconnecting" ? "connecting" : connectionState;
 
-  return <div className={`connection-bar connection-${status}`} />;
+  const statusClasses = {
+    connected: "bg-[var(--success-color)]",
+    connecting:
+      "bg-[var(--thinking-color)] animate-[connection-pulse_1.5s_ease-in-out_infinite]",
+    disconnected: "bg-[var(--error-color)]",
+  };
+
+  return (
+    <div
+      className={`fixed top-0 left-0 right-0 h-0.5 z-[9999] pointer-events-none transition-colors duration-300 ${statusClasses[status as keyof typeof statusClasses] || ""}`}
+    />
+  );
 }

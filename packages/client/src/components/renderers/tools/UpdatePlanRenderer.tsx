@@ -115,7 +115,7 @@ export const updatePlanRenderer: ToolRenderer<
 
     if (isError) {
       return (
-        <div className="todo-error">
+        <div className="rounded bg-[var(--bg-error,rgba(207,34,46,0.1))] p-2 text-[var(--error-color)]">
           {resultMessage || "Failed to update plan"}
         </div>
       );
@@ -123,10 +123,16 @@ export const updatePlanRenderer: ToolRenderer<
 
     if (steps.length === 0) {
       if (status === "pending") {
-        return <div className="todo-summary">Updating plan...</div>;
+        return (
+          <div className="text-lg text-[var(--text-muted)]">
+            Updating plan...
+          </div>
+        );
       }
       return (
-        <div className="todo-summary">{resultMessage || "Plan updated"}</div>
+        <div className="text-lg text-[var(--text-muted)]">
+          {resultMessage || "Plan updated"}
+        </div>
       );
     }
 
@@ -135,22 +141,24 @@ export const updatePlanRenderer: ToolRenderer<
     ).length;
 
     return (
-      <div className="todo-result">
-        <div className="todo-summary">
+      <div className="flex flex-col gap-1">
+        <div className="text-lg text-[var(--text-muted)]">
           {completed} out of {steps.length} tasks completed
         </div>
-        {explanation && <div className="todo-summary">{explanation}</div>}
-        <div className="todo-list">
+        {explanation && (
+          <div className="text-lg text-[var(--text-muted)]">{explanation}</div>
+        )}
+        <div className="flex flex-col gap-1">
           {steps.map((step, index) => (
             <div
               key={`${step.step}-${index}`}
-              className={`todo-item ${statusClassName(step.status)}`}
+              className={`flex items-start gap-2 py-0.5 ${statusClassName(step.status)}`}
             >
-              <span className="todo-checkbox">
+              <span className="shrink-0 text-base leading-[1.4] text-[var(--text-muted)]">
                 {getStatusIcon(step.status)}
               </span>
               <span
-                className={`todo-content ${step.status === "completed" ? "todo-completed" : ""}`}
+                className={`break-words leading-[1.4] ${step.status === "completed" ? "line-through text-[var(--text-muted)]" : ""}`}
               >
                 {index + 1}. {step.step}
               </span>
@@ -160,7 +168,9 @@ export const updatePlanRenderer: ToolRenderer<
         {status !== "pending" &&
           resultMessage &&
           resultMessage.toLowerCase() !== "plan updated" && (
-            <div className="todo-summary">{resultMessage}</div>
+            <div className="text-lg text-[var(--text-muted)]">
+              {resultMessage}
+            </div>
           )}
       </div>
     );

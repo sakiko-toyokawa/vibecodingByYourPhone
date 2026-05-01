@@ -4,30 +4,35 @@ import type {
   ToolRenderer,
 } from "./types";
 
-/** Extended input type with server-rendered HTML */
 interface ExitPlanModeInputWithHtml extends ExitPlanModeInput {
   _renderedHtml?: string;
 }
 
-/** Extended result type with server-rendered HTML */
 interface ExitPlanModeResultWithHtml extends ExitPlanModeResult {
   _renderedHtml?: string;
 }
 
-/** Renders the plan content (markdown or plain text) */
+const planContentClasses =
+  "text-[13px] leading-6 text-[var(--text-primary)] [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_h1]:mt-4 [&_h1]:[font-family:var(--font-display)] [&_h1]:text-[1.35rem] [&_h2]:mt-4 [&_h2]:[font-family:var(--font-display)] [&_h2]:text-[1.15rem] [&_h3]:mt-3 [&_h3]:text-[1rem] [&_h3]:font-semibold [&_code]:rounded-[var(--radius-sm)] [&_code]:bg-[var(--bg-secondary)] [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:[font-family:var(--font-mono)] [&_code]:text-[0.9em] [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-[16px] [&_pre]:border [&_pre]:border-black/10 [&_pre]:bg-[#171717] [&_pre]:p-4 [&_pre]:[font-family:var(--font-mono)] [&_pre]:text-[#e8e3d8] [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_blockquote]:my-3 [&_blockquote]:border-l-[3px] [&_blockquote]:border-[var(--border-color)] [&_blockquote]:pl-4 [&_blockquote]:text-[var(--text-muted)] [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-[var(--border-color)] [&_th]:bg-[var(--bg-secondary)] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_td]:border [&_td]:border-[var(--border-color)] [&_td]:px-3 [&_td]:py-2";
+
 function PlanContent({
   plan,
   renderedHtml,
 }: { plan?: string; renderedHtml?: string }) {
   if (renderedHtml) {
-    // Server-rendered HTML with shiki syntax highlighting
-    // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered markdown is safe
-    return <div dangerouslySetInnerHTML={{ __html: renderedHtml }} />;
+    return (
+      <div
+        className={planContentClasses}
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered markdown is safe
+        dangerouslySetInnerHTML={{ __html: renderedHtml }}
+      />
+    );
   }
 
-  // Fallback to plain text when server-rendered HTML is not available
   return (
-    <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{plan}</pre>
+    <pre className={`${planContentClasses} whitespace-pre-wrap font-sans`}>
+      {plan}
+    </pre>
   );
 }
 
@@ -37,7 +42,6 @@ export const exitPlanModeRenderer: ToolRenderer<
 > = {
   tool: "ExitPlanMode",
 
-  // These are required by the interface but won't be used since renderInline takes over
   renderToolUse() {
     return null;
   },
@@ -46,20 +50,15 @@ export const exitPlanModeRenderer: ToolRenderer<
     return null;
   },
 
-  // Render inline without any tool-row wrapper - full control over rendering
   renderInline(input, result, isError, status) {
     const planInput = input as ExitPlanModeInputWithHtml;
     const planResult = result as ExitPlanModeResultWithHtml;
 
-    // Get plan content from input (tool_use) or result (tool_result)
     const plan: string | undefined = planInput?.plan || planResult?.plan;
-
-    // Get pre-rendered HTML from server (if available)
     const renderedHtml: string | undefined =
       planInput?._renderedHtml || planResult?._renderedHtml;
 
     if (isError) {
-      // Result can be a plain string or an object with message field
       let errorMessage = "Exit plan mode failed";
       if (typeof result === "string") {
         errorMessage = result;
@@ -69,31 +68,40 @@ export const exitPlanModeRenderer: ToolRenderer<
           errorMessage = String(errorResult.message);
         }
       }
-      return <div className="exitplan-error">{errorMessage}</div>;
+      return (
+        <div className="rounded-lg border border-[var(--error-color)]/20 bg-[var(--error-color)]/5 px-4 py-3 text-sm text-[var(--error-color)]">
+          {errorMessage}
+        </div>
+      );
     }
 
-    // Show "Planning..." only if we don't have plan content yet
     if (!plan && !renderedHtml) {
       if (status === "pending") {
-        return <div className="exitplan-pending">Planning...</div>;
+        return (
+          <div className="text-sm italic text-[var(--text-muted)]">
+            Planning...
+          </div>
+        );
       }
       return null;
     }
 
-    // Wrap in collapsible details element - expanded by default
-    // Uses the same styling as ThinkingBlock for consistency
     return (
-      <details className="exitplan-collapsible collapsible" open>
-        <summary className="collapsible__summary">
+      <details
+        className="my-2 overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-[0_1px_0_rgba(20,20,19,0.03)]"
+        open
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-muted)]">
           <span>{status === "pending" ? "Planning..." : "Plan"}</span>
-          <span className="collapsible__icon">▸</span>
-        </summary>
-        <div className="collapsible__content">
-          <div
-            className={`exitplan-inline ${status === "pending" ? "pending" : ""}`}
+          <span
+            aria-hidden="true"
+            className="text-xs text-[var(--text-dimmed)]"
           >
-            <PlanContent plan={plan} renderedHtml={renderedHtml} />
-          </div>
+            ▾
+          </span>
+        </summary>
+        <div className="border-t border-[var(--border-subtle)] px-5 py-4">
+          <PlanContent plan={plan} renderedHtml={renderedHtml} />
         </div>
       </details>
     );

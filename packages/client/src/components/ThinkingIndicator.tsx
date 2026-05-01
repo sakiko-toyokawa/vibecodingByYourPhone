@@ -26,16 +26,32 @@ export function ThinkingIndicator({
   label = "Thinking",
   className,
 }: ThinkingIndicatorProps) {
-  const dot = <span className="thinking-indicator-dot" />;
+  const dot = (
+    <span className="inline-flex items-center justify-center">
+      <span className="h-2 w-2 rounded-full bg-[var(--thinking-color)] animate-[thinking-pulse_1.5s_ease-in-out_infinite]" />
+    </span>
+  );
 
   if (variant === "pill") {
     return (
-      <span className={`thinking-indicator-pill ${className ?? ""}`}>
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-0.5 text-[10px] font-medium whitespace-nowrap text-[var(--thinking-color)] ${className ?? ""}`}
+        style={{
+          background:
+            "color-mix(in srgb, var(--thinking-color) 15%, transparent)",
+        }}
+      >
         {dot}
-        <span className="thinking-indicator-label">{label}</span>
+        <span className="leading-none">{label}</span>
       </span>
     );
   }
 
-  return <span className={`thinking-indicator ${className ?? ""}`}>{dot}</span>;
+  return (
+    <span
+      className={`inline-flex items-center justify-center ${className ?? ""}`}
+    >
+      {dot}
+    </span>
+  );
 }

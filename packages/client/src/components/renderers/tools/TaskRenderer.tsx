@@ -21,11 +21,44 @@ import type { TaskInput, TaskResult, ToolRenderer } from "./types";
 
 const MAX_PROMPT_LENGTH = 200;
 const MAX_ERROR_SUMMARY_LENGTH = 80;
+const taskSectionBadgeClasses =
+  "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]";
+const taskInfoBadgeClasses =
+  "inline-flex items-center rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--link-color)]";
 
-/**
- * Extract error message from tool result.
- * Handles both structured errors and raw string errors.
- */
+function getTaskStatusStyles(status: string) {
+  switch (status) {
+    case "running":
+      return {
+        container: "border-[var(--border-subtle)] bg-[var(--bg-secondary)]",
+        badge: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+      };
+    case "completed":
+      return {
+        container: "border-[var(--border-subtle)] bg-[var(--bg-secondary)]",
+        badge: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+      };
+    case "failed":
+    case "error":
+      return {
+        container: "border-[var(--border-subtle)] bg-[var(--bg-secondary)]",
+        badge: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+      };
+    case "interrupted":
+    case "aborted":
+    case "timeout":
+      return {
+        container: "border-[var(--border-subtle)] bg-[var(--bg-secondary)]",
+        badge: "bg-[var(--bg-tertiary)] text-[var(--text-secondary)]",
+      };
+    default:
+      return {
+        container: "border-[var(--border-color)] bg-[rgba(255,255,255,0.72)]",
+        badge: "bg-[var(--bg-tertiary)] text-[var(--text-muted)]",
+      };
+  }
+}
+
 function extractErrorMessage(
   result: unknown,
 ): { raw: string; summary: string; label: string } | null {
@@ -33,17 +66,14 @@ function extractErrorMessage(
 
   let rawMessage = "";
 
-  // Handle different result shapes
   if (typeof result === "string") {
     rawMessage = result;
   } else if (typeof result === "object" && result !== null) {
-    // Check for content field (tool_result format)
     if ("content" in result) {
       const content = (result as { content: unknown }).content;
       if (typeof content === "string") {
         rawMessage = content;
       } else if (Array.isArray(content)) {
-        // Content blocks array - find text content
         for (const block of content) {
           if (
             typeof block === "object" &&
@@ -62,10 +92,7 @@ function extractErrorMessage(
 
   if (!rawMessage) return null;
 
-  // Classify the error
   const classified = classifyToolError(rawMessage);
-
-  // Create summary (truncated cleaned message)
   const summary =
     classified.cleanedMessage.length > MAX_ERROR_SUMMARY_LENGTH
       ? `${classified.cleanedMessage.slice(0, MAX_ERROR_SUMMARY_LENGTH)}...`
@@ -78,18 +105,12 @@ function extractErrorMessage(
   };
 }
 
-/**
- * Format duration in ms to human readable
- */
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   return `${(ms / 60000).toFixed(1)}m`;
 }
 
-/**
- * Task tool use - shows description and subagent type
- */
 function TaskToolUse({ input }: { input: TaskInput }) {
   const [showPrompt, setShowPrompt] = useState(false);
   const promptTruncated =
@@ -98,23 +119,29 @@ function TaskToolUse({ input }: { input: TaskInput }) {
       : input.prompt;
 
   return (
-    <div className="task-tool-use">
-      <div className="task-header">
-        <span className="task-description">{input.description}</span>
-        <span className="badge badge-info">{input.subagent_type}</span>
-        {input.model && <span className="badge">{input.model}</span>}
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-[var(--text-primary)]">
+          {input.description}
+        </span>
+        <span className={taskInfoBadgeClasses}>{input.subagent_type}</span>
+        {input.model && (
+          <span className="inline-flex items-center rounded-full border border-[var(--border-color)] bg-[var(--bg-surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-muted)]">
+            {input.model}
+          </span>
+        )}
       </div>
       {input.prompt && (
-        <div className="task-prompt">
+        <div className="mt-2">
           <button
             type="button"
-            className="task-prompt-toggle"
+            className="rounded-lg border border-[var(--border-color)] px-3 py-1.5 text-sm text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
             onClick={() => setShowPrompt(!showPrompt)}
           >
             {showPrompt ? "Hide prompt" : "Show prompt"}
           </button>
           {showPrompt && (
-            <pre className="task-prompt-content">
+            <pre className="mt-2 max-h-52 overflow-y-auto rounded-xl border border-[var(--border-color)] bg-[var(--bg-code)] p-3 text-sm leading-6 text-[var(--text-primary)]">
               <code>{showPrompt ? input.prompt : promptTruncated}</code>
             </pre>
           )}
@@ -124,9 +151,6 @@ function TaskToolUse({ input }: { input: TaskInput }) {
   );
 }
 
-/**
- * Task nested content - renders full agent messages
- */
 function TaskNestedContent({
   messages,
   isStreaming,
@@ -142,7 +166,7 @@ function TaskNestedContent({
   const renderItems = useMemo(() => preprocessMessages(messages), [messages]);
 
   return (
-    <div className="task-nested-content">
+    <div className="p-4">
       {renderItems.map((item) => (
         <RenderItemComponent
           key={item.id}
@@ -156,9 +180,6 @@ function TaskNestedContent({
   );
 }
 
-/**
- * Task inline renderer - shows complete Task UI with nested content
- */
 function TaskInline({
   input,
   result,
@@ -180,20 +201,12 @@ function TaskInline({
     isToolIgnored,
   } = useSchemaValidationContext();
 
-  // Get agentId from result, or look it up from toolUseToAgent mapping during streaming
-  // The mapping is built when we receive system/init messages with parent_tool_use_id
   const agentId =
     result?.agentId ??
     (toolUseId ? context?.toolUseToAgent.get(toolUseId) : undefined);
 
-  // Get live content from context if available
   const liveContent = agentId ? context?.agentContent[agentId] : undefined;
 
-  // Determine if task is running
-  // The outer `status` prop (from tool_result) is the ground truth:
-  // - "pending" = tool_use sent, no result yet (task may be running)
-  // - "complete"/"error"/"aborted" = tool_result received, task is done
-  // Only check liveContent when status is "pending" (no result yet)
   const hasTerminalResult =
     result?.status === "completed" || result?.status === "failed";
   const isRunning =
@@ -201,17 +214,14 @@ function TaskInline({
     status === "pending" &&
     (liveContent?.status === "running" || !liveContent?.status);
 
-  // Always start collapsed - users can expand if they want to see details
   const [isExpanded, setIsExpanded] = useState(false);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
 
-  // Autoscroll refs
   const contentRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const isProgrammaticScrollRef = useRef(false);
   const lastHeightRef = useRef(0);
 
-  // Scroll content container to bottom
   const scrollToBottom = useCallback((container: HTMLElement) => {
     isProgrammaticScrollRef.current = true;
     container.scrollTop = container.scrollHeight - container.clientHeight;
@@ -222,7 +232,6 @@ function TaskInline({
     });
   }, []);
 
-  // Track scroll position - only user scrolls affect auto-scroll state
   const handleScroll = useCallback(() => {
     if (isProgrammaticScrollRef.current) return;
 
@@ -235,7 +244,6 @@ function TaskInline({
     shouldAutoScrollRef.current = distanceFromBottom < threshold;
   }, []);
 
-  // Attach scroll listener to content container
   useEffect(() => {
     const container = contentRef.current;
     if (!container || !isExpanded) return;
@@ -246,7 +254,6 @@ function TaskInline({
     };
   }, [handleScroll, isExpanded]);
 
-  // Use ResizeObserver to auto-scroll when content height increases
   useEffect(() => {
     const container = contentRef.current;
     if (!container || !isExpanded || !isRunning) return;
@@ -264,12 +271,10 @@ function TaskInline({
       }
     });
 
-    // Observe the container's children for size changes
     for (const child of container.children) {
       resizeObserver.observe(child);
     }
 
-    // Also observe container itself
     resizeObserver.observe(container);
 
     return () => {
@@ -277,13 +282,11 @@ function TaskInline({
     };
   }, [isExpanded, isRunning, scrollToBottom]);
 
-  // Reset autoscroll when task starts running or expands
   useEffect(() => {
     if (isExpanded && isRunning) {
       shouldAutoScrollRef.current = true;
       const container = contentRef.current;
       if (container) {
-        // Small delay to let content render
         requestAnimationFrame(() => {
           scrollToBottom(container);
         });
@@ -291,18 +294,14 @@ function TaskInline({
     }
   }, [isExpanded, isRunning, scrollToBottom]);
 
-  // Track if we've initiated loading from the effect
   const loadInitiatedRef = useRef(false);
 
-  // Load agent content when expanded (for running tasks that auto-expand on mount)
-  // This ensures we load the JSONL content immediately rather than waiting for user click
   useEffect(() => {
     if (!isExpanded || !agentId || !context) return;
     if (loadInitiatedRef.current) return;
 
     loadInitiatedRef.current = true;
 
-    // Load the agent content from JSONL (will merge with any SSE content)
     const loadContent = async () => {
       setIsLoadingContent(true);
       try {
@@ -315,12 +314,10 @@ function TaskInline({
     loadContent();
   }, [isExpanded, agentId, context, projectId, sessionId]);
 
-  // Store validation errors for inline warning display
   const [validationErrors, setValidationErrors] = useState<ZodError | null>(
     null,
   );
 
-  // Validate result schema when enabled (debug feature)
   useEffect(() => {
     if (!result || !validationEnabled) {
       setValidationErrors(null);
@@ -336,20 +333,14 @@ function TaskInline({
     }
   }, [result, validationEnabled, reportValidationError]);
 
-  // Determine if we should show the warning badge
   const showValidationWarning =
     validationEnabled && validationErrors !== null && !isToolIgnored("Task");
 
-  // Handle expand with lazy-loading
   const handleExpand = async () => {
-    // Always lazy-load agent content if we have an agentId but no live content
-    // Note: result.content is just the summary text, not the full agent interaction
-    // The full tool calls (Glob, Read, etc.) are in the agent's JSONL file
     const hasLiveContent =
       liveContent?.messages && liveContent.messages.length > 0;
 
     if (!isExpanded && agentId && context && !hasLiveContent) {
-      // Need to lazy-load content - toggle expand first so user sees loading in expanded area
       setIsExpanded(true);
       setIsLoadingContent(true);
       try {
@@ -362,69 +353,76 @@ function TaskInline({
     }
   };
 
-  // Extract error message if this is an error state
   const errorInfo = isError ? extractErrorMessage(result) : null;
 
-  // Determine status badge and styling
   const getStatusBadge = () => {
     if (isError) {
-      // Use error label if available, otherwise generic "failed"
       const errorLabel = errorInfo?.label ?? "failed";
-      return { class: "badge-error", text: errorLabel };
+      return { text: errorLabel };
     }
-    if (status === "aborted")
-      return { class: "badge-warning", text: "interrupted" };
-    if (isRunning) return { class: "badge-running", text: "running" };
-    if (result?.status === "completed")
-      return { class: "badge-success", text: "completed" };
-    if (result?.status === "failed")
-      return { class: "badge-error", text: "failed" };
-    return { class: "badge-pending", text: "pending" };
+    if (status === "aborted") return { text: "interrupted" };
+    if (isRunning) return { text: "running" };
+    if (result?.status === "completed") return { text: "completed" };
+    if (result?.status === "failed") return { text: "failed" };
+    return { text: "pending" };
   };
 
   const statusBadge = getStatusBadge();
+  const statusStyles = getTaskStatusStyles(statusBadge.text);
 
   return (
     <div
-      className={`task-inline ${isExpanded ? "expanded" : "collapsed"} status-${statusBadge.text}`}
+      className={`my-2 overflow-hidden rounded-lg border shadow-[0_1px_0_rgba(20,20,19,0.03)] ${statusStyles.container}`}
     >
-      {/* Header row */}
       <button
         type="button"
-        className="task-inline-header"
+        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)] focus:outline-none focus-visible:bg-[var(--bg-hover)]"
         onClick={handleExpand}
       >
-        <span className="task-expand-icon">{isExpanded ? "▼" : "▶"}</span>
-        <span className="badge badge-info task-agent-type">
-          {input.subagent_type}
+        <span className="w-4 shrink-0 text-center text-[11px] text-[var(--text-muted)]">
+          {isExpanded ? "v" : ">"}
         </span>
-        <span className="task-inline-title">{input.description}</span>
-        {input.model && <span className="badge task-model">{input.model}</span>}
+        <span className={taskInfoBadgeClasses}>{input.subagent_type}</span>
+        <span className="min-w-0 flex-1 truncate font-medium text-[var(--text-primary)]">
+          {input.description}
+        </span>
+        {input.model && (
+          <span className="hidden shrink-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-muted)] md:inline-flex">
+            {input.model}
+          </span>
+        )}
         {isRunning && (
           <>
-            <span className="task-spinner" aria-label="Running">
+            <span
+              className="inline-flex shrink-0 items-center"
+              aria-label="Running"
+            >
               <Spinner />
             </span>
             {liveContent?.contextUsage && (
-              <span className="task-context-usage">
+              <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-[var(--text-muted)]">
                 {liveContent.contextUsage.percentage.toFixed(0)}% context
               </span>
             )}
           </>
         )}
         {!isRunning && (
-          <span className={`badge ${statusBadge.class}`}>
+          <span
+            className={`${taskSectionBadgeClasses} shrink-0 ${statusStyles.badge}`}
+          >
             {statusBadge.text}
           </span>
         )}
-        {/* Show error summary in collapsed view */}
         {!isExpanded && errorInfo && (
-          <span className="task-error-summary" title={errorInfo.raw}>
+          <span
+            className="hidden max-w-[24rem] shrink truncate text-xs text-[var(--text-muted)] lg:inline"
+            title={errorInfo.raw}
+          >
             {errorInfo.summary}
           </span>
         )}
         {result && !isError && (
-          <span className="task-stats">
+          <span className="hidden shrink-0 whitespace-nowrap text-xs text-[var(--text-muted)] md:inline">
             {formatDuration(result.totalDurationMs ?? 0)} ·{" "}
             {(result.totalTokens ?? 0).toLocaleString()} tokens
           </span>
@@ -434,31 +432,31 @@ function TaskInline({
         )}
       </button>
 
-      {/* Loading indicator */}
       {isLoadingContent && (
-        <div className="task-loading">
+        <div className="flex items-center gap-2 border-t border-[rgba(15,23,42,0.08)] px-4 py-3 text-sm text-[var(--text-muted)]">
           <Spinner /> Loading agent content...
         </div>
       )}
 
-      {/* Expanded content */}
       {isExpanded && (
-        <div className="task-inline-content" ref={contentRef}>
-          {/* Show error details if this is an error state */}
+        <div
+          className="max-h-[31.25rem] overflow-y-auto border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]"
+          ref={contentRef}
+        >
           {errorInfo && (
-            <div className="task-error-details">
-              <pre className="task-error-message">{errorInfo.raw}</pre>
+            <div className="p-4">
+              <pre className="m-0 whitespace-pre-wrap break-words rounded-xl border-l-4 border-[var(--error-color)] bg-[rgba(254,242,242,0.96)] p-4 text-sm leading-6 text-[var(--text-primary)]">
+                {errorInfo.raw}
+              </pre>
             </div>
           )}
-          {/* Show live nested content if available */}
           {!errorInfo && liveContent?.messages.length ? (
             <TaskNestedContent
               messages={liveContent.messages}
               isStreaming={isRunning}
             />
           ) : !errorInfo && result?.content?.length ? (
-            // Fall back to result content blocks (original behavior)
-            <div className="task-content">
+            <div className="border-l-2 border-[var(--border-color)] px-4 py-4">
               {result.content.map((block) => (
                 <ContentBlockRenderer
                   key={
@@ -471,7 +469,7 @@ function TaskInline({
               ))}
             </div>
           ) : !errorInfo ? (
-            <div className="task-empty">
+            <div className="px-4 py-4 text-base italic text-[var(--text-muted)]">
               {isRunning ? "Waiting for agent activity..." : "No content"}
             </div>
           ) : null}
@@ -484,10 +482,8 @@ function TaskInline({
 function Spinner() {
   return (
     <svg
-      className="spinner"
+      className="h-3 w-3 animate-spin text-[var(--link-color)]"
       viewBox="0 0 16 16"
-      width="12"
-      height="12"
       aria-hidden="true"
     >
       <circle
@@ -504,10 +500,6 @@ function Spinner() {
   );
 }
 
-/**
- * Task tool result - shows agent response with nested content
- * (Legacy - used when expanded in standard tool row)
- */
 function TaskToolResult({
   result,
   isError,
@@ -519,7 +511,7 @@ function TaskToolResult({
 
   if (isError) {
     return (
-      <div className="task-error">
+      <div className="rounded-xl border border-[rgba(239,68,68,0.18)] bg-[rgba(254,242,242,0.84)] px-4 py-3 text-[var(--error-color)]">
         {typeof result === "object" && "content" in result
           ? String(result.content)
           : "Task failed"}
@@ -528,35 +520,39 @@ function TaskToolResult({
   }
 
   if (!result) {
-    return <div className="task-empty">No result</div>;
+    return (
+      <div className="text-base italic text-[var(--text-muted)]">No result</div>
+    );
   }
 
   const statusClass =
     result.status === "completed"
-      ? "badge-success"
+      ? "bg-[rgba(34,197,94,0.12)] text-[var(--success-color)]"
       : result.status === "failed"
-        ? "badge-error"
-        : "badge-warning";
+        ? "bg-[rgba(239,68,68,0.12)] text-[var(--error-color)]"
+        : "bg-[rgba(234,179,8,0.14)] text-[var(--warning-color)]";
 
   return (
-    <div className="task-result">
-      <div className="task-result-header">
-        <span className={`badge ${statusClass}`}>{result.status}</span>
-        <span className="task-stats">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className={`${taskSectionBadgeClasses} ${statusClass}`}>
+          {result.status}
+        </span>
+        <span className="text-sm text-[var(--text-muted)]">
           {formatDuration(result.totalDurationMs ?? 0)} &middot;{" "}
           {(result.totalTokens ?? 0).toLocaleString()} tokens &middot;{" "}
           {result.totalToolUseCount ?? 0} tools
         </span>
         <button
           type="button"
-          className="expand-button"
+          className="cursor-pointer rounded border border-[var(--border-color)] bg-transparent px-4 py-2 text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary,var(--text-primary))] active:bg-[var(--bg-tertiary)]"
           onClick={() => setIsExpanded(!isExpanded)}
         >
           {isExpanded ? "Collapse" : "Expand"}
         </button>
       </div>
       {isExpanded && result.content && result.content.length > 0 && (
-        <div className="task-content">
+        <div className="border-l-2 border-[var(--border-color)] pl-4">
           {result.content.map((block, i) => (
             <ContentBlockRenderer
               key={`${result.agentId}-${i}`}
@@ -593,8 +589,6 @@ export const taskRenderer: ToolRenderer<TaskInput, TaskResult> = {
       : "Complete";
   },
 
-  // Use inline rendering to bypass standard tool row structure
-  // This gives us full control over expand/collapse and nested content display
   renderInline(input, result, isError, status, context) {
     return (
       <TaskInline

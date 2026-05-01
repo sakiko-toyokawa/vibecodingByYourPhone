@@ -829,6 +829,15 @@ export const api = {
       body: JSON.stringify(params),
     }),
 
+  restoreGitFiles: (projectId: string, paths: string[]) =>
+    fetchJSON<{
+      restored: string[];
+      failed: Array<{ path: string; error: string }>;
+    }>(`/projects/${projectId}/git/restore`, {
+      method: "POST",
+      body: JSON.stringify({ paths }),
+    }),
+
   // Inbox API
   getInbox: (projectId?: string) =>
     fetchJSON<InboxResponse>(

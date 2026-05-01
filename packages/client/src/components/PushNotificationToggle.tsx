@@ -44,11 +44,11 @@ export function PushNotificationToggle() {
       <div className="flex items-center justify-between gap-4 p-3 bg-[var(--bg-code)] rounded-[var(--radius-md)]">
         <div className="flex-1 min-w-0">
           <strong className="block mb-1">{t("pushToggleTitle")}</strong>
-          <p className="m-0 text-[var(--font-size-sm)] text-[var(--text-muted)]">
+          <p className="m-0 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
             {error || t("pushToggleUnsupported")}
           </p>
           {isDevModeDisabled && (
-            <div className="bg-[var(--bg-elevated)] border border-[var(--border-muted)] rounded-[var(--radius-md)] p-3 text-[var(--font-size-sm)] text-[var(--text-muted)] mt-2">
+            <div className="bg-[var(--bg-elevated)] border border-[var(--border-muted)] rounded-[var(--radius-md)] p-3 [font-size:var(--font-size-sm)] text-[var(--text-muted)] mt-2">
               <p className="m-0 mb-2">{t("pushToggleThisDeviceOnly")}</p>
               <p className="m-0">{t("pushToggleDevModeHint")}</p>
             </div>
@@ -74,7 +74,7 @@ export function PushNotificationToggle() {
       <div className="flex items-center justify-between gap-4 p-3 bg-[var(--bg-code)] rounded-[var(--radius-md)]">
         <div className="flex-1 min-w-0">
           <strong className="block mb-1">{t("pushToggleTitle")}</strong>
-          <p className="text-[var(--error-color)] text-[var(--font-size-sm)] mt-1">
+          <p className="text-[var(--error-color)] [font-size:var(--font-size-sm)] mt-1">
             {t("pushToggleBlocked")}
           </p>
         </div>
@@ -87,11 +87,11 @@ export function PushNotificationToggle() {
       <div className="flex items-center justify-between gap-4 p-3 bg-[var(--bg-code)] rounded-[var(--radius-md)]">
         <div className="flex-1 min-w-0">
           <strong className="block mb-1">{t("pushToggleTitle")}</strong>
-          <p className="m-0 text-[var(--font-size-sm)] text-[var(--text-muted)]">
+          <p className="m-0 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
             {t("pushToggleDescription")}
           </p>
           {error && (
-            <p className="text-[var(--error-color)] text-[var(--font-size-sm)] mt-1">
+            <p className="text-[var(--error-color)] [font-size:var(--font-size-sm)] mt-1">
               {error}
             </p>
           )}
@@ -115,7 +115,7 @@ export function PushNotificationToggle() {
               <strong className="block mb-1">
                 {t("pushToggleNotifyInAppTitle")}
               </strong>
-              <p className="m-0 text-[var(--font-size-sm)] text-[var(--text-muted)]">
+              <p className="m-0 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
                 {t("pushToggleNotifyInAppDescription")}
               </p>
             </div>
@@ -132,13 +132,13 @@ export function PushNotificationToggle() {
           <div className="flex items-center justify-between gap-4 p-3 bg-[var(--bg-code)] rounded-[var(--radius-md)]">
             <div className="flex-1 min-w-0">
               <strong className="block mb-1">{t("pushToggleTestTitle")}</strong>
-              <p className="m-0 text-[var(--font-size-sm)] text-[var(--text-muted)]">
+              <p className="m-0 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
                 {t("pushToggleTestDescription")}
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <select
-                className="px-3 py-2 bg-[var(--bg-hover)] border border-[var(--border-color)] rounded-[var(--radius-sm)] text-[var(--text-primary)] text-[var(--font-size-sm)] cursor-pointer min-w-[160px] hover:bg-[var(--border-color)] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-2 bg-[var(--bg-hover)] border border-[var(--border-color)] rounded-[var(--radius-sm)] text-[var(--text-primary)] [font-size:var(--font-size-sm)] cursor-pointer min-w-[160px] hover:bg-[var(--border-color)] disabled:opacity-50 disabled:cursor-not-allowed"
                 value={testUrgency}
                 onChange={(e) =>
                   setTestUrgency(e.target.value as TestNotificationUrgency)
@@ -153,7 +153,7 @@ export function PushNotificationToggle() {
               </select>
               <button
                 type="button"
-                className="px-3 py-2 bg-[var(--bg-hover)] border border-[var(--border-color)] rounded-[var(--radius-sm)] text-[var(--text-primary)] text-[var(--font-size-sm)] cursor-pointer transition-colors duration-150 whitespace-nowrap hover:bg-[var(--border-color)] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-2 bg-[var(--bg-hover)] border border-[var(--border-color)] rounded-[var(--radius-sm)] text-[var(--text-primary)] [font-size:var(--font-size-sm)] cursor-pointer transition-colors duration-150 whitespace-nowrap hover:bg-[var(--border-color)] disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => sendTest(testUrgency)}
                 disabled={isLoading}
               >

@@ -27,15 +27,32 @@ export function LocalMediaModal({
 
   return (
     <Modal title={fileName} onClose={onClose}>
-      <div className="local-media-modal-content">
-        {loading && <div className="local-media-loading">Loading...</div>}
-        {error && <div className="local-media-error">{error}</div>}
+      <div className="flex items-center justify-center p-4">
+        {loading && (
+          <div className="p-8 text-center text-[var(--text-secondary)]">
+            Loading...
+          </div>
+        )}
+        {error && (
+          <div className="p-8 text-center text-[var(--color-error)]">
+            {error}
+          </div>
+        )}
         {url &&
           (mediaType === "video" ? (
             // biome-ignore lint/a11y/useMediaCaption: user-generated local files, no captions available
-            <video controls autoPlay className="local-media-player" src={url} />
+            <video
+              controls
+              autoPlay
+              className="max-w-full max-h-[80vh] rounded-[var(--radius-md)]"
+              src={url}
+            />
           ) : (
-            <img className="local-media-image" src={url} alt={fileName} />
+            <img
+              className="max-w-full max-h-[80vh] object-contain rounded-[var(--radius-md)]"
+              src={url}
+              alt={fileName}
+            />
           ))}
       </div>
     </Modal>

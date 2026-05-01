@@ -59,33 +59,19 @@ export function BulkActionBar({
     }
 
     return (
-      <div className="bulk-action-bar">
-        <div className="bulk-action-bar__actions">
+      <div className="fixed bottom-0 left-0 right-0 z-[100] flex items-center justify-between px-4 py-3 pb-[max(var(--space-3),env(safe-area-inset-bottom,0px))] bg-[var(--bg-surface)] border-t border-[var(--border-color)] shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
+        <div className="flex gap-2">
           <button
             type="button"
-            className="bulk-action-button bulk-action-button--primary"
+            className="flex items-center gap-1 px-3 py-2 bg-[var(--text-primary)] text-white border border-[var(--text-primary)] rounded-[var(--radius-md)] [font-size:var(--font-size-sm)] font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed max-sm:flex-col"
             onClick={onArchiveAllFiltered}
             disabled={isPending}
             title={t("bulkArchiveAllFilteredTitle", {
               count: archivableFilteredCount,
             })}
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <polyline points="21 8 21 21 3 21 3 8" />
-              <rect x="1" y="3" width="22" height="5" />
-              <line x1="10" y1="12" x2="14" y2="12" />
-            </svg>
-            <span>
+            <span className="text-sm">&#x1f4c1;</span>
+            <span className="max-sm:[font-size:var(--font-size-xs)]">
               {t("bulkArchiveAll", { count: archivableFilteredCount })}
             </span>
           </button>
@@ -95,191 +81,110 @@ export function BulkActionBar({
   }
 
   return (
-    <div className="bulk-action-bar">
-      <div className="bulk-action-bar__info">
-        <span className="bulk-action-bar__count">
+    <div className="fixed bottom-0 left-0 right-0 z-[100] flex items-center justify-between px-4 py-3 pb-[max(var(--space-3),env(safe-area-inset-bottom,0px))] bg-[var(--bg-surface)] border-t border-[var(--border-color)] shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
+      <div className="flex items-center gap-2">
+        <span className="[font-size:var(--font-size-sm)] font-semibold text-[var(--text-primary)]">
           {t("bulkSelectedCount", { count: selectedCount })}
         </span>
         <button
           type="button"
-          className="bulk-action-bar__clear"
+          className="flex items-center justify-center w-7 h-7 p-0 bg-transparent border-none rounded-[var(--radius-sm)] text-[var(--text-muted)] cursor-pointer hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={onClearSelection}
           disabled={isPending}
           aria-label={t("bulkClearSelection")}
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
+          <span className="text-sm">&#x2715;</span>
         </button>
       </div>
 
-      <div className="bulk-action-bar__actions">
+      <div className="flex gap-2 max-sm:gap-1">
         {canArchive && (
           <button
             type="button"
-            className="bulk-action-button"
+            className="flex items-center gap-1 px-3 py-2 bg-[var(--bg-hover)] border border-[var(--border-color)] rounded-[var(--radius-md)] text-[var(--text-primary)] [font-size:var(--font-size-sm)] cursor-pointer hover:bg-[var(--bg-surface)] hover:border-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed max-sm:flex-col"
             onClick={onArchive}
             disabled={isPending}
             title={t("bulkArchiveSelected")}
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <polyline points="21 8 21 21 3 21 3 8" />
-              <rect x="1" y="3" width="22" height="5" />
-              <line x1="10" y1="12" x2="14" y2="12" />
-            </svg>
-            <span>{t("bulkArchive")}</span>
+            <span className="text-sm">&#x1f4c1;</span>
+            <span className="max-sm:[font-size:var(--font-size-xs)]">
+              {t("bulkArchive")}
+            </span>
           </button>
         )}
 
         {canUnarchive && (
           <button
             type="button"
-            className="bulk-action-button"
+            className="flex items-center gap-1 px-3 py-2 bg-[var(--bg-hover)] border border-[var(--border-color)] rounded-[var(--radius-md)] text-[var(--text-primary)] [font-size:var(--font-size-sm)] cursor-pointer hover:bg-[var(--bg-surface)] hover:border-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed max-sm:flex-col"
             onClick={onUnarchive}
             disabled={isPending}
             title={t("bulkUnarchiveSelected")}
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <polyline points="21 8 21 21 3 21 3 8" />
-              <rect x="1" y="3" width="22" height="5" />
-              <polyline points="12 11 12 17" />
-              <polyline points="9 14 12 11 15 14" />
-            </svg>
-            <span>{t("bulkUnarchive")}</span>
+            <span className="text-sm">&#x1f4c2;</span>
+            <span className="max-sm:[font-size:var(--font-size-xs)]">
+              {t("bulkUnarchive")}
+            </span>
           </button>
         )}
 
         {canStar && (
           <button
             type="button"
-            className="bulk-action-button"
+            className="flex items-center gap-1 px-3 py-2 bg-[var(--bg-hover)] border border-[var(--border-color)] rounded-[var(--radius-md)] text-[var(--text-primary)] [font-size:var(--font-size-sm)] cursor-pointer hover:bg-[var(--bg-surface)] hover:border-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed max-sm:flex-col"
             onClick={onStar}
             disabled={isPending}
             title={t("bulkStarSelected")}
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-            </svg>
-            <span>{t("bulkStar")}</span>
+            <span className="text-sm">&#x2605;</span>
+            <span className="max-sm:[font-size:var(--font-size-xs)]">
+              {t("bulkStar")}
+            </span>
           </button>
         )}
 
         {canUnstar && (
           <button
             type="button"
-            className="bulk-action-button"
+            className="flex items-center gap-1 px-3 py-2 bg-[var(--bg-hover)] border border-[var(--border-color)] rounded-[var(--radius-md)] text-[var(--text-primary)] [font-size:var(--font-size-sm)] cursor-pointer hover:bg-[var(--bg-surface)] hover:border-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed max-sm:flex-col"
             onClick={onUnstar}
             disabled={isPending}
             title={t("bulkUnstarSelected")}
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-              <line x1="4" y1="4" x2="20" y2="20" />
-            </svg>
-            <span>{t("bulkUnstar")}</span>
+            <span className="text-sm">&#x2606;</span>
+            <span className="max-sm:[font-size:var(--font-size-xs)]">
+              {t("bulkUnstar")}
+            </span>
           </button>
         )}
 
         {canMarkRead && (
           <button
             type="button"
-            className="bulk-action-button"
+            className="flex items-center gap-1 px-3 py-2 bg-[var(--bg-hover)] border border-[var(--border-color)] rounded-[var(--radius-md)] text-[var(--text-primary)] [font-size:var(--font-size-sm)] cursor-pointer hover:bg-[var(--bg-surface)] hover:border-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed max-sm:flex-col"
             onClick={onMarkRead}
             disabled={isPending}
             title={t("bulkMarkReadTitle")}
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-              <polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-            <span>{t("bulkMarkRead")}</span>
+            <span className="text-sm">&#x2713;</span>
+            <span className="max-sm:[font-size:var(--font-size-xs)]">
+              {t("bulkMarkRead")}
+            </span>
           </button>
         )}
 
         {canMarkUnread && (
           <button
             type="button"
-            className="bulk-action-button"
+            className="flex items-center gap-1 px-3 py-2 bg-[var(--bg-hover)] border border-[var(--border-color)] rounded-[var(--radius-md)] text-[var(--text-primary)] [font-size:var(--font-size-sm)] cursor-pointer hover:bg-[var(--bg-surface)] hover:border-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed max-sm:flex-col"
             onClick={onMarkUnread}
             disabled={isPending}
             title={t("bulkMarkUnreadTitle")}
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <circle cx="12" cy="12" r="4" fill="currentColor" />
-            </svg>
-            <span>{t("bulkMarkUnread")}</span>
+            <span className="text-sm">&#x25cf;</span>
+            <span className="max-sm:[font-size:var(--font-size-xs)]">
+              {t("bulkMarkUnread")}
+            </span>
           </button>
         )}
       </div>

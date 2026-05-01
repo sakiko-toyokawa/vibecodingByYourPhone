@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { GlobalSessionItem } from "../api/client";
 import { useOptionalRemoteConnection } from "../contexts/RemoteConnectionContext";
 import { useDrafts } from "../hooks/useDrafts";
 import { useGlobalSessions } from "../hooks/useGlobalSessions";
@@ -10,7 +9,7 @@ import { useRecentProjects } from "../hooks/useRecentProjects";
 import { useRemoteBasePath } from "../hooks/useRemoteBasePath";
 import { useVersion } from "../hooks/useVersion";
 import { useI18n } from "../i18n";
-import { getSessionDisplayTitle, toUrlProjectId } from "../utils";
+import { getSessionDisplayTitle } from "../utils";
 import { AgentsNavItem } from "./AgentsNavItem";
 import { SessionListItem } from "./SessionListItem";
 import {
@@ -18,34 +17,23 @@ import {
   SidebarNavItem,
   SidebarNavSection,
 } from "./SidebarNavItem";
-import { YepAnywhereLogo } from "./YepAnywhereLogo";
 
-const SWIPE_THRESHOLD = 50; // Minimum distance to trigger close
-const SWIPE_ENGAGE_THRESHOLD = 15; // Minimum horizontal distance before swipe engages
-const RECENT_SESSIONS_INITIAL = 12; // Initial number of recent sessions to show
-const RECENT_SESSIONS_INCREMENT = 10; // How many more to show on each expand
+const SWIPE_THRESHOLD = 50;
+const SWIPE_ENGAGE_THRESHOLD = 15;
+const RECENT_SESSIONS_INITIAL = 12;
+const RECENT_SESSIONS_INCREMENT = 10;
 
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onNavigate: () => void;
-
-  /** Current session ID (for highlighting in sidebar) */
   currentSessionId?: string;
-
-  /** Desktop mode: sidebar is always visible, no overlay */
   isDesktop?: boolean;
-  /** Desktop mode: sidebar is collapsed (icons only) */
   isCollapsed?: boolean;
-  /** Desktop mode: callback to toggle expanded/collapsed state */
   onToggleExpanded?: () => void;
-  /** Desktop mode: current sidebar width in pixels */
   sidebarWidth?: number;
-  /** Desktop mode: called when resize starts */
   onResizeStart?: () => void;
-  /** Desktop mode: called during resize with new width */
   onResize?: (width: number) => void;
-  /** Desktop mode: called when resize ends */
   onResizeEnd?: () => void;
 }
 
@@ -54,7 +42,6 @@ export function Sidebar({
   onClose,
   onNavigate,
   currentSessionId,
-  // Desktop mode props
   isDesktop = false,
   isCollapsed = false,
   onToggleExpanded,
@@ -64,51 +51,37 @@ export function Sidebar({
   onResizeEnd,
 }: SidebarProps) {
   const { t } = useI18n();
-  // Get base path for relay mode (e.g., "/remote/my-server")
   const basePath = useRemoteBasePath();
   const navigate = useNavigate();
   const remoteConnection = useOptionalRemoteConnection();
-
-  // Fetch global sessions for sidebar (non-starred only for recent/older sections)
   const { sessions: globalSessions, loading: globalLoading } =
     useGlobalSessions({ limit: 50, includeStats: false });
-
-  // Fetch starred sessions separately to ensure we get ALL starred sessions
   const { sessions: starredSessions, loading: starredLoading } =
     useGlobalSessions({
       starred: true,
       limit: 100,
       includeStats: false,
     });
-
   const sessionsLoading = globalLoading || starredLoading;
-
-  // Server capabilities for feature gating
   const { version: versionInfo } = useVersion();
   const capabilities = versionInfo?.capabilities ?? [];
-
-  // Global inbox count
   const inboxCount = useNeedsAttentionBadge();
   const { recentProjects, projects } = useRecentProjects();
   const newSessionProjectId = resolvePreferredProjectId(
     projects,
     recentProjects[0]?.id,
   );
+  const drafts = useDrafts();
 
   const sidebarRef = useRef<HTMLElement>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
-  const swipeEngaged = useRef<boolean>(false);
-  const [swipeOffset, setSwipeOffset] = useState(0);
-  const [isResizing, setIsResizing] = useState(false);
+  const swipeEngaged = useRef(false);
   const resizeStartX = useRef<number | null>(null);
   const resizeStartWidth = useRef<number | null>(null);
-  const [recentSessionsLimit, setRecentSessionsLimit] = useState(
-    RECENT_SESSIONS_INITIAL,
-  );
-  const [olderSessionsLimit, setOlderSessionsLimit] = useState(
-    RECENT_SESSIONS_INITIAL,
-  );
+
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [isResizing, setIsResizing] = useState(false);
   const [starredSessionsLimit, setStarredSessionsLimit] = useState(
     RECENT_SESSIONS_INITIAL,
   );
@@ -129,15 +102,9 @@ export function Sidebar({
     const diffX = currentX - touchStartX.current;
     const diffY = currentY - touchStartY.current;
 
-    // If not yet engaged, check if we should engage the swipe
     if (!swipeEngaged.current) {
       const absDiffX = Math.abs(diffX);
       const absDiffY = Math.abs(diffY);
-
-      // Engage swipe only if:
-      // 1. Horizontal movement exceeds threshold
-      // 2. Horizontal movement is greater than vertical (user is swiping, not scrolling)
-      // 3. Movement is to the left (closing gesture)
       if (
         absDiffX > SWIPE_ENGAGE_THRESHOLD &&
         absDiffX > absDiffY &&
@@ -145,11 +112,10 @@ export function Sidebar({
       ) {
         swipeEngaged.current = true;
       } else {
-        return; // Not engaged yet, don't track offset
+        return;
       }
     }
 
-    // Only allow swiping left (negative offset)
     if (diffX < 0) {
       setSwipeOffset(diffX);
     }
@@ -165,7 +131,6 @@ export function Sidebar({
     setSwipeOffset(0);
   };
 
-  // Desktop sidebar resize handlers
   const handleResizeMouseDown = (e: React.MouseEvent) => {
     if (!isDesktop || isCollapsed || !sidebarWidth) return;
     e.preventDefault();
@@ -179,11 +144,11 @@ export function Sidebar({
     if (!isResizing) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (resizeStartX.current === null || resizeStartWidth.current === null)
+      if (resizeStartX.current === null || resizeStartWidth.current === null) {
         return;
+      }
       const diff = e.clientX - resizeStartX.current;
-      const newWidth = resizeStartWidth.current + diff;
-      onResize?.(newWidth);
+      onResize?.(resizeStartWidth.current + diff);
     };
 
     const handleMouseUp = () => {
@@ -202,73 +167,29 @@ export function Sidebar({
     };
   }, [isResizing, onResize, onResizeEnd]);
 
-  // Handle switching hosts - disconnect and go to host picker
   const handleSwitchHost = () => {
     remoteConnection?.disconnect();
     navigate("/login");
     onNavigate();
   };
 
-  // Starred sessions come from dedicated fetch (filtered by server)
-  // Filter out archived just in case
-  const filteredStarredSessions = useMemo(() => {
-    return starredSessions.filter((s) => !s.isArchived);
-  }, [starredSessions]);
+  const filteredStarredSessions = useMemo(
+    () => starredSessions.filter((s) => !s.isArchived),
+    [starredSessions],
+  );
 
-  // Sessions updated in the last 24 hours (non-starred, non-archived)
-  const recentDaySessions = useMemo(() => {
-    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-    const isWithinLastDay = (date: Date) => date.getTime() >= oneDayAgo;
-
-    return globalSessions.filter(
-      (s) =>
-        !s.isStarred && !s.isArchived && isWithinLastDay(new Date(s.updatedAt)),
-    );
-  }, [globalSessions]);
-
-  // Older sessions (non-starred, non-archived, NOT in last 24 hours)
-  const olderSessions = useMemo(() => {
-    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-    const isOlderThanOneDay = (date: Date) => date.getTime() < oneDayAgo;
-
-    return globalSessions.filter(
-      (s) =>
-        !s.isStarred &&
-        !s.isArchived &&
-        isOlderThanOneDay(new Date(s.updatedAt)),
-    );
-  }, [globalSessions]);
-
-  // Track which sessions have unsent drafts in localStorage
-  const drafts = useDrafts();
-
-  // In desktop mode, always render. In mobile mode, only render when open.
   if (!isDesktop && !isOpen) return null;
 
-  // Sidebar toggle icon for desktop mode
-  const SidebarToggleIcon = () => (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <line x1="9" y1="3" x2="9" y2="21" />
-    </svg>
-  );
+  const showSessionLists = !isCollapsed;
+  const shellClasses = isDesktop
+    ? "relative inset-auto h-full w-full max-w-none animate-none border-r-0 bg-transparent shadow-none"
+    : "fixed inset-y-0 left-0 z-[101] w-[280px] max-w-[85vw] animate-[slideIn_0.2s_ease-out] border-r border-[var(--border-color)] bg-[var(--bg-surface)] shadow-[0_18px_60px_rgba(20,20,19,0.12)]";
 
   return (
     <>
-      {/* Only show overlay in non-desktop mode */}
       {!isDesktop && (
         <div
-          className="sidebar-overlay"
+          className="fixed inset-0 z-[100] bg-[var(--bg-overlay)] animate-[fadeIn_0.15s_ease-out]"
           onClick={onClose}
           onKeyDown={(e) => e.key === "Escape" && onClose()}
           role="button"
@@ -276,9 +197,10 @@ export function Sidebar({
           aria-label={t("actionCloseSidebar")}
         />
       )}
+
       <aside
         ref={sidebarRef}
-        className="sidebar"
+        className={`${shellClasses} flex flex-col pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]`}
         onTouchStart={!isDesktop ? handleTouchStart : undefined}
         onTouchMove={!isDesktop ? handleTouchMove : undefined}
         onTouchEnd={!isDesktop ? handleTouchEnd : undefined}
@@ -288,69 +210,136 @@ export function Sidebar({
             : undefined
         }
       >
-        <div className="sidebar-header">
+        <div
+          className={`flex items-center ${
+            isCollapsed
+              ? "justify-center px-2 py-3"
+              : "justify-between px-4 py-4"
+          }`}
+        >
           {isDesktop && isCollapsed ? (
-            /* Desktop collapsed mode: show toggle button to expand */
             <button
               type="button"
-              className="sidebar-toggle"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[var(--text-muted)] shadow-sm ring-1 ring-black/5 transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
               onClick={onToggleExpanded}
               title={t("actionExpandSidebar")}
               aria-label={t("actionExpandSidebar")}
             >
-              <SidebarToggleIcon />
+              <span className="text-sm font-medium">→</span>
             </button>
-          ) : isDesktop ? (
-            /* Desktop expanded mode: show brand (toggle is in toolbar) */
-            <span className="sidebar-brand">
-              <YepAnywhereLogo />
-            </span>
           ) : (
-            /* Mobile mode: brand text + close button */
             <>
-              <span className="sidebar-brand">
-                <YepAnywhereLogo />
-              </span>
-              <button
-                type="button"
-                className="sidebar-close"
-                onClick={onClose}
-                aria-label={t("actionCloseSidebar")}
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  aria-hidden="true"
+              <div className="flex flex-col">
+                <h1
+                  className="text-[1.4rem] leading-tight text-[var(--text-primary)]"
+                  style={{ fontFamily: "var(--font-display)" }}
                 >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
+                  {"Yep Anywhere"}
+                </h1>
+                {!isCollapsed && (
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {"ARCHIVAL VIEW"}
+                  </span>
+                )}
+              </div>
+              {!isDesktop && (
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[var(--text-muted)] shadow-sm ring-1 ring-black/5 transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                  onClick={onClose}
+                  aria-label={t("actionCloseSidebar")}
+                >
+                  <span className="text-sm font-medium">×</span>
+                </button>
+              )}
             </>
           )}
         </div>
 
-        <div className="sidebar-actions">
-          {/* New Session: link to most recent project's new session page */}
-          <SidebarNavItem
-            to={
-              newSessionProjectId
-                ? `/new-session?projectId=${encodeURIComponent(newSessionProjectId)}`
-                : "/new-session"
-            }
-            icon={SidebarIcons.newSession}
-            label={t("sidebarNewSession")}
-            onClick={onNavigate}
-            basePath={basePath}
-          />
+        <div
+          className={`flex flex-col ${isCollapsed ? "px-2 py-2" : "px-3 py-2"}`}
+        >
+          {isCollapsed ? (
+            <Link
+              to={
+                newSessionProjectId
+                  ? `${basePath}/new-session?projectId=${encodeURIComponent(newSessionProjectId)}`
+                  : `${basePath}/new-session`
+              }
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1b1c18] text-[#fbf9f2] transition-opacity hover:opacity-90"
+              onClick={onNavigate}
+              title={t("sidebarNewSession")}
+              aria-label={t("sidebarNewSession")}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <line
+                  x1="12"
+                  y1="7"
+                  x2="12"
+                  y2="17"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+                <line
+                  x1="7"
+                  y1="12"
+                  x2="17"
+                  y2="12"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </Link>
+          ) : (
+            <Link
+              to={
+                newSessionProjectId
+                  ? `${basePath}/new-session?projectId=${encodeURIComponent(newSessionProjectId)}`
+                  : `${basePath}/new-session`
+              }
+              className="flex items-center justify-center gap-2 rounded-md bg-[#1b1c18] py-2.5 px-4 text-sm font-medium text-[#fbf9f2] no-underline transition-opacity hover:opacity-90"
+              onClick={onNavigate}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <line
+                  x1="12"
+                  y1="7"
+                  x2="12"
+                  y2="17"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+                <line
+                  x1="7"
+                  y1="12"
+                  x2="17"
+                  y2="12"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+              {t("sidebarNewSession")}
+            </Link>
+          )}
         </div>
 
-        <div className="sidebar-sessions">
-          {/* Navigation items that scroll with content */}
+        <div
+          className={`flex-1 overflow-y-auto ${isCollapsed ? "px-2 pb-3" : "px-3 pb-4"}`}
+        >
           <SidebarNavSection>
             <SidebarNavItem
               to="/inbox"
@@ -359,6 +348,7 @@ export function Sidebar({
               badge={inboxCount}
               onClick={onNavigate}
               basePath={basePath}
+              collapsed={isCollapsed}
             />
             <SidebarNavItem
               to="/sessions"
@@ -366,6 +356,23 @@ export function Sidebar({
               label={t("sidebarAllSessions")}
               onClick={onNavigate}
               basePath={basePath}
+              collapsed={isCollapsed}
+            />
+            <SidebarNavItem
+              to="/recent"
+              icon={SidebarIcons.recents}
+              label={t("sidebarRecent")}
+              onClick={onNavigate}
+              basePath={basePath}
+              collapsed={isCollapsed}
+            />
+            <SidebarNavItem
+              to="/older"
+              icon={SidebarIcons.older}
+              label={t("sidebarOlder")}
+              onClick={onNavigate}
+              basePath={basePath}
+              collapsed={isCollapsed}
             />
             <SidebarNavItem
               to="/projects"
@@ -373,6 +380,7 @@ export function Sidebar({
               label={t("sidebarProjects")}
               onClick={onNavigate}
               basePath={basePath}
+              collapsed={isCollapsed}
             />
             {capabilities.includes("git-status") && (
               <SidebarNavItem
@@ -381,6 +389,7 @@ export function Sidebar({
                 label={t("sidebarSourceControl")}
                 onClick={onNavigate}
                 basePath={basePath}
+                collapsed={isCollapsed}
               />
             )}
             {(capabilities.includes("deviceBridge") ||
@@ -391,55 +400,42 @@ export function Sidebar({
                 label={t("sidebarDevices")}
                 onClick={onNavigate}
                 basePath={basePath}
+                collapsed={isCollapsed}
               />
             )}
-            <AgentsNavItem onClick={onNavigate} basePath={basePath} />
+            <AgentsNavItem
+              onClick={onNavigate}
+              basePath={basePath}
+              collapsed={isCollapsed}
+            />
             <SidebarNavItem
               to="/settings"
               icon={SidebarIcons.settings}
               label={t("sidebarSettings")}
               onClick={onNavigate}
               basePath={basePath}
+              collapsed={isCollapsed}
             />
-            {/* Switch Host - show whenever we have a remote connection */}
-            {remoteConnection && (
+            {remoteConnection && !isCollapsed && (
               <button
                 type="button"
-                className="sidebar-nav-item sidebar-switch-host"
+                className="mt-1 flex items-center gap-2 rounded-xl border border-[var(--border-color)]/70 bg-white px-3.5 py-2 text-left text-xs text-[var(--text-primary)] shadow-sm transition-colors hover:bg-[var(--bg-hover)]"
                 onClick={handleSwitchHost}
               >
-                <span className="sidebar-nav-icon">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <polyline points="17 1 21 5 17 9" />
-                    <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-                    <polyline points="7 23 3 19 7 15" />
-                    <path d="M21 13v2a4 4 0 0 1-4 4H3" />
-                  </svg>
-                </span>
-                <span className="sidebar-nav-label">
-                  {t("sidebarSwitchHost")}
-                </span>
+                <span>{t("sidebarSwitchHost")}</span>
               </button>
             )}
           </SidebarNavSection>
 
-          {/* Global sessions list */}
-          {filteredStarredSessions.length > 0 && (
-            <div className="sidebar-section">
-              <h3 className="sidebar-section-title">
+          {showSessionLists && filteredStarredSessions.length > 0 && (
+            <div className="mb-4 mt-3">
+              <h3
+                className="mb-2 px-3 text-xs font-semibold tracking-wide uppercase text-[var(--text-dimmed)]"
+                style={{ fontFamily: "var(--font-body)" }}
+              >
                 {t("sidebarSectionStarred")}
               </h3>
-              <ul className="sidebar-session-list">
+              <ul className="m-0 list-none p-0">
                 {filteredStarredSessions
                   .slice(0, starredSessionsLimit)
                   .map((session) => (
@@ -470,7 +466,7 @@ export function Sidebar({
               {filteredStarredSessions.length > starredSessionsLimit && (
                 <button
                   type="button"
-                  className="sidebar-show-more"
+                  className="block w-full px-3.5 py-1.5 text-left text-xs text-[var(--text-dimmed)] transition-colors hover:text-[var(--text-secondary)]"
                   onClick={() =>
                     setStarredSessionsLimit(
                       (prev) => prev + RECENT_SESSIONS_INCREMENT,
@@ -488,127 +484,44 @@ export function Sidebar({
             </div>
           )}
 
-          {recentDaySessions.length > 0 && (
-            <div className="sidebar-section">
-              <h3 className="sidebar-section-title">
-                {t("sidebarSectionLast24Hours")}
-              </h3>
-              <ul className="sidebar-session-list">
-                {recentDaySessions
-                  .slice(0, recentSessionsLimit)
-                  .map((session) => (
-                    <SessionListItem
-                      key={session.id}
-                      sessionId={session.id}
-                      projectId={session.projectId}
-                      title={getSessionDisplayTitle(session)}
-                      fullTitle={getSessionDisplayTitle(session)}
-                      provider={session.provider}
-                      status={session.ownership}
-                      pendingInputType={session.pendingInputType}
-                      hasUnread={session.hasUnread}
-                      isStarred={session.isStarred}
-                      isArchived={session.isArchived}
-                      mode="compact"
-                      isCurrent={session.id === currentSessionId}
-                      activity={session.activity}
-                      onNavigate={onNavigate}
-                      showProjectName
-                      projectName={session.projectName}
-                      basePath={basePath}
-                      messageCount={session.messageCount}
-                      hasDraft={drafts.has(session.id)}
-                    />
-                  ))}
-              </ul>
-              {recentDaySessions.length > recentSessionsLimit && (
-                <button
-                  type="button"
-                  className="sidebar-show-more"
-                  onClick={() =>
-                    setRecentSessionsLimit(
-                      (prev) => prev + RECENT_SESSIONS_INCREMENT,
-                    )
-                  }
-                >
-                  {t("actionShowMore", {
-                    count: Math.min(
-                      RECENT_SESSIONS_INCREMENT,
-                      recentDaySessions.length - recentSessionsLimit,
-                    ),
-                  })}
-                </button>
-              )}
-            </div>
+          {showSessionLists && filteredStarredSessions.length === 0 && (
+            <p className="p-4 text-center text-xs text-[var(--text-dimmed)]">
+              {sessionsLoading
+                ? t("sidebarLoadingSessions")
+                : t("sidebarNoSessions")}
+            </p>
           )}
-
-          {olderSessions.length > 0 && (
-            <div className="sidebar-section">
-              <h3 className="sidebar-section-title">
-                {t("sidebarSectionOlder")}
-              </h3>
-              <ul className="sidebar-session-list">
-                {olderSessions.slice(0, olderSessionsLimit).map((session) => (
-                  <SessionListItem
-                    key={session.id}
-                    sessionId={session.id}
-                    projectId={session.projectId}
-                    title={getSessionDisplayTitle(session)}
-                    fullTitle={getSessionDisplayTitle(session)}
-                    provider={session.provider}
-                    status={session.ownership}
-                    pendingInputType={session.pendingInputType}
-                    hasUnread={session.hasUnread}
-                    isStarred={session.isStarred}
-                    isArchived={session.isArchived}
-                    mode="compact"
-                    isCurrent={session.id === currentSessionId}
-                    activity={session.activity}
-                    onNavigate={onNavigate}
-                    showProjectName
-                    projectName={session.projectName}
-                    basePath={basePath}
-                    messageCount={session.messageCount}
-                    hasDraft={drafts.has(session.id)}
-                  />
-                ))}
-              </ul>
-              {olderSessions.length > olderSessionsLimit && (
-                <button
-                  type="button"
-                  className="sidebar-show-more"
-                  onClick={() =>
-                    setOlderSessionsLimit(
-                      (prev) => prev + RECENT_SESSIONS_INCREMENT,
-                    )
-                  }
-                >
-                  {t("actionShowMore", {
-                    count: Math.min(
-                      RECENT_SESSIONS_INCREMENT,
-                      olderSessions.length - olderSessionsLimit,
-                    ),
-                  })}
-                </button>
-              )}
-            </div>
-          )}
-
-          {filteredStarredSessions.length === 0 &&
-            recentDaySessions.length === 0 &&
-            olderSessions.length === 0 && (
-              <p className="sidebar-empty">
-                {sessionsLoading
-                  ? t("sidebarLoadingSessions")
-                  : t("sidebarNoSessions")}
-              </p>
-            )}
         </div>
 
-        {/* Resize handle - desktop only, when expanded */}
+        {!isCollapsed && (
+          <div className="shrink-0 border-t border-[var(--border-subtle)] px-3 pb-4 pt-3">
+            <div className="flex flex-col gap-1.5">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                {remoteConnection?.currentRelayUsername
+                  ? t("sidebarConnectedTo")
+                  : t("sidebarHost")}
+              </div>
+              <div className="truncate text-[11px] text-[var(--text-secondary)]">
+                {remoteConnection?.currentRelayUsername ?? window.location.host}
+              </div>
+              {remoteConnection && (
+                <button
+                  type="button"
+                  className="mt-1 text-left text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+                  onClick={handleSwitchHost}
+                >
+                  {t("sidebarSwitchHost")}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {isDesktop && !isCollapsed && (
           <div
-            className={`sidebar-resize-handle ${isResizing ? "active" : ""}`}
+            className={`absolute -right-[3px] top-0 bottom-0 z-10 w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-[var(--accent-rust)] hover:opacity-60 ${
+              isResizing ? "bg-[var(--accent-rust)] opacity-80" : ""
+            }`}
             onMouseDown={handleResizeMouseDown}
             role="separator"
             aria-orientation="vertical"

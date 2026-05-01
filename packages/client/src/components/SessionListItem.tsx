@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { AgentActivity } from "../hooks/useFileActivity";
+import { useI18n } from "../i18n";
 import type {
   ContextUsage,
   PendingInputType,
@@ -14,12 +15,9 @@ import { SessionStatusBadge } from "./StatusBadge";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 
 interface SessionListItemProps {
-  // Core (required)
   sessionId: string;
   projectId: string;
   title: string | null;
-
-  // Optional display data
   fullTitle?: string | null;
   projectName?: string;
   updatedAt?: string;
@@ -29,63 +27,33 @@ interface SessionListItemProps {
   contextUsage?: ContextUsage;
   status?: SessionStatus;
   provider?: ProviderName;
-  /** SSH host for remote execution (undefined = local) */
   executor?: string;
-
-  // Feature toggles
-  mode: "card" | "compact";
+  mode: "card" | "compact" | "grid";
   showProjectName?: boolean;
   showTimestamp?: boolean;
   showContextUsage?: boolean;
   showStatusBadge?: boolean;
-
-  // Custom badge (for Inbox)
   customBadge?: { label: string; className: string } | null;
-
-  // Actions (menu hidden when all undefined)
   isStarred?: boolean;
   isArchived?: boolean;
   onToggleStar?: () => void;
   onToggleArchive?: () => void;
   onToggleRead?: () => void;
   onRename?: () => void;
-
-  // Selection (for All Sessions page)
   isCurrent?: boolean;
   isSelected?: boolean;
   isSelectionMode?: boolean;
   onSelect?: (sessionId: string, selected: boolean) => void;
   onNavigate?: () => void;
-
-  // For sidebar compact mode
   hasDraft?: boolean;
-
-  /** Base path prefix for relay mode (e.g., "/remote/my-server") */
   basePath?: string;
-
-  /** Number of messages in session (0 indicates brand new session) */
   messageCount?: number;
 }
 
-/**
- * Shared session list item component used by Sidebar (compact), SessionsPage (card),
- * RecentsPage, and InboxContent.
- *
- * Features:
- * - Star indicator, title, draft badge
- * - SessionMenu (star, archive, rename actions) - hidden when no action handlers
- * - Inline rename editing with optimistic updates
- * - Card mode: context usage indicator, full status badge, time display
- * - Compact mode: abbreviated badges (Appr/Q/Running)
- * - Optional checkbox for selection mode
- * - Custom badge support (for Inbox)
- */
 export function SessionListItem({
-  // Core
   sessionId,
   projectId,
   title,
-  // Optional display data
   fullTitle,
   projectName,
   updatedAt,
@@ -96,55 +64,42 @@ export function SessionListItem({
   status,
   provider,
   executor,
-  // Feature toggles
   mode,
   showProjectName = false,
   showTimestamp = true,
   showContextUsage = true,
   showStatusBadge = true,
-  // Custom badge
   customBadge,
-  // Actions
   isStarred: isStarredProp,
   isArchived: isArchivedProp,
   onToggleStar,
   onToggleArchive,
   onToggleRead,
   onRename,
-  // Selection
   isCurrent = false,
   isSelected = false,
   isSelectionMode = false,
   onSelect,
   onNavigate,
-  // Sidebar
   hasDraft = false,
-  // Relay mode
   basePath = "",
-  // New session detection
   messageCount,
 }: SessionListItemProps) {
   const navigate = useNavigate();
-
-  // Local state for optimistic updates (only used when action handlers are provided)
-  const [localIsStarred, setLocalIsStarred] = useState<boolean | undefined>(
-    undefined,
-  );
-  const [localIsArchived, setLocalIsArchived] = useState<boolean | undefined>(
-    undefined,
-  );
+  const { t } = useI18n();
+  const [localIsStarred, setLocalIsStarred] = useState<boolean | undefined>();
+  const [localIsArchived, setLocalIsArchived] = useState<boolean | undefined>();
   const [isEditing, setIsEditing] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [localTitle, setLocalTitle] = useState<string | undefined>(undefined);
+  const [localTitle, setLocalTitle] = useState<string | undefined>();
+  const [localHasUnread, setLocalHasUnread] = useState<boolean | undefined>();
   const renameInputRef = useRef<HTMLInputElement>(null);
   const isSavingRef = useRef(false);
 
-  // Computed values with optimistic fallback
   const isStarred = localIsStarred ?? isStarredProp;
   const isArchived = localIsArchived ?? isArchivedProp;
-  // Detect brand new sessions that haven't received a title yet
-  // Use messageCount === 0, or if messageCount is unknown but session is actively running
+  const hasUnread = localHasUnread ?? hasUnreadProp;
   const isNewSession =
     !localTitle &&
     !title &&
@@ -152,52 +107,43 @@ export function SessionListItem({
   const displayTitle =
     localTitle ?? title ?? (isNewSession ? "New session" : "Untitled session");
 
-  // Focus input when entering edit mode
   useEffect(() => {
-    if (isEditing) {
-      setTimeout(() => {
-        renameInputRef.current?.focus();
-        renameInputRef.current?.select();
-      }, 0);
-    }
+    if (!isEditing) return;
+    setTimeout(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }, 0);
   }, [isEditing]);
 
-  // Local state for optimistic unread toggle
-  const [localHasUnread, setLocalHasUnread] = useState<boolean | undefined>(
-    undefined,
-  );
-  const hasUnread = localHasUnread ?? hasUnreadProp;
-
-  // Handlers for menu actions
   const handleToggleStar = async () => {
-    const newStarred = !isStarred;
-    setLocalIsStarred(newStarred);
+    const next = !isStarred;
+    setLocalIsStarred(next);
     try {
-      await api.updateSessionMetadata(sessionId, { starred: newStarred });
+      await api.updateSessionMetadata(sessionId, { starred: next });
       onToggleStar?.();
     } catch (err) {
       console.error("Failed to update star status:", err);
-      setLocalIsStarred(undefined); // Revert on error
+      setLocalIsStarred(undefined);
     }
   };
 
   const handleToggleArchive = async () => {
-    const newArchived = !isArchived;
-    setLocalIsArchived(newArchived);
+    const next = !isArchived;
+    setLocalIsArchived(next);
     try {
-      await api.updateSessionMetadata(sessionId, { archived: newArchived });
+      await api.updateSessionMetadata(sessionId, { archived: next });
       onToggleArchive?.();
     } catch (err) {
       console.error("Failed to update archive status:", err);
-      setLocalIsArchived(undefined); // Revert on error
+      setLocalIsArchived(undefined);
     }
   };
 
   const handleToggleRead = async () => {
-    const newHasUnread = !hasUnread;
-    setLocalHasUnread(newHasUnread);
+    const next = !hasUnread;
+    setLocalHasUnread(next);
     try {
-      if (newHasUnread) {
+      if (next) {
         await api.markSessionUnread(sessionId);
       } else {
         await api.markSessionSeen(sessionId);
@@ -205,13 +151,8 @@ export function SessionListItem({
       onToggleRead?.();
     } catch (err) {
       console.error("Failed to update read status:", err);
-      setLocalHasUnread(undefined); // Revert on error
+      setLocalHasUnread(undefined);
     }
-  };
-
-  const handleRename = () => {
-    setRenameValue(displayTitle);
-    setIsEditing(true);
   };
 
   const handleCancelEditing = () => {
@@ -267,30 +208,6 @@ export function SessionListItem({
     onSelect?.(sessionId, e.target.checked);
   };
 
-  // Activity indicator for compact mode
-  const getCompactActivityIndicator = () => {
-    // External sessions always show external badge
-    if (status?.owner === "external") {
-      return <span className="session-badge session-badge-external">Ext</span>;
-    }
-
-    // Priority 1: Needs input
-    if (pendingInputType) {
-      const label = pendingInputType === "tool-approval" ? "Appr" : "Q";
-      return (
-        <span className="session-badge session-badge-needs-input">{label}</span>
-      );
-    }
-
-    // Priority 2: In-turn (thinking)
-    if (activity === "in-turn") {
-      return <ThinkingIndicator />;
-    }
-
-    return null;
-  };
-
-  // Format relative time for card mode
   const formatRelativeTime = (timestamp: string): string => {
     const now = Date.now();
     const then = new Date(timestamp).getTime();
@@ -306,25 +223,37 @@ export function SessionListItem({
     return new Date(timestamp).toLocaleDateString();
   };
 
-  // Build CSS classes
-  const liClasses = [
-    "session-list-item",
-    mode === "card" ? "session-list-item--card" : "session-list-item--compact",
-    isCurrent && "current",
-    hasUnread && "unread",
-    isSelected && "selected",
-    isArchived && "archived",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const getCompactActivityIndicator = () => {
+    if (status?.owner === "external") {
+      return (
+        <span className="shrink-0 rounded-full bg-[var(--status-badge-external-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--status-badge-external-text)]">
+          Ext
+        </span>
+      );
+    }
 
-  // Star icon SVG
+    if (pendingInputType) {
+      const label = pendingInputType === "tool-approval" ? "Appr" : "Q";
+      return (
+        <span className="shrink-0 rounded-full bg-[var(--status-badge-input-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--status-badge-input-text)]">
+          {label}
+        </span>
+      );
+    }
+
+    if (activity === "in-turn") {
+      return <ThinkingIndicator />;
+    }
+
+    return null;
+  };
+
   const StarIcon = ({
     filled,
     size = 10,
   }: { filled: boolean; size?: number }) => (
     <svg
-      className="session-star-icon"
+      className="shrink-0 text-[var(--warning-color)]"
       width={size}
       height={size}
       viewBox="0 0 24 24"
@@ -338,12 +267,19 @@ export function SessionListItem({
   );
 
   return (
-    <li className={liClasses}>
-      {/* Checkbox for multi-select (only shown when onSelect is provided) */}
+    <li
+      className={`group relative ${
+        mode === "grid"
+          ? "block h-full"
+          : mode === "card"
+            ? "block"
+            : "flex items-center gap-2"
+      } ${isSelectionMode ? "select-none" : ""}`}
+    >
       {onSelect && (
         <input
           type="checkbox"
-          className="session-list-item__checkbox"
+          className={`h-[18px] w-[18px] cursor-pointer accent-[var(--accent-rust)] ${mode === "grid" ? "absolute top-3 left-3 z-10" : "shrink-0"}`}
           checked={isSelected}
           onChange={handleCheckboxChange}
           onClick={(e) => e.stopPropagation()}
@@ -355,7 +291,7 @@ export function SessionListItem({
         <input
           ref={renameInputRef}
           type="text"
-          className="session-rename-input"
+          className="flex-1 rounded-md border border-[var(--border-input)] bg-[var(--bg-surface)] px-3 py-1.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
           value={renameValue}
           onChange={(e) => setRenameValue(e.target.value)}
           onBlur={handleRenameBlur}
@@ -372,66 +308,121 @@ export function SessionListItem({
             onNavigate?.();
           }}
           title={fullTitle || displayTitle}
-          className="session-list-item__link"
+          className={
+            mode === "grid"
+              ? `flex flex-col h-full rounded-lg border p-5 no-underline transition-colors ${
+                  isCurrent
+                    ? "border-[var(--text-primary)]/25 bg-[var(--bg-surface)] shadow-sm"
+                    : "border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[var(--border-subtle)]"
+                }`
+              : mode === "card"
+                ? `flex flex-col rounded-lg border px-6 py-6 no-underline transition-colors ${
+                    isCurrent
+                      ? "border-[var(--text-primary)]/25 bg-[var(--bg-surface)] shadow-sm"
+                      : "border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[var(--border-subtle)]"
+                  }`
+                : `flex flex-1 items-center justify-between overflow-hidden rounded-xl px-3 py-2.5 no-underline transition-colors ${
+                    isCurrent
+                      ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm ring-1 ring-black/5"
+                      : hasUnread
+                        ? "bg-black/[0.03] text-[var(--text-primary)] hover:bg-black/[0.05]"
+                        : "text-[var(--text-primary)] hover:bg-black/[0.04]"
+                  }`
+          }
         >
           {mode === "card" ? (
-            // Card mode: title on one line, meta on second line
             <>
-              <strong className="session-list-item__title">
-                {isStarred && <StarIcon filled size={12} />}
-                {isNewSession && <ThinkingIndicator />}
-                {displayTitle}
-                {hasDraft && <span className="session-draft-badge">Draft</span>}
-                {isArchived && (
-                  <span className="session-archived-badge">Archived</span>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  {hasDraft && (
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-rust)] bg-[var(--accent-rust)]/10 px-2 py-0.5 rounded">
+                      Draft
+                    </span>
+                  )}
+                  {isArchived && (
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)] bg-[var(--bg-tertiary)] px-2 py-0.5 rounded">
+                      Archived
+                    </span>
+                  )}
+                  {!hasDraft && !isArchived && getCompactActivityIndicator()}
+                </div>
+                {showTimestamp && updatedAt && (
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-dimmed)]">
+                    {formatRelativeTime(updatedAt)}
+                  </span>
                 )}
-              </strong>
-              <span className="session-list-item__meta">
+              </div>
+
+              <h2 className="text-2xl md:text-[1.75rem] [font-family:var(--font-display)] text-[var(--text-primary)] leading-tight">
+                {isNewSession && <ThinkingIndicator className="inline mr-2" />}
+                {displayTitle}
+              </h2>
+
+              <div className="mt-auto pt-6 flex items-center justify-between">
+                <span className="text-sm font-medium text-[var(--accent-rust)]">
+                  {t("globalSessionsResume")} →
+                </span>
                 {showProjectName && projectName && (
-                  <span className="session-list-item__project">
+                  <span className="text-[11px] text-[var(--text-muted)]">
                     {projectName}
                   </span>
                 )}
-                {showTimestamp && updatedAt && formatRelativeTime(updatedAt)}
-                {executor && (
-                  <span
-                    className="session-badge session-badge-executor"
-                    title={`Running on ${executor}`}
-                  >
-                    {executor}
+              </div>
+            </>
+          ) : mode === "grid" ? (
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  {getCompactActivityIndicator()}
+                </div>
+                {showTimestamp && updatedAt && (
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-dimmed)]">
+                    {formatRelativeTime(updatedAt)}
                   </span>
                 )}
-                {showContextUsage && (
-                  <ContextUsageIndicator usage={contextUsage} size={14} />
-                )}
-                {customBadge && (
-                  <span className={`inbox-item-badge ${customBadge.className}`}>
-                    {customBadge.label}
-                  </span>
-                )}
-                {showStatusBadge && status && (
-                  <SessionStatusBadge
-                    status={status}
-                    pendingInputType={pendingInputType}
-                    hasUnread={hasUnread}
-                    activity={activity}
-                  />
-                )}
-              </span>
+              </div>
+
+              <h3 className="text-lg [font-family:var(--font-display)] text-[var(--text-primary)] leading-snug">
+                {isStarred && <StarIcon filled size={10} />}
+                {isNewSession && <ThinkingIndicator className="inline mr-1" />}
+                {displayTitle}
+              </h3>
+
+              {(hasDraft || isArchived) && (
+                <div className="mt-2 flex items-center gap-2">
+                  {hasDraft && (
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent-rust)] bg-[var(--accent-rust)]/10 px-2 py-0.5 rounded">
+                      Draft
+                    </span>
+                  )}
+                  {isArchived && (
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] bg-[var(--bg-tertiary)] px-2 py-0.5 rounded">
+                      Archived
+                    </span>
+                  )}
+                </div>
+              )}
             </>
           ) : (
-            // Compact mode: single line with badges
             <>
-              <span className="session-list-item__title-row">
+              <span className="flex min-w-0 flex-1 items-center gap-2">
                 {isStarred && <StarIcon filled />}
-                <span className="session-list-item__title-text">
-                  {isNewSession && <ThinkingIndicator />}
+                <span
+                  className={`flex-1 overflow-hidden text-ellipsis whitespace-nowrap [font-size:var(--font-size-sm)] ${
+                    hasUnread ? "font-semibold text-[var(--text-primary)]" : ""
+                  }`}
+                >
+                  {isNewSession && <ThinkingIndicator className="mr-1" />}
                   {displayTitle}
                 </span>
-                {hasDraft && <span className="session-draft-badge">Draft</span>}
+                {hasDraft && (
+                  <span className="shrink-0 rounded bg-[var(--warning-color)]/20 px-1.5 py-0.5 text-[10px] font-medium text-[var(--warning-color)]">
+                    Draft
+                  </span>
+                )}
               </span>
               {showProjectName && projectName && (
-                <span className="session-list-item__project-compact">
+                <span className="max-w-[100px] shrink-0 overflow-hidden text-ellipsis whitespace-nowrap text-[10px] text-[var(--text-muted)]">
                   {projectName}
                 </span>
               )}
@@ -441,7 +432,6 @@ export function SessionListItem({
         </Link>
       )}
 
-      {/* Only show menu when provider is available (required for clone) */}
       {provider && (
         <SessionMenu
           sessionId={sessionId}
@@ -464,7 +454,17 @@ export function SessionListItem({
           }}
           useEllipsisIcon
           useFixedPositioning
-          className="session-list-item__menu"
+          className={`absolute z-[2] flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 [&.is-open]:opacity-100 ${
+            mode === "compact"
+              ? "right-0 top-1/2 -translate-y-1/2 pl-4 pr-2"
+              : "right-2 top-3"
+          }`}
+          style={{
+            background:
+              mode === "compact"
+                ? "linear-gradient(to right, transparent, var(--bg-surface) 60%)"
+                : undefined,
+          }}
         />
       )}
     </li>

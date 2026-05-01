@@ -40,9 +40,14 @@ export function LifecycleWebhooksSettings() {
 
   if (isLoading) {
     return (
-      <section className="settings-section">
-        <h2>{t("lifecycleWebhooksTitle")}</h2>
-        <p className="settings-section-description">
+      <section className="flex flex-col gap-8 mb-12">
+        <h2
+          style={{ fontFamily: "var(--font-display)" }}
+          className="text-[2rem] text-[var(--text-primary)] mb-2"
+        >
+          {t("lifecycleWebhooksTitle")}
+        </h2>
+        <p className="mb-[var(--space-3)] text-sm text-[var(--text-muted)]">
           {t("lifecycleWebhooksLoading")}
         </p>
       </section>
@@ -55,15 +60,20 @@ export function LifecycleWebhooksSettings() {
   const dryRun = settings?.lifecycleWebhookDryRun ?? true;
 
   return (
-    <section className="settings-section">
-      <h2>{t("lifecycleWebhooksTitle")}</h2>
-      <p className="settings-section-description">
+    <section className="flex flex-col gap-8 mb-12">
+      <h2
+        style={{ fontFamily: "var(--font-display)" }}
+        className="text-[2rem] text-[var(--text-primary)] mb-2"
+      >
+        {t("lifecycleWebhooksTitle")}
+      </h2>
+      <p className="mb-[var(--space-3)] text-sm text-[var(--text-muted)]">
         {t("lifecycleWebhooksDescription")}
       </p>
 
-      <div className="settings-group">
-        <label className="settings-item">
-          <div className="settings-item-info">
+      <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
+        <label className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-1">
             <strong>{t("lifecycleWebhooksEnableTitle")}</strong>
             <p>{t("lifecycleWebhooksEnableDescription")}</p>
           </div>
@@ -77,16 +87,16 @@ export function LifecycleWebhooksSettings() {
         </label>
 
         <div
-          className="settings-item"
+          className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]"
           style={{ flexDirection: "column", alignItems: "stretch" }}
         >
-          <div className="settings-item-info">
+          <div className="flex flex-col gap-1">
             <strong>{t("lifecycleWebhooksUrlTitle")}</strong>
             <p>{t("lifecycleWebhooksUrlDescription")}</p>
           </div>
           <input
             type="url"
-            className="settings-input"
+            className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
             value={url}
             onChange={(e) => {
               const value = e.target.value.slice(0, MAX_URL_LENGTH);
@@ -99,16 +109,16 @@ export function LifecycleWebhooksSettings() {
         </div>
 
         <div
-          className="settings-item"
+          className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]"
           style={{ flexDirection: "column", alignItems: "stretch" }}
         >
-          <div className="settings-item-info">
+          <div className="flex flex-col gap-1">
             <strong>{t("lifecycleWebhooksTokenTitle")}</strong>
             <p>{t("lifecycleWebhooksTokenDescription")}</p>
           </div>
           <input
             type="password"
-            className="settings-input"
+            className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
             value={token}
             onChange={(e) => {
               const value = e.target.value.slice(0, MAX_TOKEN_LENGTH);
@@ -120,8 +130,8 @@ export function LifecycleWebhooksSettings() {
           />
         </div>
 
-        <label className="settings-item">
-          <div className="settings-item-info">
+        <label className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-1">
             <strong>{t("lifecycleWebhooksDryRunTitle")}</strong>
             <p>{t("lifecycleWebhooksDryRunDescription")}</p>
           </div>
@@ -135,12 +145,12 @@ export function LifecycleWebhooksSettings() {
         </label>
 
         <div
-          className="settings-item"
+          className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]"
           style={{ justifyContent: "flex-end", gap: "var(--space-2)" }}
         >
           <button
             type="button"
-            className="settings-button"
+            className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
             disabled={!hasChanges || isSaving}
             onClick={handleSave}
           >
@@ -149,7 +159,9 @@ export function LifecycleWebhooksSettings() {
         </div>
 
         {(saveError || error) && (
-          <p className="settings-warning">{saveError || error}</p>
+          <p className="text-xs text-[var(--warning-color)] mt-1">
+            {saveError || error}
+          </p>
         )}
       </div>
     </section>

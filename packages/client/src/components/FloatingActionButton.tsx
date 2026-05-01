@@ -178,7 +178,7 @@ export function FloatingActionButton() {
   return (
     <div
       ref={containerRef}
-      className={`fab-container ${isExpanded ? "fab-expanded" : "fab-collapsed"}`}
+      className={`fixed z-50 flex flex-col items-end transition-all duration-200 ${isExpanded ? "gap-2" : ""}`}
       style={{
         right: `${right}px`,
         bottom: `${bottom}px`,
@@ -188,7 +188,7 @@ export function FloatingActionButton() {
     >
       {/* Input panel appears above the button */}
       {isExpanded && (
-        <div className="fab-input-panel">
+        <div className="mb-3 rounded-xl bg-[var(--bg-surface)] shadow-lg border border-[var(--border-subtle)] p-3 w-full">
           <textarea
             ref={textareaRef}
             value={displayText}
@@ -198,18 +198,18 @@ export function FloatingActionButton() {
             }}
             onKeyDown={handleKeyDown}
             placeholder={t("fabPlaceholder")}
-            className="fab-textarea"
+            className="w-full resize-none rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3 text-sm outline-none focus:border-[var(--focus-border)]"
             rows={3}
           />
-          <div className="fab-input-toolbar">
+          <div className="flex items-center justify-between mt-2">
             <VoiceInputButton
               onTranscript={handleVoiceTranscript}
               onInterimTranscript={handleInterimTranscript}
-              className="toolbar-button"
+              className="flex items-center justify-center rounded-md p-2 text-[var(--text-muted)] hover:bg-[var(--bg-hover)]"
             />
             <button
               type="button"
-              className="fab-submit"
+              className="flex items-center justify-center rounded-full bg-[var(--text-primary)] text-white w-8 h-8"
               onClick={handleSubmit}
               disabled={!message.trim()}
               aria-label={t("fabGoToNewSession")}
@@ -222,25 +222,13 @@ export function FloatingActionButton() {
       {/* FAB button always at the bottom */}
       <button
         type="button"
-        className={`fab-button ${isExpanded ? "fab-button-active" : ""}`}
+        className={`flex items-center justify-center rounded-full bg-[var(--text-primary)] text-white w-12 h-12 shadow-lg transition-transform duration-200 ${isExpanded ? "rotate-45" : ""}`}
         onClick={isExpanded ? () => setIsExpanded(false) : handleButtonClick}
         aria-label={isExpanded ? t("fabClose") : t("fabNewSession")}
       >
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-          className={isExpanded ? "fab-icon-rotated" : ""}
-        >
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
+        <span className="text-xl leading-none" aria-hidden="true">
+          +
+        </span>
       </button>
     </div>
   );

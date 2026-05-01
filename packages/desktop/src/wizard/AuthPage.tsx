@@ -147,46 +147,26 @@ export function AuthPage({ agents, onNext }: Props) {
   }
 
   return (
-    <div style={{ width: "100%", maxWidth: 700 }}>
-      <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>
-        Sign in to your agents
-      </h2>
-      <p
-        style={{
-          color: "var(--text-secondary)",
-          fontSize: 14,
-          marginBottom: 16,
-        }}
-      >
+    <div className="w-full max-w-[700px]">
+      <h2 className="mb-2 text-[22px] font-semibold">Sign in to your agents</h2>
+      <p className="mb-4 text-sm text-[var(--text-secondary)]">
         {statusText}
       </p>
 
       {/* Auth status list */}
       {relevantAgents.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-            marginBottom: 16,
-          }}
-        >
+        <div className="mb-4 flex flex-col gap-2">
           {relevantAgents.map((agent) => (
             <div
               key={agent}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                fontSize: 14,
-              }}
+              className="flex items-center gap-2 text-sm"
             >
               <span
-                style={{
-                  color: authStatus[agent]
-                    ? "var(--success)"
-                    : "var(--text-secondary)",
-                }}
+                className={
+                  authStatus[agent]
+                    ? "text-[var(--success)]"
+                    : "text-[var(--text-secondary)]"
+                }
               >
                 {authStatus[agent] ? "●" : "○"}
               </span>
@@ -203,20 +183,13 @@ export function AuthPage({ agents, onNext }: Props) {
         <>
           <div
             ref={termRef}
-            style={{
-              height: 400,
-              borderRadius: 8,
-              overflow: "hidden",
-              border: "1px solid var(--border)",
-              marginBottom: 16,
-            }}
+            className="mb-4 h-[400px] overflow-hidden rounded-lg border border-[var(--border)]"
           />
 
           {!started && (
             <button
-              className="btn-primary"
+              className="btn-primary mb-3 w-full"
               onClick={startAuth}
-              style={{ width: "100%", marginBottom: 12 }}
             >
               Sign in to {pendingAgent === "claude" ? "Claude" : "Gemini"}
             </button>
@@ -224,21 +197,19 @@ export function AuthPage({ agents, onNext }: Props) {
         </>
       )}
 
-      <div style={{ display: "flex", gap: 12 }}>
+      <div className="flex gap-3">
         {!canContinue && (
           <button
-            className="btn-secondary"
+            className="btn-secondary flex-1"
             onClick={onNext}
-            style={{ flex: 1 }}
           >
             Skip
           </button>
         )}
         <button
-          className="btn-primary"
+          className="btn-primary flex-1"
           onClick={onNext}
           disabled={!canContinue && started}
-          style={{ flex: 1 }}
         >
           {canContinue ? "Continue" : "Waiting..."}
         </button>

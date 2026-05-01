@@ -51,12 +51,15 @@ export function ContextUsageIndicator({
       });
 
   return (
-    <span className="context-usage-indicator" title={tooltip}>
+    <span
+      className="inline-flex items-center gap-1 ml-2 cursor-default"
+      title={tooltip}
+    >
       <svg
         width={size}
         height={size}
         viewBox={`0 0 ${size} ${size}`}
-        className="context-usage-pie"
+        className="shrink-0"
         aria-hidden="true"
       >
         {/* Background circle - darker */}
@@ -82,7 +85,9 @@ export function ContextUsageIndicator({
         />
       </svg>
       {showLabel && (
-        <span className="context-usage-label">{clampedPercentage}%</span>
+        <span className="[font-size:var(--font-size-xs)] text-[var(--text-muted)] tabular-nums">
+          {clampedPercentage}%
+        </span>
       )}
     </span>
   );

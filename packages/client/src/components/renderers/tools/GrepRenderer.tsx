@@ -20,10 +20,20 @@ function getFileName(filePath: string): string {
  */
 function GrepToolUse({ input }: { input: GrepInput }) {
   return (
-    <div className="grep-tool-use">
-      <span className="grep-pattern">{input.pattern}</span>
-      {input.glob && <span className="grep-glob">({input.glob})</span>}
-      {input.path && <span className="grep-path">in {input.path}</span>}
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="[font-family:var(--font-mono)] text-lg text-[var(--link-color)]">
+        {input.pattern}
+      </span>
+      {input.glob && (
+        <span className="text-base text-[var(--text-muted)]">
+          ({input.glob})
+        </span>
+      )}
+      {input.path && (
+        <span className="text-base text-[var(--text-muted)]">
+          in {input.path}
+        </span>
+      )}
     </div>
   );
 }
@@ -48,15 +58,20 @@ function FileListView({
 
   return (
     <>
-      <div className="file-list">
+      <div className="flex flex-col gap-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-code)] p-2">
         {displayFiles.map((file) => (
-          <div key={file} className="file-list-item">
-            <span className="file-path">{getFileName(file)}</span>
-            <span className="file-dir">{file}</span>
+          <div
+            key={file}
+            className="flex flex-col gap-0.5 rounded p-1 px-2 hover:bg-white/5"
+          >
+            <span className="font-medium">{getFileName(file)}</span>
+            <span className="[font-family:var(--font-mono)] text-sm text-[var(--text-muted)]">
+              {file}
+            </span>
           </div>
         ))}
         {needsCollapse && !isExpanded && (
-          <div className="file-list-more">
+          <div className="p-1 px-2 text-base italic text-[var(--text-muted)]">
             ... and {filenames.length - MAX_FILES_COLLAPSED} more
           </div>
         )}
@@ -64,7 +79,7 @@ function FileListView({
       {needsCollapse && (
         <button
           type="button"
-          className="expand-button"
+          className="cursor-pointer rounded border border-[var(--border-color)] bg-transparent px-4 py-2 text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary,var(--text-primary))] active:bg-[var(--bg-tertiary)]"
           onClick={() => setIsExpanded(!isExpanded)}
         >
           {isExpanded ? "Show less" : `Show all ${filenames.length} files`}
@@ -93,13 +108,13 @@ function ContentView({
 
   return (
     <>
-      <pre className="grep-content code-block">
+      <pre className="m-0 overflow-x-auto rounded-md border border-[var(--border-color)] bg-[var(--bg-code)] p-3">
         <code>{displayLines.join("\n")}</code>
       </pre>
       {needsCollapse && (
         <button
           type="button"
-          className="expand-button"
+          className="cursor-pointer rounded border border-[var(--border-color)] bg-transparent px-4 py-2 text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary,var(--text-primary))] active:bg-[var(--bg-tertiary)]"
           onClick={() => setIsExpanded(!isExpanded)}
         >
           {isExpanded ? "Show less" : `Show all ${lines.length} lines`}
@@ -144,7 +159,7 @@ function GrepToolResult({
   if (isError) {
     const errorResult = result as unknown as { content?: unknown } | undefined;
     return (
-      <div className="grep-error">
+      <div className="rounded bg-[var(--bg-error,rgba(207,34,46,0.1))] p-2 text-[var(--error-color)]">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="Grep" errors={validationErrors} />
         )}
@@ -156,7 +171,9 @@ function GrepToolResult({
   }
 
   if (!result) {
-    return <div className="grep-empty">No results</div>;
+    return (
+      <div className="text-lg italic text-[var(--text-muted)]">No results</div>
+    );
   }
 
   const { mode, filenames, numFiles, content, appliedLimit } = result;
@@ -164,11 +181,11 @@ function GrepToolResult({
   // Count mode - just show summary
   if (mode === "count") {
     return (
-      <div className="grep-result">
+      <div className="flex flex-col gap-2">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="Grep" errors={validationErrors} />
         )}
-        <div className="grep-count-summary">
+        <div className="text-lg text-[var(--text-muted)]">
           {numFiles} {numFiles === 1 ? "file" : "files"} matched
         </div>
       </div>
@@ -183,13 +200,15 @@ function GrepToolResult({
     const matchCount = lines.filter((line) => /(^|:)\d+:/.test(line)).length;
 
     return (
-      <div className="grep-result">
-        <div className="grep-header">
-          <span className="grep-count">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <span className="text-base text-[var(--text-muted)]">
             {matchCount} {matchCount === 1 ? "match" : "matches"}
           </span>
           {appliedLimit && (
-            <span className="badge badge-info">limit: {appliedLimit}</span>
+            <span className="inline-block rounded bg-[var(--bg-secondary)] px-2 py-0.5 text-sm font-medium text-[var(--link-color)]">
+              limit: {appliedLimit}
+            </span>
           )}
           {showValidationWarning && validationErrors && (
             <SchemaWarning toolName="Grep" errors={validationErrors} />
@@ -207,7 +226,7 @@ function GrepToolResult({
   // files_with_matches mode (default) - show file list
   if (!filenames || filenames.length === 0) {
     return (
-      <div className="grep-empty">
+      <div className="text-lg italic text-[var(--text-muted)]">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="Grep" errors={validationErrors} />
         )}
@@ -217,9 +236,11 @@ function GrepToolResult({
   }
 
   return (
-    <div className="grep-result">
-      <div className="grep-header">
-        <span className="grep-count">{numFiles} files</span>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-3">
+        <span className="text-base text-[var(--text-muted)]">
+          {numFiles} files
+        </span>
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="Grep" errors={validationErrors} />
         )}

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import { promisify } from "node:util";
 import {
@@ -134,7 +134,170 @@ export function createGitStatusRoutes(deps: GitStatusDeps): Hono {
     }
   });
 
+  /**
+   * POST /:projectId/git/restore
+   * Restore files to their pre-modification state.
+   * Body: { paths: string[] }
+   */
+  routes.post("/:projectId/git/restore", async (c) => {
+    const projectId = c.req.param("projectId");
+
+    if (!isUrlProjectId(projectId)) {
+      return c.json({ error: "Invalid project ID format" }, 400);
+    }
+
+    const project = await deps.scanner.getProject(projectId);
+    if (!project) {
+      return c.json({ error: "Project not found" }, 404);
+    }
+
+    let body: { paths: string[] };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+
+    const { paths } = body;
+    if (!Array.isArray(paths) || paths.length === 0) {
+      return c.json(
+        { error: "Missing required field: paths (non-empty array)" },
+        400,
+      );
+    }
+
+    try {
+      const result = await restoreFiles(project.path, paths);
+      return c.json(result);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to restore files";
+      return c.json({ error: message }, 500);
+    }
+  });
+
   return routes;
+}
+
+/**
+ * Restore files to their pre-modification state based on git status.
+ */
+async function restoreFiles(
+  cwd: string,
+  paths: string[],
+): Promise<{
+  restored: string[];
+  failed: Array<{ path: string; error: string }>;
+}> {
+  const restored: string[] = [];
+  const failed: Array<{ path: string; error: string }> = [];
+
+  // Get current git status to determine how to restore each file
+  let statusResult: { stdout: string; stderr: string };
+  try {
+    statusResult = await runGit(cwd, ["status", "--porcelain=v2"]);
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Failed to get git status";
+    for (const path of paths) {
+      failed.push({ path, error: message });
+    }
+    return { restored, failed };
+  }
+
+  // Build a map of path -> { stagedStatus, unstagedStatus }
+  const statusMap = new Map<
+    string,
+    { stagedStatus: string | null; unstagedStatus: string | null }
+  >();
+
+  for (const line of statusResult.stdout.split("\n")) {
+    if (!line || line.startsWith("#")) continue;
+
+    if (line.startsWith("1 ")) {
+      const parts = line.split(" ");
+      const xy = parts[1];
+      const path = parts.slice(8).join(" ");
+      const stagedStatus = statusChar(xy, 0);
+      const unstagedStatus = statusChar(xy, 1);
+      statusMap.set(path, { stagedStatus, unstagedStatus });
+    } else if (line.startsWith("2 ")) {
+      const parts = line.split(" ");
+      const xy = parts[1];
+      const pathAndOrig = parts.slice(9).join(" ");
+      const tabIdx = pathAndOrig.indexOf("\t");
+      const path = tabIdx >= 0 ? pathAndOrig.slice(0, tabIdx) : pathAndOrig;
+      const stagedStatus = statusChar(xy, 0);
+      const unstagedStatus = statusChar(xy, 1);
+      statusMap.set(path, { stagedStatus, unstagedStatus });
+    } else if (line.startsWith("? ")) {
+      const path = line.slice(2);
+      statusMap.set(path, { stagedStatus: null, unstagedStatus: "?" });
+    }
+  }
+
+  for (const path of paths) {
+    try {
+      const status = statusMap.get(path);
+      if (!status) {
+        // File not in git status - might already be clean or not tracked
+        restored.push(path);
+        continue;
+      }
+
+      const { stagedStatus, unstagedStatus } = status;
+
+      // Determine effective status: prioritize unstaged, then staged
+      const effectiveStatus = unstagedStatus ?? stagedStatus;
+
+      if (effectiveStatus === "?" || effectiveStatus === null) {
+        // Untracked file - remove it
+        try {
+          await unlink(resolve(cwd, path));
+        } catch {
+          // File might already be gone
+        }
+        restored.push(path);
+        continue;
+      }
+
+      if (effectiveStatus === "A") {
+        // Added file - unstage and remove
+        await runGit(cwd, ["rm", "--cached", "--", path]).catch(() => {
+          // Might not be staged anymore
+        });
+        try {
+          await unlink(resolve(cwd, path));
+        } catch {
+          // File might already be gone
+        }
+        restored.push(path);
+        continue;
+      }
+
+      if (effectiveStatus === "D") {
+        // Deleted file - restore from HEAD
+        await runGit(cwd, ["checkout", "HEAD", "--", path]);
+        restored.push(path);
+        continue;
+      }
+
+      // Modified or other statuses - restore from index (for unstaged) or HEAD (for staged)
+      if (stagedStatus && !unstagedStatus) {
+        // Only staged changes - restore from HEAD
+        await runGit(cwd, ["checkout", "HEAD", "--", path]);
+      } else {
+        // Unstaged changes (or both) - restore from index
+        await runGit(cwd, ["checkout", "--", path]);
+      }
+      restored.push(path);
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      failed.push({ path, error });
+    }
+  }
+
+  return { restored, failed };
 }
 
 /**

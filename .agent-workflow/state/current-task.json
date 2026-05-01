@@ -1,74 +1,32 @@
 {
   "version": "1.0",
   "task": {
-    "id": "awf-002",
-    "title": "修复旧样式覆盖 Tailwind 样式并优化单屏布局",
-    "description": "1. 解决项目旧前端样式覆盖新建 tailwind 样式的问题，旧样式在启动 client pnpm dev 后依旧存在，需要确保新 Tailwind 样式正确显示。2. 调整整体样式保证所有内容能在单个屏幕内完整显示，消除横向滚动条。",
-    "type": "bugfix",
-    "status": "completed",
-    "priority": "high",
-    "createdAt": "2026-04-29T00:00:00Z",
-    "updatedAt": "2026-04-29T00:00:00Z",
+    "id": "",
+    "title": "",
+    "description": "",
+    "type": "feature",
+    "status": "idle",
+    "priority": "medium",
+    "createdAt": "",
+    "updatedAt": "",
     "assignee": "coder",
-    "branch": "feature/awf-002-fix-styles",
+    "branch": "",
     "baseBranch": "main"
   },
   "decomposition": {
-    "completed": true,
-    "steps": [
-      {
-        "id": 1,
-        "title": "诊断样式冲突根因",
-        "description": "检查 packages/client/src/styles/index.css、vite.config.ts、tailwind 配置，找出旧样式为何在 pnpm dev 后仍然生效（CSS 导入顺序、模块热更新缓存、vite 的 CSS 处理等）。",
-        "verify": "能明确说出旧样式残留的具体原因"
-      },
-      {
-        "id": 2,
-        "title": "清理残留旧样式文件引用",
-        "description": "删除或清理已废弃的样式文件引用。根据 git status，provider-themes.css 和 tool-rows.css 已被删除，确认它们的引用也已从代码中移除。",
-        "verify": "项目内不存在对已删除样式文件的引用"
-      },
-      {
-        "id": 3,
-        "title": "确保 Tailwind 样式优先级高于旧样式",
-        "description": "调整 CSS 导入顺序或使用 @layer、!important 等方式确保 Tailwind 工具类优先。如有全局样式冲突，在 index.css 中用 @layer 包裹或限制作用域。",
-        "verify": "Tailwind 工具类（如 bg-blue-500、text-white）在浏览器 DevTools 中显示为生效"
-      },
-      {
-        "id": 4,
-        "title": "修复横向滚动问题（单屏适配）",
-        "description": "检查所有页面和组件，找出导致横向溢出的元素（过宽的表格、固定宽度元素、flex 布局未换行等）。使用 max-width、overflow-hidden、flex-wrap 等手段确保内容不超出视口宽度。重点关注 SessionPage、InboxPage、ActivityPage 等页面。",
-        "verify": "在常见视口宽度（360px-1920px）下，页面无横向滚动条"
-      },
-      {
-        "id": 5,
-        "title": "运行 lint 和 typecheck 验证",
-        "description": "运行 pnpm lint 和 pnpm typecheck，修复所有错误。",
-        "verify": "lint 和 typecheck 全部通过"
-      }
-    ]
+    "completed": false,
+    "steps": []
   },
   "coding": {
-    "completed": true,
-    "commits": ["655cce4", "70a6ff7", "7593af6"],
+    "completed": false,
+    "commits": [],
     "prUrl": ""
   },
   "review": {
-    "round": 2,
+    "round": 0,
     "maxRounds": 3,
-    "status": "reviewing",
-    "lastResult": "parse-failure-issues-fixed",
-    "history": [
-      {
-        "round": 1,
-        "result": "parse-failure-issues-fixed",
-        "notes": "Codex output lacked VERDICT line (parse failure). Review flagged 3 issues in working tree components (PushNotificationToggle, RemoteAccessSetup, SessionMenu) — none in the scope of awf-002's index.css changes. All 3 issues were fixed in commit 70a6ff7."
-      },
-      {
-        "round": 2,
-        "result": "parse-failure-issues-fixed",
-        "notes": "Codex output lacked VERDICT line (parse failure). Review flagged 2 P3 issues in NewSessionForm.tsx (missing provider-option-dot and mode-option-dot classes). Both fixed in commit 7593af6."
-      }
-    ]
+    "status": "pending",
+    "lastResult": null,
+    "history": []
   }
 }

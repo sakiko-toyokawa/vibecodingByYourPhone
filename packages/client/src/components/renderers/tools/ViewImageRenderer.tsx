@@ -19,23 +19,24 @@ function ViewImageModalContent({ path, alt }: { path: string; alt: string }) {
   const { url, loading, error } = useFetchedImage(apiPath);
 
   if (loading) {
-    return <div className="viewimage-loading">Loading image...</div>;
+    return (
+      <div className="p-8 text-center text-[var(--text-muted)]">
+        Loading image...
+      </div>
+    );
   }
 
   if (error || !url) {
     return (
-      <div className="viewimage-error">{error ?? "Failed to load image"}</div>
+      <div className="p-8 text-center text-[var(--error-color)]">
+        {error ?? "Failed to load image"}
+      </div>
     );
   }
 
   return (
-    <div className="read-image-result">
-      <img
-        className="read-image"
-        src={url}
-        alt={alt}
-        style={{ maxWidth: "100%" }}
-      />
+    <div className="flex flex-col gap-2">
+      <img className="h-auto max-w-full rounded" src={url} alt={alt} />
     </div>
   );
 }
@@ -56,7 +57,9 @@ function ViewImageButton({
   return (
     <button type="button" className={className} onClick={onClick}>
       {getFileName(path)}
-      <span className="file-line-count-inline">(image)</span>
+      <span className="text-[0.85em] text-[var(--text-muted)] no-underline">
+        (image)
+      </span>
     </button>
   );
 }
@@ -102,8 +105,11 @@ export const viewImageRenderer: ToolRenderer<ViewImageInput, unknown> = {
   renderToolUse(input, _context) {
     const { path } = input as ViewImageInput;
     return (
-      <div className="read-image-result">
-        <ViewImageClickable path={path} buttonClass="file-link-button" />
+      <div className="flex flex-col gap-2">
+        <ViewImageClickable
+          path={path}
+          buttonClass="inline-flex cursor-pointer items-center gap-3 rounded-lg border border-[var(--border-color)] bg-transparent px-3 py-2 text-left [font-family:var(--font-mono)] [font-size:var(--font-size-base)] text-[var(--link-color)] transition-colors duration-150 hover:border-[var(--border-input)] hover:bg-[var(--bg-hover)]"
+        />
       </div>
     );
   },
@@ -111,8 +117,11 @@ export const viewImageRenderer: ToolRenderer<ViewImageInput, unknown> = {
   renderToolResult(_result, _isError, _context, input) {
     const { path } = input as ViewImageInput;
     return (
-      <div className="read-image-result">
-        <ViewImageClickable path={path} buttonClass="file-link-button" />
+      <div className="flex flex-col gap-2">
+        <ViewImageClickable
+          path={path}
+          buttonClass="inline-flex cursor-pointer items-center gap-3 rounded-lg border border-[var(--border-color)] bg-transparent px-3 py-2 text-left [font-family:var(--font-mono)] [font-size:var(--font-size-base)] text-[var(--link-color)] transition-colors duration-150 hover:border-[var(--border-input)] hover:bg-[var(--bg-hover)]"
+        />
       </div>
     );
   },
@@ -131,7 +140,7 @@ export const viewImageRenderer: ToolRenderer<ViewImageInput, unknown> = {
     return (
       <ViewImageClickable
         path={path}
-        buttonClass="file-link-inline"
+        buttonClass="inline-flex cursor-pointer items-center gap-2 bg-transparent p-0 [font-family:var(--font-mono)] text-inherit text-[var(--link-color)] underline decoration-transparent transition-colors duration-150 hover:decoration-current"
         stopPropagation
       />
     );

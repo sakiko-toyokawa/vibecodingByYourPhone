@@ -72,9 +72,9 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const isFirstStep = currentStepIndex === 0;
 
   const modalTitle = (
-    <div className="onboarding-modal-title">
+    <div className="flex items-center gap-[var(--space-3)]">
       <span>Welcome to yepanywhere</span>
-      <span className="onboarding-step-indicator">
+      <span className="[font-size:var(--font-size-sm)] font-normal text-[var(--text-muted)]">
         Step {currentStepIndex + 1} of {ONBOARDING_STEPS.length}
       </span>
     </div>
@@ -82,8 +82,10 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 
   return (
     <Modal title={modalTitle} onClose={handleSkipAll}>
-      <div className="onboarding-wizard">
-        <h2 className="onboarding-step-title">{currentStep.title}</h2>
+      <div className="flex flex-col gap-[var(--space-4)] p-[var(--space-2)]">
+        <h2 className="m-0 text-[1.25rem] font-semibold text-[var(--text-primary)]">
+          {currentStep.title}
+        </h2>
 
         <StepComponent
           onNext={handleNext}
@@ -91,31 +93,35 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
           isLastStep={isLastStep}
         />
 
-        <div className="onboarding-footer">
+        <div className="flex items-center justify-between border-t border-[var(--border-subtle)] pt-[var(--space-3)]">
           <button
             type="button"
-            className="onboarding-skip-all"
+            className="cursor-pointer rounded-[var(--radius-sm)] border-none bg-transparent p-[var(--space-1)] px-[var(--space-2)] [font-size:var(--font-size-sm)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]"
             onClick={handleSkipAll}
           >
             Skip all
           </button>
-          <div className="onboarding-footer-right">
+          <div className="flex items-center gap-[var(--space-3)]">
             {!isFirstStep && (
               <button
                 type="button"
-                className="onboarding-back"
+                className="cursor-pointer rounded-[var(--radius-sm)] border-none bg-transparent p-[var(--space-1)] px-[var(--space-2)] [font-size:var(--font-size-sm)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                 onClick={handleBack}
               >
                 Back
               </button>
             )}
-            <div className="onboarding-progress">
+            <div className="flex gap-[var(--space-2)]">
               {ONBOARDING_STEPS.map((step, index) => (
                 <span
                   key={step.id}
-                  className={`onboarding-progress-dot ${
-                    index === currentStepIndex ? "active" : ""
-                  } ${index < currentStepIndex ? "completed" : ""}`}
+                  className={`h-2 w-2 rounded-full transition-[background] duration-150 ${
+                    index === currentStepIndex
+                      ? "bg-[var(--accent-rust)]"
+                      : index < currentStepIndex
+                        ? "bg-[var(--accent-rust-dark)]"
+                        : "bg-[var(--border-color)]"
+                  }`}
                 />
               ))}
             </div>

@@ -197,14 +197,19 @@ export function HostPickerPage() {
   // If auto-resume is in progress, show a loading screen
   if (isAutoResuming) {
     return (
-      <div className="login-page">
-        <div className="login-container">
-          <div className="login-logo">
-            <YepAnywhereLogo />
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-surface)] p-4">
+        <div className="w-full max-w-[360px] p-4">
+          <div className="mb-6 flex justify-center">
+            <YepAnywhereLogo size="lg" />
           </div>
-          <p className="login-subtitle">{t("reconnecting")}</p>
-          <div className="login-loading" data-testid="auto-resume-loading">
-            <div className="login-spinner" />
+          <p className="m-0 mb-4 text-center text-base text-[var(--text-muted)]">
+            {t("reconnecting")}
+          </p>
+          <div
+            className="text-center text-[var(--text-muted)]"
+            data-testid="auto-resume-loading"
+          >
+            <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-[var(--border-muted)] border-t-[var(--accent-rust)]" />
           </div>
         </div>
       </div>
@@ -212,17 +217,22 @@ export function HostPickerPage() {
   }
 
   return (
-    <div className="login-page">
-      <div className="login-container">
-        <div className="login-logo">
-          <YepAnywhereLogo />
+    <div className="flex min-h-screen items-center justify-center bg-[var(--bg-surface)] p-4">
+      <div className="w-full max-w-[360px] p-4">
+        <div className="mb-6 flex justify-center">
+          <YepAnywhereLogo size="lg" />
         </div>
 
         {hosts.length > 0 && (
           <>
-            <p className="login-subtitle">{t("hostPickerSavedHosts")}</p>
+            <p className="m-0 mb-4 text-center text-base text-[var(--text-muted)]">
+              {t("hostPickerSavedHosts")}
+            </p>
 
-            <div className="host-picker-list" data-testid="saved-hosts-list">
+            <div
+              className="mb-4 flex w-full flex-col gap-2"
+              data-testid="saved-hosts-list"
+            >
               {hosts.map((host) => {
                 const status = hostStatuses[host.id] ?? "unknown";
                 const isConnecting = connectingHostId === host.id;
@@ -231,32 +241,42 @@ export function HostPickerPage() {
                   <button
                     key={host.id}
                     type="button"
-                    className="host-picker-item"
+                    className="group relative flex w-full cursor-pointer flex-col gap-1 rounded-[var(--radius-md)] border border-[var(--border-muted)] bg-[var(--bg-elevated)] p-3 text-left transition-[border-color,background-color] duration-150 hover:border-[var(--accent-rust)] hover:bg-[var(--bg-hover)] disabled:cursor-wait disabled:opacity-70"
                     onClick={() => handleConnectHost(host)}
                     disabled={isConnecting}
                     data-testid={`host-item-${host.id}`}
                   >
-                    <div className="host-picker-item-main">
+                    <div className="flex items-center gap-2">
                       <span
-                        className={`host-picker-status host-picker-status-${status}`}
+                        className={`h-2 w-2 shrink-0 rounded-full ${
+                          status === "online"
+                            ? "bg-[var(--color-success)]"
+                            : status === "offline"
+                              ? "bg-[var(--color-error)]"
+                              : status === "checking"
+                                ? "animate-pulse bg-[var(--text-muted)]"
+                                : "bg-[var(--text-muted)]"
+                        }`}
                         title={t(
                           `hostPickerStatus${status.charAt(0).toUpperCase()}${status.slice(1)}` as never,
                         )}
                       />
-                      <span className="host-picker-name">
+                      <span className="flex-1 font-medium text-[var(--text-primary)]">
                         {host.displayName}
                       </span>
-                      <span className="host-picker-mode">{host.mode}</span>
+                      <span className="rounded-[var(--radius-sm)] bg-[var(--bg-subtle)] px-1.5 py-0.5 text-xs text-[var(--text-muted)]">
+                        {host.mode}
+                      </span>
                     </div>
-                    <div className="host-picker-item-meta">
+                    <div className="flex items-center justify-between pl-[calc(8px+0.5rem)]">
                       {host.lastConnected && (
-                        <span className="host-picker-last-connected">
+                        <span className="text-xs text-[var(--text-muted)]">
                           {formatLastConnected(host.lastConnected)}
                         </span>
                       )}
                       <button
                         type="button"
-                        className="host-picker-delete"
+                        className="rounded-[var(--radius-sm)] border-none bg-transparent p-0.5 px-1.5 text-lg leading-none text-[var(--text-muted)] opacity-0 transition-[opacity,color,background-color] duration-150 hover:bg-[var(--bg-subtle)] hover:text-[var(--color-error)] group-hover:opacity-100"
                         onClick={(e) => handleDeleteHost(host.id, e)}
                         title={t("hostPickerRemoveHost")}
                         data-testid={`delete-host-${host.id}`}
@@ -265,8 +285,8 @@ export function HostPickerPage() {
                       </button>
                     </div>
                     {isConnecting && (
-                      <div className="host-picker-connecting">
-                        <div className="login-spinner" />
+                      <div className="absolute inset-0 flex items-center justify-center rounded-[var(--radius-md)] bg-[var(--bg-elevated)] opacity-90">
+                        <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-[var(--border-muted)] border-t-[var(--accent-rust)]" />
                       </div>
                     )}
                   </button>
@@ -275,52 +295,57 @@ export function HostPickerPage() {
             </div>
 
             {error && (
-              <div className="login-error" data-testid="host-picker-error">
+              <div
+                className="rounded-[var(--radius-md)] bg-[rgba(199,78,57,0.1)] p-2 text-center text-sm text-[var(--error-color)]"
+                data-testid="host-picker-error"
+              >
                 {error}
               </div>
             )}
 
-            <p className="login-subtitle host-picker-add-title">
+            <p className="m-0 mb-4 mt-4 text-center text-base text-[var(--text-muted)]">
               {t("hostPickerAddNewHost")}
             </p>
           </>
         )}
 
         {hosts.length === 0 && (
-          <p className="login-subtitle">{t("hostPickerHowToConnect")}</p>
+          <p className="m-0 mb-4 text-center text-base text-[var(--text-muted)]">
+            {t("hostPickerHowToConnect")}
+          </p>
         )}
 
-        <div className="login-mode-options">
+        <div className="my-4 flex flex-col gap-3">
           <button
             type="button"
-            className="login-mode-option"
+            className="flex cursor-pointer flex-col gap-1 rounded-[var(--radius-md)] border border-[var(--border-muted)] bg-[var(--bg-elevated)] p-3 text-left transition-[border-color,background] duration-150 hover:border-[var(--accent-rust)] hover:bg-[var(--bg-hover)]"
             onClick={() => navigate("/login/relay")}
             data-testid="relay-mode-button"
           >
-            <span className="login-mode-option-title">
+            <span className="text-base font-medium text-[var(--text-primary)]">
               {t("hostPickerRelayTitle")}
             </span>
-            <span className="login-mode-option-desc">
+            <span className="text-sm text-[var(--text-muted)]">
               {t("hostPickerRelayDescription")}
             </span>
           </button>
 
           <button
             type="button"
-            className="login-mode-option login-mode-option-secondary"
+            className="flex cursor-pointer flex-col gap-1 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-3 text-left transition-[border-color,background] duration-150 hover:border-[var(--border-muted)] hover:bg-[var(--bg-hover)]"
             onClick={() => navigate("/login/direct")}
             data-testid="direct-mode-button"
           >
-            <span className="login-mode-option-title">
+            <span className="text-base font-medium text-[var(--text-primary)]">
               {t("hostPickerDirectTitle")}
             </span>
-            <span className="login-mode-option-desc">
+            <span className="text-sm text-[var(--text-muted)]">
               {t("hostPickerDirectDescription")}
             </span>
           </button>
         </div>
 
-        <p className="login-hint">
+        <p className="mt-3 text-center text-sm text-[var(--text-dimmed)]">
           {hosts.length > 0
             ? t("hostPickerSavedHint")
             : t("hostPickerEmptyHint")}

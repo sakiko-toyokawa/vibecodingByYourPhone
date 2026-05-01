@@ -224,68 +224,76 @@ export function NotificationsSettings() {
   return (
     <>
       {/* Server-side settings - what types of notifications are sent */}
-      <section className="settings-section">
-        <h2>{t("notificationsServerTitle")}</h2>
-        <p className="settings-section-description">
+      <section className="flex flex-col gap-8 mb-12">
+        <h2
+          style={{ fontFamily: "var(--font-display)" }}
+          className="text-[2rem] text-[var(--text-primary)] mb-2"
+        >
+          {t("notificationsServerTitle")}
+        </h2>
+        <p className="m-0 mb-[var(--space-3)] [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
           {t("notificationsServerDescription")}
         </p>
-        <div className="settings-group">
-          <div className="settings-item">
-            <div className="settings-item-info">
+        <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
+          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+            <div className="flex flex-col gap-1">
               <strong>{t("notificationsToolApprovalsTitle")}</strong>
               <p>{t("notificationsToolApprovalsDescription")}</p>
             </div>
-            <label className="toggle-switch">
+            <label className="relative inline-block w-[44px] h-[24px] shrink-0">
               <input
                 type="checkbox"
+                className="opacity-0 w-0 h-0"
                 checked={settings?.toolApproval ?? true}
                 onChange={(e) =>
                   updateSetting("toolApproval", e.target.checked)
                 }
                 disabled={settingsLoading || !hasSubscriptions}
               />
-              <span className="toggle-slider" />
+              <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
             </label>
           </div>
 
-          <div className="settings-item">
-            <div className="settings-item-info">
+          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+            <div className="flex flex-col gap-1">
               <strong>{t("notificationsQuestionsTitle")}</strong>
               <p>{t("notificationsQuestionsDescription")}</p>
             </div>
-            <label className="toggle-switch">
+            <label className="relative inline-block w-[44px] h-[24px] shrink-0">
               <input
                 type="checkbox"
+                className="opacity-0 w-0 h-0"
                 checked={settings?.userQuestion ?? true}
                 onChange={(e) =>
                   updateSetting("userQuestion", e.target.checked)
                 }
                 disabled={settingsLoading || !hasSubscriptions}
               />
-              <span className="toggle-slider" />
+              <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
             </label>
           </div>
 
-          <div className="settings-item">
-            <div className="settings-item-info">
+          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+            <div className="flex flex-col gap-1">
               <strong>{t("notificationsSessionHaltedTitle")}</strong>
               <p>{t("notificationsSessionHaltedDescription")}</p>
             </div>
-            <label className="toggle-switch">
+            <label className="relative inline-block w-[44px] h-[24px] shrink-0">
               <input
                 type="checkbox"
+                className="opacity-0 w-0 h-0"
                 checked={settings?.sessionHalted ?? true}
                 onChange={(e) =>
                   updateSetting("sessionHalted", e.target.checked)
                 }
                 disabled={settingsLoading || !hasSubscriptions}
               />
-              <span className="toggle-slider" />
+              <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
             </label>
           </div>
 
           {!hasSubscriptions && !devicesLoading && (
-            <p className="settings-hint">
+            <p className="text-[var(--text-muted)] [font-size:var(--font-size-sm)] p-[var(--space-2)]">
               {t("notificationsNoSubscribedDevices")}
             </p>
           )}
@@ -294,26 +302,32 @@ export function NotificationsSettings() {
 
       {/* Desktop notifications - browser Notification API (not available on mobile) */}
       {!isMobile && (
-        <section className="settings-section">
-          <h2>{t("notificationsDesktopTitle")}</h2>
-          <p className="settings-section-description">
+        <section className="flex flex-col gap-8 mb-12">
+          <h2
+            style={{ fontFamily: "var(--font-display)" }}
+            className="text-[2rem] text-[var(--text-primary)] mb-2"
+          >
+            {t("notificationsDesktopTitle")}
+          </h2>
+          <p className="m-0 mb-[var(--space-3)] [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
             {t("notificationsDesktopDescription")}
           </p>
-          <div className="settings-group">
+          <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
             <BrowserNotificationToggle />
             {isDesktopTauri && (
-              <div className="settings-item">
-                <div className="settings-item-info">
+              <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+                <div className="flex flex-col gap-1">
                   <strong>{t("desktopNativeNotifyTitle")}</strong>
                   <p>{t("desktopNativeNotifyDescription")}</p>
                 </div>
-                <label className="toggle-switch">
+                <label className="relative inline-block w-[44px] h-[24px] shrink-0">
                   <input
                     type="checkbox"
+                    className="opacity-0 w-0 h-0"
                     checked={desktopNotifyEnabled}
                     onChange={toggleDesktopNotify}
                   />
-                  <span className="toggle-slider" />
+                  <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
                 </label>
               </div>
             )}
@@ -323,24 +337,30 @@ export function NotificationsSettings() {
 
       {/* Mobile native notifications - Tauri plugin (only on mobile Tauri app) */}
       {isMobile && isMobileTauri && (
-        <section className="settings-section">
-          <h2>{t("notificationsNativeTitle")}</h2>
-          <p className="settings-section-description">
+        <section className="flex flex-col gap-8 mb-12">
+          <h2
+            style={{ fontFamily: "var(--font-display)" }}
+            className="text-[2rem] text-[var(--text-primary)] mb-2"
+          >
+            {t("notificationsNativeTitle")}
+          </h2>
+          <p className="m-0 mb-[var(--space-3)] [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
             {t("notificationsNativeDescription")}
           </p>
-          <div className="settings-group">
-            <div className="settings-item">
-              <div className="settings-item-info">
+          <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
+            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+              <div className="flex flex-col gap-1">
                 <strong>{t("mobileNativeNotifyTitle")}</strong>
                 <p>{t("mobileNativeNotifyDescription")}</p>
               </div>
-              <label className="toggle-switch">
+              <label className="relative inline-block w-[44px] h-[24px] shrink-0">
                 <input
                   type="checkbox"
+                  className="opacity-0 w-0 h-0"
                   checked={desktopNotifyEnabled}
                   onChange={toggleDesktopNotify}
                 />
-                <span className="toggle-slider" />
+                <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
               </label>
             </div>
           </div>
@@ -348,45 +368,62 @@ export function NotificationsSettings() {
       )}
 
       {/* Push notifications - service worker based */}
-      <section className="settings-section">
-        <h2>{t("notificationsPushTitle")}</h2>
-        <p className="settings-section-description">
+      <section className="flex flex-col gap-8 mb-12">
+        <h2
+          style={{ fontFamily: "var(--font-display)" }}
+          className="text-[2rem] text-[var(--text-primary)] mb-2"
+        >
+          {t("notificationsPushTitle")}
+        </h2>
+        <p className="m-0 mb-[var(--space-3)] [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
           {t("notificationsPushDescription")}
         </p>
-        <div className="settings-group">
+        <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
           <PushNotificationToggle />
         </div>
       </section>
 
       {/* Unified devices list */}
-      <section className="settings-section">
-        <h2>{t("notificationsDevicesTitle")}</h2>
-        <p className="settings-section-description">
+      <section className="flex flex-col gap-8 mb-12">
+        <h2
+          style={{ fontFamily: "var(--font-display)" }}
+          className="text-[2rem] text-[var(--text-primary)] mb-2"
+        >
+          {t("notificationsDevicesTitle")}
+        </h2>
+        <p className="m-0 mb-[var(--space-3)] [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
           {t("notificationsDevicesDescription")}
         </p>
-        <div className="settings-group">
+        <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
           {isLoading ? (
-            <p className="settings-hint">{t("notificationsLoadingDevices")}</p>
+            <p className="text-[var(--text-muted)] [font-size:var(--font-size-sm)] p-[var(--space-2)]">
+              {t("notificationsLoadingDevices")}
+            </p>
           ) : unifiedDevices.length === 0 ? (
-            <p className="settings-hint">{t("notificationsNoDevices")}</p>
+            <p className="text-[var(--text-muted)] [font-size:var(--font-size-sm)] p-[var(--space-2)]">
+              {t("notificationsNoDevices")}
+            </p>
           ) : (
-            <div className="device-list">
+            <div className="flex flex-col gap-[var(--space-2)]">
               {unifiedDevices.map((device) => (
-                <div key={device.browserProfileId} className="device-list-item">
-                  <div className="device-list-info">
-                    <strong>
+                <div
+                  key={device.browserProfileId}
+                  className="flex items-center justify-between gap-[var(--space-3)] p-[var(--space-3)] bg-[var(--bg-elevated)] border border-[var(--border-muted)] rounded-[var(--radius-md)]"
+                >
+                  <div className="flex-1 min-w-0">
+                    <strong className="flex items-center gap-[var(--space-2)] [font-size:var(--font-size-base)]">
                       {device.displayName}
                       {device.browserType && ` ${device.browserType}`}
                       {device.isCurrentDevice && (
-                        <span className="device-current-badge">
+                        <span className="[font-size:var(--font-size-xs)] font-medium px-[6px] py-[2px] bg-[var(--text-primary)] text-white rounded-[var(--radius-sm)]">
                           {t("notificationsThisDevice")}
                         </span>
                       )}
                     </strong>
-                    <p>
+                    <p className="m-[var(--space-1)]_0_0 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
                       {/* Status indicator */}
                       {device.isConnected ? (
-                        <span className="device-status device-status-online">
+                        <span className="mr-[var(--space-2)] before:content-[''] before:inline-block before:w-2 before:h-2 before:rounded-full before:bg-[var(--success-color)] before:mr-1 before:align-middle">
                           {device.tabCount === 1
                             ? t("notificationsOneTab")
                             : t("notificationsTabs", {
@@ -394,19 +431,19 @@ export function NotificationsSettings() {
                               })}
                         </span>
                       ) : (
-                        <span className="device-status device-status-offline">
+                        <span className="mr-[var(--space-2)] before:content-[''] before:inline-block before:w-2 before:h-2 before:rounded-full before:bg-[var(--text-muted)] before:mr-1 before:align-middle">
                           {t("notificationsOffline")}
                         </span>
                       )}
                       {/* No push indicator for connected-only devices */}
                       {!device.isSubscribed && (
-                        <span className="device-no-push">
+                        <span className="[font-size:var(--font-size-xs)] px-1 py-[1px] bg-[var(--bg-muted)] border border-[var(--border-muted)] rounded-[var(--radius-sm)] text-[var(--text-muted)] ml-[var(--space-2)]">
                           {t("notificationsNoPush")}
                         </span>
                       )}
                       {/* Subscription date for subscribed devices */}
                       {device.subscribedAt && (
-                        <span className="device-subscribed-date">
+                        <span className="ml-[var(--space-2)] text-[var(--text-muted)]">
                           {t("notificationsSubscribed", {
                             date: formatDate(device.subscribedAt, t),
                           })}
@@ -418,7 +455,7 @@ export function NotificationsSettings() {
                   {device.isSubscribed && (
                     <button
                       type="button"
-                      className="settings-button settings-button-danger-subtle"
+                      className="px-[var(--space-2)] py-[var(--space-2)] bg-transparent border border-[var(--error-color)] rounded-[var(--radius-sm)] text-[var(--error-color)] [font-size:var(--font-size-sm)] cursor-pointer transition-[background,color] duration-150 whitespace-nowrap hover:bg-[var(--error-color)] hover:text-white"
                       onClick={() => removeDevice(device.browserProfileId)}
                       title={
                         device.isCurrentDevice

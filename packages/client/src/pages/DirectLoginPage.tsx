@@ -39,14 +39,19 @@ export function DirectLoginPage() {
   // If auto-resume is in progress, show a loading screen
   if (isAutoResuming) {
     return (
-      <div className="login-page">
-        <div className="login-container">
-          <div className="login-logo">
-            <YepAnywhereLogo />
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-surface)] p-4">
+        <div className="w-full max-w-[360px] p-4">
+          <div className="mb-6 flex justify-center">
+            <YepAnywhereLogo size="lg" />
           </div>
-          <p className="login-subtitle">{t("reconnecting")}</p>
-          <div className="login-loading" data-testid="auto-resume-loading">
-            <div className="login-spinner" />
+          <p className="m-0 mb-4 text-center text-base text-[var(--text-muted)]">
+            {t("reconnecting")}
+          </p>
+          <div
+            className="text-center text-[var(--text-muted)]"
+            data-testid="auto-resume-loading"
+          >
+            <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-[var(--border-muted)] border-t-[var(--accent-rust)]" />
           </div>
         </div>
       </div>
@@ -123,24 +128,37 @@ export function DirectLoginPage() {
   const displayError = localError ?? error;
 
   return (
-    <div className="login-page">
-      <div className="login-container">
-        <Link to="/login" className="login-back-link">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--bg-surface)] p-4">
+      <div className="w-full max-w-[360px] p-4">
+        <Link
+          to="/login"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-[var(--text-muted)] no-underline hover:text-[var(--text-primary)]"
+        >
           &larr; {t("actionBack")}
         </Link>
 
-        <div className="login-logo">
-          <YepAnywhereLogo />
+        <div className="mb-6 flex justify-center">
+          <YepAnywhereLogo size="lg" />
         </div>
-        <p className="login-subtitle">{t("directLoginTitle")}</p>
+        <h1
+          className="m-0 mb-4 text-center text-[1.75rem] text-[var(--text-primary)]"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          {t("directLoginTitle")}
+        </h1>
 
         <form
           onSubmit={handleSubmit}
-          className="login-form"
+          className="flex flex-col gap-3"
           data-testid="login-form"
         >
-          <div className="login-field">
-            <label htmlFor="serverUrl">{t("directLoginServerUrl")}</label>
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="serverUrl"
+              className="text-sm text-[var(--text-muted)]"
+            >
+              {t("directLoginServerUrl")}
+            </label>
             <input
               id="serverUrl"
               type="text"
@@ -150,12 +168,20 @@ export function DirectLoginPage() {
               disabled={isConnecting}
               autoComplete="url"
               data-testid="ws-url-input"
+              className="rounded-[var(--radius-md)] border border-[var(--border-input)] bg-[var(--bg-input)] px-3 py-2 text-base text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
             />
-            <p className="login-field-hint">{t("directLoginServerUrlHint")}</p>
+            <p className="m-0 text-xs text-[var(--text-dimmed)]">
+              {t("directLoginServerUrlHint")}
+            </p>
           </div>
 
-          <div className="login-field">
-            <label htmlFor="username">{t("directLoginUsername")}</label>
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="username"
+              className="text-sm text-[var(--text-muted)]"
+            >
+              {t("directLoginUsername")}
+            </label>
             <input
               id="username"
               type="text"
@@ -165,11 +191,17 @@ export function DirectLoginPage() {
               disabled={isConnecting}
               autoComplete="username"
               data-testid="username-input"
+              className="rounded-[var(--radius-md)] border border-[var(--border-input)] bg-[var(--bg-input)] px-3 py-2 text-base text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
             />
           </div>
 
-          <div className="login-field">
-            <label htmlFor="password">{t("directLoginPassword")}</label>
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="password"
+              className="text-sm text-[var(--text-muted)]"
+            >
+              {t("directLoginPassword")}
+            </label>
             <input
               id="password"
               type="password"
@@ -179,21 +211,23 @@ export function DirectLoginPage() {
               disabled={isConnecting}
               autoComplete="current-password"
               data-testid="password-input"
+              className="rounded-[var(--radius-md)] border border-[var(--border-input)] bg-[var(--bg-input)] px-3 py-2 text-base text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
             />
           </div>
 
-          <div className="login-field login-field-checkbox">
-            <label className="login-checkbox-label">
+          <div className="flex flex-row items-start gap-2">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--text-primary)]">
               <input
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
                 disabled={isConnecting}
                 data-testid="remember-me-checkbox"
+                className="h-4 w-4 cursor-pointer accent-[var(--accent-rust)]"
               />
               <span>{t("directLoginRememberMe")}</span>
             </label>
-            <p className="login-field-hint">
+            <p className="m-0 text-xs text-[var(--text-dimmed)]">
               {hasStoredSession
                 ? t("directLoginResumeHint")
                 : t("directLoginStayLoggedIn")}
@@ -201,14 +235,17 @@ export function DirectLoginPage() {
           </div>
 
           {displayError && (
-            <div className="login-error" data-testid="login-error">
+            <div
+              className="rounded-[var(--radius-md)] bg-[rgba(199,78,57,0.1)] p-2 text-center text-sm text-[var(--error-color)]"
+              data-testid="login-error"
+            >
               {displayError}
             </div>
           )}
 
           <button
             type="submit"
-            className="login-button"
+            className="cursor-pointer rounded-[var(--radius-md)] border-none bg-[var(--accent-rust)] px-4 py-2 text-base font-medium text-white transition-colors duration-150 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isConnecting}
             data-testid="login-button"
           >
@@ -218,7 +255,9 @@ export function DirectLoginPage() {
           </button>
         </form>
 
-        <p className="login-hint">{t("directLoginHint")}</p>
+        <p className="mt-3 text-center text-sm text-[var(--text-dimmed)]">
+          {t("directLoginHint")}
+        </p>
       </div>
     </div>
   );

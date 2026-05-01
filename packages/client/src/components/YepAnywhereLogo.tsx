@@ -8,20 +8,28 @@
 interface YepAnywhereLogoProps {
   /** Show compact version (icon + text) vs just text */
   showIcon?: boolean;
+  /** Preset size variant */
+  size?: "sm" | "md" | "lg";
   /** Additional className for styling */
   className?: string;
 }
 
 export function YepAnywhereLogo({
   showIcon = true,
+  size = "md",
   className = "",
 }: YepAnywhereLogoProps) {
+  const iconSize =
+    size === "lg" ? "h-9 w-9" : size === "sm" ? "h-5 w-5" : "h-6 w-6";
+  const textSize =
+    size === "lg" ? "text-[22px]" : size === "sm" ? "text-[15px]" : "text-base";
+
   return (
-    <span className={`yep-anywhere-logo ${className}`}>
+    <span className={`inline-flex items-center gap-2 ${className}`}>
       {showIcon && (
         <svg
           viewBox="0 0 120 120"
-          className="yep-anywhere-logo-icon"
+          className={`${iconSize} shrink-0`}
           aria-hidden="true"
         >
           <defs>
@@ -32,8 +40,8 @@ export function YepAnywhereLogo({
               x2="100%"
               y2="100%"
             >
-              <stop offset="0%" stopColor="var(--app-yep-green)" />
-              <stop offset="100%" stopColor="var(--app-yep-green-dark)" />
+              <stop offset="0%" stopColor="var(--accent-rust)" />
+              <stop offset="100%" stopColor="var(--accent-rust-dark)" />
             </linearGradient>
           </defs>
           <rect
@@ -61,9 +69,9 @@ export function YepAnywhereLogo({
           />
         </svg>
       )}
-      <span className="yep-anywhere-logo-text">
-        <span className="yep-anywhere-logo-yep">yep</span>
-        <span className="yep-anywhere-logo-anywhere">anywhere</span>
+      <span className={`font-sans font-bold tracking-[-0.03em] ${textSize}`}>
+        <span className="text-[var(--accent-rust-dark)]">yep</span>
+        <span className="text-[var(--text-primary)]">anywhere</span>
       </span>
     </span>
   );

@@ -64,10 +64,12 @@ function getFileName(filePath: string): string {
 function ReadToolUse({ input }: { input: ReadInput }) {
   const fileName = getFileName(input.file_path);
   return (
-    <div className="read-tool-use">
-      <span className="file-path">{fileName}</span>
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
+        {fileName}
+      </span>
       {(input.offset !== undefined || input.limit !== undefined) && (
-        <span className="read-range">
+        <span className="text-[var(--text-muted)] [font-size:var(--font-size-base)]">
           {input.offset !== undefined && ` from line ${input.offset}`}
           {input.limit !== undefined && ` (${input.limit} lines)`}
         </span>
@@ -96,17 +98,17 @@ function FileModalContent({
 
   // Toggle button for markdown files
   const toggleButton = hasMarkdownPreview && (
-    <div className="markdown-view-toggle">
+    <div className="flex gap-0 p-2 px-3 border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
       <button
         type="button"
-        className={`toggle-btn ${!showPreview ? "active" : ""}`}
+        className={`px-3 py-1.5 border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-muted)] [font-size:var(--font-size-sm)] cursor-pointer transition-all duration-150 hover:bg-[var(--bg-hover)] rounded-l ${!showPreview ? "bg-[var(--primary-color)] text-white border-[var(--primary-color)]" : ""}`}
         onClick={() => setShowPreview(false)}
       >
         Source
       </button>
       <button
         type="button"
-        className={`toggle-btn ${showPreview ? "active" : ""}`}
+        className={`px-3 py-1.5 border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-muted)] [font-size:var(--font-size-sm)] cursor-pointer transition-all duration-150 hover:bg-[var(--bg-hover)] rounded-r border-l-0 ${showPreview ? "bg-[var(--primary-color)] text-white border-[var(--primary-color)]" : ""}`}
         onClick={() => setShowPreview(true)}
       >
         Preview
@@ -117,11 +119,11 @@ function FileModalContent({
   // Show rendered markdown preview
   if (showPreview && renderedMarkdownHtml) {
     return (
-      <div className="file-content-modal">
+      <div className="bg-[var(--bg-code)] rounded overflow-auto">
         {toggleButton}
-        <div className="markdown-preview">
+        <div className="overflow-auto">
           <div
-            className="markdown-rendered"
+            className="p-4 leading-relaxed text-[var(--text-primary)]"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
             dangerouslySetInnerHTML={{ __html: renderedMarkdownHtml }}
           />
@@ -133,16 +135,16 @@ function FileModalContent({
   // Use highlighted HTML if available
   if (highlightedHtml) {
     return (
-      <div className="file-content-modal">
+      <div className="bg-[var(--bg-code)] rounded overflow-auto">
         {toggleButton}
-        <div className="file-viewer-code file-viewer-code-highlighted">
+        <div className="font-mono [font-size:var(--font-size-base)] leading-relaxed bg-[var(--bg-code)] overflow-x-auto">
           <div
-            className="shiki-container"
+            className="p-3"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
             dangerouslySetInnerHTML={{ __html: highlightedHtml }}
           />
           {highlightedTruncated && (
-            <div className="file-viewer-truncated">
+            <div className="py-2 px-3 [font-size:var(--font-size-sm)] text-[var(--text-muted)] border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
               Content truncated for highlighting (showing first 2000 lines)
             </div>
           )}
@@ -153,15 +155,15 @@ function FileModalContent({
 
   // Fallback: plain text with line numbers
   return (
-    <div className="file-content-modal">
+    <div className="bg-[var(--bg-code)] rounded overflow-auto">
       {toggleButton}
-      <div className="file-content-with-lines">
-        <div className="line-numbers">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] font-mono [font-size:var(--font-size-base)] bg-[var(--bg-code)] tab-[var(--tab-size)] border border-[var(--border-color)] rounded-md">
+        <div className="text-right py-3 px-2 text-[var(--text-muted)] select-none border-r border-[var(--border-color)] bg-[var(--bg-secondary)]">
           {lines.map((_, i) => (
             <div key={`ln-${i + 1}`}>{file.startLine + i}</div>
           ))}
         </div>
-        <pre className="line-content">
+        <pre className="py-3 px-3 m-0 overflow-x-auto leading-relaxed">
           <code>{file.content}</code>
         </pre>
       </div>
@@ -177,10 +179,10 @@ function FileModalTitle({ file }: { file: TextFile }) {
   const showRange = file.startLine > 1 || file.numLines < file.totalLines;
 
   return (
-    <span className="file-path">
+    <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
       {fileName}
       {showRange && (
-        <span className="file-range">
+        <span className="text-[var(--text-muted)] [font-size:var(--font-size-sm)]">
           {" "}
           (lines {file.startLine}-{file.startLine + file.numLines - 1} of{" "}
           {file.totalLines})
@@ -212,29 +214,35 @@ function TextFileResult({
 
   if (isPtyHandoff) {
     return (
-      <div className="read-text-result">
-        <span className="file-path">{fileName}</span>{" "}
-        <span className="file-line-count">continues in Shell</span>
+      <div className="flex flex-col gap-2">
+        <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
+          {fileName}
+        </span>{" "}
+        <span className="text-[var(--text-muted)] ml-auto">
+          continues in Shell
+        </span>
       </div>
     );
   }
 
   return (
     <>
-      <div className="read-text-result">
+      <div className="flex flex-col gap-2">
         <button
           type="button"
-          className="file-link-button"
+          className="inline-flex items-center gap-3 bg-transparent border border-[var(--border-color)] rounded-lg px-3 py-2 font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] cursor-pointer text-left transition-colors hover:bg-[var(--bg-hover)] hover:border-[var(--border-input)]"
           onClick={() => setShowModal(true)}
         >
           {fileName}
           {showRange && (
-            <span className="file-range">
+            <span className="text-[var(--text-muted)]">
               {" "}
               (lines {file.startLine}-{file.startLine + file.numLines - 1})
             </span>
           )}
-          <span className="file-line-count">{file.numLines} lines</span>
+          <span className="text-[var(--text-muted)] ml-auto">
+            {file.numLines} lines
+          </span>
         </button>
       </div>
       {showModal && (
@@ -264,9 +272,9 @@ function ImageFileResult({ file }: { file: ImageFile }) {
     dimensions?.originalWidth != null && dimensions?.originalHeight != null;
 
   return (
-    <div className="read-image-result">
+    <div className="flex flex-col gap-2">
       {(hasDimensions || sizeKB > 0) && (
-        <div className="image-info">
+        <div className="text-[var(--text-muted)] [font-size:var(--font-size-sm)]">
           {hasDimensions && (
             <>
               {dimensions.originalWidth}x{dimensions.originalHeight}
@@ -277,7 +285,7 @@ function ImageFileResult({ file }: { file: ImageFile }) {
         </div>
       )}
       <img
-        className="read-image"
+        className="max-w-full h-auto rounded"
         src={`data:${file.type};base64,${file.base64}`}
         alt="File content"
         width={dimensions?.displayWidth}
@@ -312,15 +320,17 @@ function PdfFileResult({
   const fileName = filePath ? getFileName(filePath) : "document.pdf";
 
   return (
-    <div className="read-pdf-result">
+    <div className="flex flex-col gap-2">
       <button
         type="button"
-        className="file-link-button"
+        className="inline-flex items-center gap-3 bg-transparent border border-[var(--border-color)] rounded-lg px-3 py-2 font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] cursor-pointer text-left transition-colors hover:bg-[var(--bg-hover)] hover:border-[var(--border-input)]"
         onClick={() => openPdfInNewTab(file.base64)}
       >
         {fileName}
-        {sizeKB > 0 && <span className="file-line-count">({sizeKB}KB)</span>}
-        <span className="file-line-count">Open PDF</span>
+        {sizeKB > 0 && (
+          <span className="text-[var(--text-muted)] ml-auto">({sizeKB}KB)</span>
+        )}
+        <span className="text-[var(--text-muted)] ml-auto">Open PDF</span>
       </button>
     </div>
   );
@@ -360,7 +370,7 @@ function ReadToolResult({
   if (isError || !result?.file) {
     const errorResult = result as unknown as { content?: unknown } | undefined;
     return (
-      <div className="read-error">
+      <div className="text-[var(--error-color)] p-2 bg-[var(--bg-error,rgba(207,34,46,0.1))] rounded">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="Read" errors={validationErrors} />
         )}
@@ -465,14 +475,16 @@ function ReadInteractiveSummary({
     return (
       <button
         type="button"
-        className="file-link-inline"
+        className="inline-flex items-center gap-2 bg-transparent border-none p-0 font-mono text-inherit text-[var(--link-color)] cursor-pointer underline underline-transparent hover:underline-current"
         onClick={(e) => {
           e.stopPropagation();
           openPdfInNewTab(pdfFile.base64);
         }}
       >
         {fileName}
-        <span className="file-line-count-inline">(PDF)</span>
+        <span className="text-[var(--text-muted)] text-[0.85em] no-underline">
+          (PDF)
+        </span>
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="Read" errors={validationErrors} />
         )}
@@ -486,14 +498,16 @@ function ReadInteractiveSummary({
       <>
         <button
           type="button"
-          className="file-link-inline"
+          className="inline-flex items-center gap-2 bg-transparent border-none p-0 font-mono text-inherit text-[var(--link-color)] cursor-pointer underline underline-transparent hover:underline-current"
           onClick={(e) => {
             e.stopPropagation();
             setShowModal(true);
           }}
         >
           {fileName}
-          <span className="file-line-count-inline">(image)</span>
+          <span className="text-[var(--text-muted)] text-[0.85em] no-underline">
+            (image)
+          </span>
           {showValidationWarning && validationErrors && (
             <SchemaWarning toolName="Read" errors={validationErrors} />
           )}
@@ -514,7 +528,9 @@ function ReadInteractiveSummary({
     return (
       <span>
         {fileName}{" "}
-        <span className="file-line-count-inline">continues in Shell</span>
+        <span className="text-[var(--text-muted)] text-[0.85em] no-underline">
+          continues in Shell
+        </span>
       </span>
     );
   }
@@ -523,14 +539,16 @@ function ReadInteractiveSummary({
     <>
       <button
         type="button"
-        className="file-link-inline"
+        className="inline-flex items-center gap-2 bg-transparent border-none p-0 font-mono text-inherit text-[var(--link-color)] cursor-pointer underline underline-transparent hover:underline-current"
         onClick={(e) => {
           e.stopPropagation();
           setShowModal(true);
         }}
       >
         {fileName}
-        <span className="file-line-count-inline">{file.numLines} lines</span>
+        <span className="text-[var(--text-muted)] text-[0.85em] no-underline">
+          {file.numLines} lines
+        </span>
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="Read" errors={validationErrors} />
         )}

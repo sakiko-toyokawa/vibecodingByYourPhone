@@ -186,8 +186,8 @@ export const FileViewer = memo(function FileViewer({
   // Render loading state
   if (loading) {
     return (
-      <div className="file-viewer">
-        <div className="file-viewer-loading">
+      <div className="flex flex-col h-full bg-[var(--bg-surface)]">
+        <div className="flex items-center justify-center p-8 text-[var(--text-muted)]">
           {t("fileViewerLoading" as never, { name: fileName })}
         </div>
       </div>
@@ -197,8 +197,8 @@ export const FileViewer = memo(function FileViewer({
   // Render error state
   if (error || !fileData) {
     return (
-      <div className="file-viewer">
-        <div className="file-viewer-error">
+      <div className="flex flex-col h-full bg-[var(--bg-surface)]">
+        <div className="flex items-center justify-center p-8 text-[var(--error-color)]">
           {error || t("fileViewerNotFound" as never)}
         </div>
       </div>
@@ -213,8 +213,12 @@ export const FileViewer = memo(function FileViewer({
     // Image files
     if (isImage) {
       return (
-        <div className="file-viewer-image">
-          <img src={rawUrl} alt={fileName} />
+        <div className="flex items-center justify-center p-4 min-h-[200px]">
+          <img
+            src={rawUrl}
+            alt={fileName}
+            className="max-w-full max-h-[80vh] object-contain rounded"
+          />
         </div>
       );
     }
@@ -226,17 +230,17 @@ export const FileViewer = memo(function FileViewer({
 
       // Toggle button for markdown files
       const toggleButton = hasMarkdownPreview && (
-        <div className="markdown-view-toggle">
+        <div className="flex gap-0 p-2 px-3 border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
           <button
             type="button"
-            className={`toggle-btn ${!showPreview ? "active" : ""}`}
+            className={`px-3 py-1.5 border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-muted)] [font-size:var(--font-size-sm)] cursor-pointer transition-all duration-150 hover:bg-[var(--bg-hover)] rounded-l ${!showPreview ? "bg-[var(--primary-color)] text-white border-[var(--primary-color)]" : ""}`}
             onClick={() => setShowPreview(false)}
           >
             {t("fileViewerSource" as never)}
           </button>
           <button
             type="button"
-            className={`toggle-btn ${showPreview ? "active" : ""}`}
+            className={`px-3 py-1.5 border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-muted)] [font-size:var(--font-size-sm)] cursor-pointer transition-all duration-150 hover:bg-[var(--bg-hover)] rounded-r border-l-0 ${showPreview ? "bg-[var(--primary-color)] text-white border-[var(--primary-color)]" : ""}`}
             onClick={() => setShowPreview(true)}
           >
             {t("fileViewerPreview" as never)}
@@ -249,9 +253,9 @@ export const FileViewer = memo(function FileViewer({
         return (
           <>
             {toggleButton}
-            <div className="markdown-preview">
+            <div className="overflow-auto">
               <div
-                className="markdown-rendered"
+                className="p-4 leading-relaxed text-[var(--text-primary)]"
                 // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
                 dangerouslySetInnerHTML={{
                   __html: fileData.renderedMarkdownHtml,
@@ -268,16 +272,16 @@ export const FileViewer = memo(function FileViewer({
           <>
             {toggleButton}
             <div
-              className="file-viewer-code file-viewer-code-highlighted"
+              className="font-mono [font-size:var(--font-size-base)] leading-relaxed bg-[var(--bg-code)] overflow-x-auto"
               data-language={fileData.highlightedLanguage ?? language}
             >
               <div
-                className="shiki-container"
+                className="p-3"
                 // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
                 dangerouslySetInnerHTML={{ __html: fileData.highlightedHtml }}
               />
               {fileData.highlightedTruncated && (
-                <div className="file-viewer-truncated">
+                <div className="py-2 px-3 [font-size:var(--font-size-sm)] text-[var(--text-muted)] border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
                   {t("fileViewerHighlightTruncated" as never)}
                 </div>
               )}
@@ -294,14 +298,17 @@ export const FileViewer = memo(function FileViewer({
       return (
         <>
           {toggleButton}
-          <div className="file-viewer-code" data-language={language}>
-            <div className="code-highlighter-plain">
-              <div className="code-line-numbers">
+          <div
+            className="font-mono [font-size:var(--font-size-base)] leading-relaxed bg-[var(--bg-code)] overflow-x-auto"
+            data-language={language}
+          >
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] p-1.5 m-0 bg-transparent">
+              <div className="text-right pr-4 text-[var(--text-dimmed)] select-none min-w-[2.5em]">
                 {lines.map((_, i) => (
                   <div key={`ln-${i + 1}`}>{i + 1}</div>
                 ))}
               </div>
-              <pre className="code-content">
+              <pre className="m-0 overflow-x-auto leading-relaxed">
                 <code>
                   {lines.map((line, i) => {
                     const num = i + 1;
@@ -318,17 +325,8 @@ export const FileViewer = memo(function FileViewer({
                             : undefined
                         }
                         className={
-                          isHighlighted ? "highlighted-line" : undefined
-                        }
-                        style={
                           isHighlighted
-                            ? {
-                                backgroundColor: "rgba(255, 255, 0, 0.15)",
-                                marginLeft: "-0.75rem",
-                                marginRight: "-0.75rem",
-                                paddingLeft: "0.75rem",
-                                paddingRight: "0.75rem",
-                              }
+                            ? "bg-[rgba(255,255,0,0.15)] -mx-3 px-3"
                             : undefined
                         }
                       >
@@ -346,7 +344,7 @@ export const FileViewer = memo(function FileViewer({
 
     // Binary files or files too large
     return (
-      <div className="file-viewer-binary">
+      <div className="flex flex-col items-center justify-center gap-4 p-8 text-center text-[var(--text-muted)]">
         <p>{t("fileViewerBinary" as never)}</p>
         <p>
           <strong>{t("fileViewerType" as never)}</strong> {metadata.mimeType}
@@ -357,7 +355,7 @@ export const FileViewer = memo(function FileViewer({
         </p>
         <button
           type="button"
-          className="file-viewer-download-btn"
+          className="px-4 py-2 bg-[var(--primary-color)] text-white border-none rounded [font-size:var(--font-size-base)] cursor-pointer hover:brightness-110"
           onClick={handleDownload}
         >
           {t("fileViewerDownloadFile" as never)}
@@ -368,12 +366,15 @@ export const FileViewer = memo(function FileViewer({
 
   // Header with file info and actions
   const header = (
-    <div className="file-viewer-header">
-      <div className="file-viewer-info">
-        <span className="file-viewer-path" title={filePath}>
+    <div className="flex items-center justify-between gap-2 py-1.5 px-2 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] flex-shrink-0">
+      <div className="flex flex-col gap-1 min-w-0 flex-1">
+        <span
+          className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all"
+          title={filePath}
+        >
           {filePath}
         </span>
-        <span className="file-viewer-meta">
+        <span className="[font-size:var(--font-size-sm)] text-[var(--text-muted)]">
           {formatFileSize(metadata.size)}
           {metadata.isText &&
             content &&
@@ -382,11 +383,11 @@ export const FileViewer = memo(function FileViewer({
             })}`}
         </span>
       </div>
-      <div className="file-viewer-actions">
+      <div className="flex items-center gap-1 flex-shrink-0">
         {content && (
           <button
             type="button"
-            className={`file-viewer-action ${copied ? "copied" : ""}`}
+            className={`flex items-center justify-center w-8 h-8 p-0 bg-transparent border-none rounded text-[var(--text-muted)] cursor-pointer transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] ${copied ? "text-[var(--success-color)]" : ""}`}
             onClick={handleCopy}
             title={
               copied
@@ -394,30 +395,30 @@ export const FileViewer = memo(function FileViewer({
                 : t("fileViewerCopyContent" as never)
             }
           >
-            {copied ? <CheckIcon /> : <CopyIcon />}
+            {copied ? "\u2713" : "\u2398"}
           </button>
         )}
         {!standalone && (
           <button
             type="button"
-            className="file-viewer-action"
+            className="flex items-center justify-center w-8 h-8 p-0 bg-transparent border-none rounded text-[var(--text-muted)] cursor-pointer transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
             onClick={handleOpenInNewTab}
             title={t("fileViewerOpenNewTab" as never)}
           >
-            <ExternalLinkIcon />
+            {"\u2197"}
           </button>
         )}
         <button
           type="button"
-          className="file-viewer-action"
+          className="flex items-center justify-center w-8 h-8 p-0 bg-transparent border-none rounded text-[var(--text-muted)] cursor-pointer transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
           onClick={handleDownload}
           title={t("fileViewerDownload" as never)}
         >
-          <DownloadIcon />
+          {"\u2913"}
         </button>
         <button
           type="button"
-          className="file-viewer-action"
+          className="flex items-center justify-center w-8 h-8 p-0 bg-transparent border-none rounded text-[var(--text-muted)] cursor-pointer transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
           onClick={() => setFullscreen(!fullscreen)}
           title={
             fullscreen
@@ -425,16 +426,16 @@ export const FileViewer = memo(function FileViewer({
               : t("fileViewerFullscreen" as never)
           }
         >
-          {fullscreen ? <ExitFullscreenIcon /> : <FullscreenIcon />}
+          {fullscreen ? "\u29BE" : "\u26F6"}
         </button>
         {onClose && (
           <button
             type="button"
-            className="file-viewer-action file-viewer-close"
+            className="flex items-center justify-center w-8 h-8 p-0 bg-transparent border-none rounded text-[var(--text-muted)] cursor-pointer transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] ml-2"
             onClick={onClose}
             title={t("modalClose")}
           >
-            <CloseIcon />
+            {"\u2715"}
           </button>
         )}
       </div>
@@ -442,9 +443,10 @@ export const FileViewer = memo(function FileViewer({
   );
 
   const viewerClass = [
-    "file-viewer",
-    standalone && "file-viewer-standalone",
-    fullscreen && "file-viewer-fullscreen",
+    "flex flex-col h-full bg-[var(--bg-surface)]",
+    standalone && "min-h-full",
+    fullscreen &&
+      "fixed inset-0 z-[10000] bg-[var(--bg-surface)] rounded-none max-h-none h-screen w-screen",
   ]
     .filter(Boolean)
     .join(" ");
@@ -452,135 +454,7 @@ export const FileViewer = memo(function FileViewer({
   return (
     <div className={viewerClass}>
       {header}
-      <div className="file-viewer-body">{renderContent()}</div>
+      <div className="flex-1 overflow-auto p-0">{renderContent()}</div>
     </div>
   );
 });
-
-// Icons
-function CopyIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="5" y="5" width="9" height="9" rx="1.5" />
-      <path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H3.5A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M3 8.5L6.5 12L13 4" />
-    </svg>
-  );
-}
-
-function DownloadIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M8 2v9M4 8l4 4 4-4M2 14h12" />
-    </svg>
-  );
-}
-
-function ExternalLinkIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M12 9v4a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h4M9 2h5v5M6 10l8-8" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M4 4l8 8M12 4l-8 8" />
-    </svg>
-  );
-}
-
-function FullscreenIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3" />
-    </svg>
-  );
-}
-
-function ExitFullscreenIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M5 2v3H2M14 5h-3V2M11 14v-3h3M2 11h3v3" />
-    </svg>
-  );
-}

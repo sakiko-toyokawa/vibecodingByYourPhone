@@ -5,19 +5,10 @@ import type { Locale } from "./i18n";
 import type { SettingsCategory } from "./pages/settings/types";
 
 export function getThemeLabel(
-  theme: Theme,
-  t: (key: string) => string,
+  _theme: Theme,
+  _t: (key: string) => string,
 ): string {
-  switch (theme) {
-    case "auto":
-      return t("themeAuto");
-    case "light":
-      return t("themeLight");
-    case "dark":
-      return t("themeDark");
-    case "verydark":
-      return t("themeVerydark");
-  }
+  return "Literary";
 }
 
 export function getFontSizeLabel(

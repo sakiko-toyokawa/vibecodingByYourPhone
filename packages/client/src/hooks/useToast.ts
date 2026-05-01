@@ -9,7 +9,7 @@ export interface ToastAction {
 export interface Toast {
   id: string;
   message: string;
-  type: "error" | "success" | "info";
+  type: "error" | "success" | "info" | "warning";
   action?: ToastAction;
 }
 

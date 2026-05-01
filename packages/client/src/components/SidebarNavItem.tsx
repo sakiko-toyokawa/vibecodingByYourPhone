@@ -87,14 +87,8 @@ export const SidebarIcons = {
     </svg>
   ),
   newSession: (
-    <svg
-      className="sidebar-new-session-icon"
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="12" fill="var(--app-yep-green)" />
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="12" fill="var(--accent-rust)" />
       <line
         x1="12"
         y1="7"
@@ -165,6 +159,23 @@ export const SidebarIcons = {
       <line x1="12" y1="18" x2="12" y2="18" />
     </svg>
   ),
+  older: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 8v13H3V8" />
+      <path d="M1 3h22v5H1z" />
+      <line x1="10" y1="12" x2="14" y2="12" />
+    </svg>
+  ),
 };
 
 export interface SidebarNavItemProps {
@@ -186,6 +197,8 @@ export interface SidebarNavItemProps {
   hasActivityIndicator?: boolean;
   /** Base path prefix for relay mode (e.g., "/remote/my-server") */
   basePath?: string;
+  /** Whether the sidebar is collapsed to icon-only mode */
+  collapsed?: boolean;
 }
 
 /**
@@ -202,6 +215,7 @@ export function SidebarNavItem({
   hasDraft,
   hasActivityIndicator,
   basePath = "",
+  collapsed = false,
 }: SidebarNavItemProps) {
   const location = useLocation();
   const fullPath = `${basePath}${to}`;
@@ -211,16 +225,47 @@ export function SidebarNavItem({
   return (
     <Link
       to={fullPath}
-      className={`sidebar-nav-item ${isActive ? "active" : ""}`}
+      className={`group relative flex items-center no-underline transition-all duration-150 ${
+        collapsed ? "justify-center px-0 py-3" : "gap-3 px-3 py-2"
+      } ${
+        isActive
+          ? "bg-transparent text-[var(--text-primary)]"
+          : "bg-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]/40 hover:text-[var(--text-primary)]"
+      }`}
       onClick={onClick}
       title={title ?? label}
     >
-      {icon}
-      <span className="sidebar-nav-text">{label}</span>
-      {hasDraft && <span className="session-draft-badge">(draft)</span>}
-      {hasActivityIndicator && <ThinkingIndicator />}
+      {isActive && (
+        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-[var(--accent-rust)]" />
+      )}
+      <span
+        className={`shrink-0 transition-colors ${
+          isActive
+            ? "text-[var(--text-primary)]"
+            : "text-[var(--text-muted)] group-hover:text-[var(--text-primary)]"
+        } ${collapsed ? "min-w-0" : "min-w-[16px]"}`}
+      >
+        {icon}
+      </span>
+      {!collapsed && (
+        <span className="flex-1 truncate text-[13px]">{label}</span>
+      )}
+      {hasDraft && (
+        <span className="shrink-0 rounded-full bg-[var(--warning-color)]/15 px-1.5 py-0.5 text-[10px] font-medium text-[var(--warning-color)]">
+          draft
+        </span>
+      )}
+      {!collapsed && hasActivityIndicator && <ThinkingIndicator />}
       {badge !== undefined && badge > 0 && (
-        <span className="sidebar-nav-badge">{badge}</span>
+        <span
+          className={`shrink-0 items-center justify-center rounded-full bg-[var(--accent-rust)] px-1.5 text-[10px] font-semibold text-white ${
+            collapsed
+              ? "absolute right-1 top-1 flex h-4 min-w-4"
+              : "ml-auto flex h-[18px] min-w-[18px]"
+          }`}
+        >
+          {badge}
+        </span>
       )}
     </Link>
   );
@@ -235,5 +280,5 @@ export interface SidebarNavSectionProps {
  * Provides consistent spacing between items.
  */
 export function SidebarNavSection({ children }: SidebarNavSectionProps) {
-  return <nav className="sidebar-nav-section">{children}</nav>;
+  return <nav className="flex flex-col gap-0.5 px-2">{children}</nav>;
 }

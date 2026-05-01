@@ -59,12 +59,20 @@ function StatusIndicator({ session }: { session: GlobalSessionItem }) {
   // Needs input
   if (session.pendingInputType) {
     const label = session.pendingInputType === "tool-approval" ? "Appr" : "Q";
-    return <span className="recent-sessions-badge needs-input">{label}</span>;
+    return (
+      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-[var(--radius-sm)] whitespace-nowrap bg-[var(--status-badge-input-bg)] text-[var(--status-badge-input-text)]">
+        {label}
+      </span>
+    );
   }
 
   // External session
   if (session.ownership.owner === "external") {
-    return <span className="recent-sessions-badge external">Ext</span>;
+    return (
+      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-[var(--radius-sm)] whitespace-nowrap bg-[var(--status-badge-external-bg)] text-[var(--status-badge-external-text)]">
+        Ext
+      </span>
+    );
   }
 
   return null;
@@ -144,49 +152,48 @@ export function RecentSessionsDropdown({
     : {};
 
   const dropdown = (
-    <div ref={dropdownRef} className="recent-sessions-dropdown" style={style}>
-      <div className="recent-sessions-header">Recent Sessions</div>
+    <div
+      ref={dropdownRef}
+      className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-md)] shadow-[0_4px_16px_rgba(0,0,0,0.4)] min-w-[280px] max-w-[min(830px,calc(100vw-32px))] z-[10001] overflow-hidden"
+      style={style}
+    >
+      <div className="px-3 py-2 [font-size:var(--font-size-xs)] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-color)]">
+        Recent Sessions
+      </div>
       {recentSessions.length === 0 ? (
-        <div className="recent-sessions-empty">No other sessions</div>
+        <div className="px-3 py-4 text-[var(--text-muted)] [font-size:var(--font-size-sm)]">
+          No other sessions
+        </div>
       ) : (
-        <div className="recent-sessions-list">
+        <div className="max-h-[400px] overflow-y-auto">
           {recentSessions.map((session) => (
             <Link
               key={session.id}
               to={`${basePath}/projects/${session.projectId}/sessions/${session.id}`}
-              className={`recent-session-item${session.hasUnread ? " unread" : ""}`}
+              className={`flex items-center justify-between gap-3 px-3 py-2.5 no-underline text-[var(--text-primary)] border-b border-[var(--border-subtle)] transition-colors duration-100 hover:bg-[var(--bg-hover)] active:bg-[var(--bg-active)] ${session.hasUnread ? "unread" : ""}`}
               onClick={() => {
                 onNavigate(session.id, session.projectId);
                 onClose();
               }}
             >
-              <div className="recent-session-content">
-                <span className="recent-session-title">
+              <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                <span className="flex items-center gap-1.5 [font-size:var(--font-size-sm)] font-normal text-[var(--text-secondary)] min-w-0">
                   {session.isStarred && (
-                    <svg
-                      className="recent-session-star"
-                      width="10"
-                      height="10"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      aria-hidden="true"
-                    >
-                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                    </svg>
+                    <span className="text-[var(--accent-star)] shrink-0 text-xs">
+                      &#x2605;
+                    </span>
                   )}
-                  <span className="recent-session-title-text">
+                  <span className="overflow-hidden text-ellipsis whitespace-nowrap">
                     {getDisplayTitle(session)}
                   </span>
                 </span>
-                <span className="recent-session-project">
+                <span className="[font-size:var(--font-size-xs)] text-[var(--text-muted)] overflow-hidden text-ellipsis whitespace-nowrap">
                   {session.projectName}
                 </span>
               </div>
-              <div className="recent-session-meta">
+              <div className="flex items-center gap-2 shrink-0">
                 <StatusIndicator session={session} />
-                <span className="recent-session-time">
+                <span className="[font-size:var(--font-size-xs)] text-[var(--text-muted)] whitespace-nowrap">
                   {formatRelativeTime(session.updatedAt)}
                 </span>
               </div>

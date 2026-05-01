@@ -154,12 +154,14 @@ export function FilterDropdown<T extends string>({
         <>
           <button
             type="button"
-            className="filter-dropdown-option filter-dropdown-clear"
+            className="flex items-center gap-3 px-4 py-3 bg-transparent border-none cursor-pointer text-left w-full transition-colors duration-150 hover:bg-[var(--bg-hover)]"
             onClick={handleClearAll}
           >
-            <span className="filter-dropdown-label">{t("filterClearAll")}</span>
+            <span className="[font-size:var(--font-size-base)] text-[var(--text-muted)]">
+              {t("filterClearAll")}
+            </span>
           </button>
-          <div className="filter-dropdown-divider" />
+          <div className="h-px bg-[var(--border-subtle)] my-2 mx-4" />
         </>
       )}
 
@@ -169,52 +171,42 @@ export function FilterDropdown<T extends string>({
           <button
             key={option.value}
             type="button"
-            className={`filter-dropdown-option ${isSelected ? "selected" : ""} ${!multiSelect ? "single-select" : ""}`}
+            className={`flex items-center gap-3 px-4 py-3 bg-transparent border-none cursor-pointer text-left w-full transition-colors duration-150 hover:bg-[var(--bg-hover)] ${isSelected ? "bg-[rgba(217,119,87,0.08)]" : ""} ${!multiSelect ? "relative pr-8" : ""}`}
             onClick={() => handleOptionClick(option.value)}
             aria-pressed={isSelected}
           >
             {multiSelect && (
               <span
-                className={`filter-dropdown-checkbox ${isSelected ? "checked" : ""}`}
+                className={`w-[18px] h-[18px] border-2 border-[var(--border-color)] rounded-[var(--radius-sm)] flex items-center justify-center shrink-0 transition-colors duration-150 ${isSelected ? "bg-[var(--text-primary)] border-[var(--text-primary)] text-white" : ""}`}
                 aria-hidden="true"
               >
-                {isSelected && (
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                )}
+                {isSelected && <span className="text-xs">&#x2713;</span>}
               </span>
             )}
 
             {option.color && (
               <span
-                className="filter-dropdown-color-dot"
+                className="w-2.5 h-2.5 rounded-full shrink-0"
                 style={{ backgroundColor: option.color }}
                 aria-hidden="true"
               />
             )}
 
-            <span className="filter-dropdown-label-wrapper">
-              <span className="filter-dropdown-label">{option.label}</span>
+            <span className="flex-1 flex flex-col gap-0.5 min-w-0">
+              <span className="[font-size:var(--font-size-base)]">
+                {option.label}
+              </span>
               {option.description && (
-                <span className="filter-dropdown-description">
+                <span className="[font-size:var(--font-size-xs)] text-[var(--text-muted)] leading-tight">
                   {option.description}
                 </span>
               )}
             </span>
 
             {option.count !== undefined && (
-              <span className="filter-dropdown-count">{option.count}</span>
+              <span className="[font-size:var(--font-size-xs)] text-[var(--text-muted)] bg-[var(--bg-secondary)] px-2 py-1 rounded-[var(--radius-sm)]">
+                {option.count}
+              </span>
             )}
           </button>
         );
@@ -227,20 +219,22 @@ export function FilterDropdown<T extends string>({
       ? createPortal(
           // biome-ignore lint/a11y/useKeyWithClickEvents: Escape key handled globally
           <div
-            className="filter-dropdown-overlay"
+            className="fixed inset-0 bg-black/50 z-[10001] flex items-end justify-center md:hidden"
             onClick={handleOverlayClick}
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div
               ref={sheetRef}
-              className="filter-dropdown-sheet"
+              className="bg-[var(--bg-surface)] rounded-t-[var(--radius-lg)] w-full max-w-[500px] max-h-[80vh] overflow-y-auto animate-[slideUp_0.2s_ease-out] shadow-[0_-2px_8px_rgba(0,0,0,0.08)] pb-[env(safe-area-inset-bottom,0)]"
               tabIndex={-1}
               aria-label={t("filterByLabel", { label })}
             >
-              <div className="filter-dropdown-header">
-                <span className="filter-dropdown-title">{label}</span>
+              <div className="flex items-center justify-center px-4 py-3 border-b border-[var(--border-subtle)]">
+                <span className="[font-size:var(--font-size-base)] font-semibold text-[var(--text-primary)]">
+                  {label}
+                </span>
               </div>
-              <div className="filter-dropdown-options">{optionsContent}</div>
+              <div className="flex flex-col py-2">{optionsContent}</div>
             </div>
           </div>,
           document.body,
@@ -251,20 +245,20 @@ export function FilterDropdown<T extends string>({
     isOpen && isDesktop ? (
       <div
         ref={sheetRef}
-        className={`filter-dropdown-dropdown ${align === "right" ? "align-right" : ""}`}
+        className={`absolute top-full mt-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-lg)] min-w-[200px] shadow-[0_2px_6px_rgba(0,0,0,0.08)] z-[10001] ${align === "right" ? "right-0" : "left-0"}`}
         tabIndex={-1}
         aria-label={t("filterByLabel", { label })}
       >
-        <div className="filter-dropdown-options">{optionsContent}</div>
+        <div className="flex flex-col py-1">{optionsContent}</div>
       </div>
     ) : null;
 
   return (
-    <div className="filter-dropdown-container">
+    <div className="relative inline-block">
       <button
         ref={buttonRef}
         type="button"
-        className={`filter-dropdown-button ${selected.length > 0 ? "has-selection" : ""}`}
+        className={`flex items-center gap-2 px-4 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg [font-size:var(--font-size-sm)] text-[var(--text-primary)] cursor-pointer transition-colors duration-150 hover:border-[var(--border-color)] hover:bg-[var(--bg-secondary)] ${selected.length > 0 ? "border-[var(--text-primary)]/30 text-[var(--text-primary)] bg-[var(--bg-secondary)]" : ""}`}
         onClick={handleButtonClick}
         title={t("filterByLabel", { label })}
         aria-haspopup="listbox"
@@ -272,18 +266,18 @@ export function FilterDropdown<T extends string>({
       >
         {displayText}
         <svg
-          className="filter-dropdown-chevron"
+          className={`shrink-0 text-[var(--text-muted)] transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
           width="12"
           height="12"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth="2"
+          strokeWidth="2.5"
           strokeLinecap="round"
           strokeLinejoin="round"
           aria-hidden="true"
         >
-          <polyline points="6 9 12 15 18 9" />
+          <path d="m6 9 6 6 6-6" />
         </svg>
       </button>
       {desktopDropdown}

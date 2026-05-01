@@ -55,13 +55,13 @@ function getStateLabel(state: string, t: (key: never) => string): string {
 function getStateBadgeClass(state: string): string {
   switch (state) {
     case "running":
-      return "agent-state-running";
+      return "bg-[var(--status-badge-running-bg)] text-[var(--status-badge-running-text)]";
     case "waiting-input":
-      return "agent-state-input";
+      return "bg-[var(--status-badge-input-bg)] text-[var(--status-badge-input-text)]";
     case "idle":
-      return "agent-state-idle";
+      return "bg-[var(--status-badge-idle-bg)] text-[var(--status-badge-idle-text)]";
     case "terminated":
-      return "agent-state-terminated";
+      return "bg-[var(--bg-hover)] text-[var(--text-muted)]";
     default:
       return "";
   }
@@ -94,13 +94,13 @@ function getProviderLabel(
 function getProviderBadgeClass(provider: string | undefined): string {
   switch (provider) {
     case "codex":
-      return "agent-provider-codex";
+      return "bg-gradient-to-br from-[#10a37f] to-[#14b8a6] text-white";
     case "gemini":
-      return "agent-provider-gemini";
+      return "bg-gradient-to-br from-[#4f46e5] to-[#7c3aed] text-white";
     case "local":
-      return "agent-provider-local";
+      return "bg-gradient-to-br from-[#6b7280] to-[#9ca3af] text-white";
     default:
-      return "agent-provider-claude";
+      return "bg-gradient-to-br from-[#d97706] to-[#f59e0b] text-white";
   }
 }
 
@@ -114,15 +114,15 @@ function ProcessCard({ process, isTerminated = false }: ProcessCardProps) {
   return (
     <Link
       to={`/projects/${process.projectId}/sessions/${process.sessionId}`}
-      className={`agent-card ${isTerminated ? "agent-card-terminated" : ""}`}
+      className={`block w-full border border-[var(--border-color)] rounded-[var(--radius-md)] bg-[var(--bg-secondary)] p-6 text-left no-underline text-inherit transition-[border-color] duration-150 hover:border-[var(--border-hover)] ${isTerminated ? "border-dashed opacity-70" : ""}`}
     >
-      <div className="agent-card-header">
-        <div className="agent-card-title">
-          <span className="agent-card-session-title">
+      <div className="flex flex-col gap-[var(--space-1)]">
+        <div className="flex min-w-0 items-center gap-[var(--space-2)]">
+          <span className="overflow-hidden text-ellipsis whitespace-nowrap font-medium text-[var(--text-primary)]">
             {process.sessionTitle || t("agentsUntitled" as never)}
           </span>
           <span
-            className={`agent-provider-badge ${getProviderBadgeClass(process.provider)}`}
+            className={`shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-semibold uppercase tracking-wider ${getProviderBadgeClass(process.provider)}`}
           >
             {getProviderLabel(process.provider, t)}
           </span>
@@ -133,16 +133,18 @@ function ProcessCard({ process, isTerminated = false }: ProcessCardProps) {
             />
           ) : (
             <span
-              className={`agent-state-badge ${getStateBadgeClass(process.state)}`}
+              className={`shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium ${getStateBadgeClass(process.state)}`}
             >
               {getStateLabel(process.state, t)}
             </span>
           )}
         </div>
-        <div className="agent-card-meta">
-          <span className="agent-card-project">{process.projectName}</span>
+        <div className="flex items-center gap-[var(--space-2)]">
+          <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+            {process.projectName}
+          </span>
           {!isTerminated && (
-            <span className="agent-card-uptime">
+            <span className="shrink-0 [font-size:var(--font-size-sm)] font-mono text-[var(--text-muted)]">
               {formatUptime(process.startedAt)}
             </span>
           )}
@@ -155,31 +157,33 @@ function ProcessCard({ process, isTerminated = false }: ProcessCardProps) {
       {(process.permissionMode ||
         process.queueDepth > 0 ||
         process.terminationReason) && (
-        <div className="agent-card-details">
+        <div className="mt-[var(--space-3)] border-t border-[var(--border-subtle)] pt-[var(--space-3)]">
           {process.permissionMode && (
-            <div className="agent-detail-row">
-              <span className="agent-detail-label">
+            <div className="flex items-start justify-between gap-[var(--space-3)] py-[var(--space-1)]">
+              <span className="shrink-0 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
                 {t("agentsPermissionMode" as never)}
               </span>
-              <span className="agent-detail-value">
+              <span className="break-all text-right [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
                 {process.permissionMode}
               </span>
             </div>
           )}
           {process.queueDepth > 0 && (
-            <div className="agent-detail-row">
-              <span className="agent-detail-label">
+            <div className="flex items-start justify-between gap-[var(--space-3)] py-[var(--space-1)]">
+              <span className="shrink-0 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
                 {t("agentsMessagesQueued" as never)}
               </span>
-              <span className="agent-detail-value">{process.queueDepth}</span>
+              <span className="break-all text-right [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
+                {process.queueDepth}
+              </span>
             </div>
           )}
           {process.terminationReason && (
-            <div className="agent-detail-row">
-              <span className="agent-detail-label">
+            <div className="flex items-start justify-between gap-[var(--space-3)] py-[var(--space-1)]">
+              <span className="shrink-0 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
                 {t("agentsStopReason" as never)}
               </span>
-              <span className="agent-detail-value">
+              <span className="break-all text-right [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
                 {process.terminationReason}
               </span>
             </div>
@@ -204,13 +208,17 @@ export function AgentsPage() {
 
   return (
     <div
-      className={isWideScreen ? "main-content-wrapper" : "main-content-mobile"}
+      className={
+        isWideScreen
+          ? "flex min-h-0 min-w-0 flex-1 justify-center overflow-hidden"
+          : "flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-hidden"
+      }
     >
       <div
         className={
           isWideScreen
-            ? "main-content-constrained"
-            : "main-content-mobile-inner"
+            ? "flex h-dvh w-full flex-col"
+            : "flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-hidden"
         }
       >
         <PageHeader
@@ -218,28 +226,35 @@ export function AgentsPage() {
           onOpenSidebar={openSidebar}
         />
 
-        <main className="page-scroll-container">
-          <div className="page-content-inner">
+        <main className="flex-1 min-h-0 min-w-0 w-full overflow-x-hidden overflow-y-auto [-webkit-overflow-scrolling:touch]">
+          <div className="box-border min-w-0 w-full px-6 py-8 md:px-10 md:py-10">
             {loading && (
-              <p className="loading">{t("agentsLoading" as never)}</p>
+              <p className="p-3 [font-size:var(--font-size-sm)] italic text-[var(--text-muted)]">
+                {t("agentsLoading" as never)}
+              </p>
             )}
 
             {error && (
-              <p className="error">
+              <p className="p-3 [font-size:var(--font-size-sm)] text-[var(--error-color)]">
                 {t("agentsError" as never, { message: error.message })}
               </p>
             )}
 
             {!loading && !error && (
               <>
-                <section className="agents-section">
-                  <h2>{t("agentsSectionActive" as never)}</h2>
+                <section className="mb-12">
+                  <h2
+                    className="m-0 mb-4 text-[2rem] text-[var(--text-primary)]"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {t("agentsSectionActive" as never)}
+                  </h2>
                   {activeProcesses.length === 0 ? (
-                    <p className="agents-empty">
+                    <p className="p-[var(--space-3)] italic text-[var(--text-muted)]">
                       {t("agentsEmptyActive" as never)}
                     </p>
                   ) : (
-                    <div className="agents-list">
+                    <div className="flex flex-col gap-[var(--space-2)]">
                       {activeProcesses.map((process) => (
                         <ProcessCard key={process.id} process={process} />
                       ))}
@@ -247,14 +262,19 @@ export function AgentsPage() {
                   )}
                 </section>
 
-                <section className="agents-section">
-                  <h2>{t("agentsSectionIdle" as never)}</h2>
+                <section className="mb-12">
+                  <h2
+                    className="m-0 mb-4 text-[2rem] text-[var(--text-primary)]"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {t("agentsSectionIdle" as never)}
+                  </h2>
                   {idleProcesses.length === 0 ? (
-                    <p className="agents-empty">
+                    <p className="p-[var(--space-3)] italic text-[var(--text-muted)]">
                       {t("agentsEmptyIdle" as never)}
                     </p>
                   ) : (
-                    <div className="agents-list">
+                    <div className="flex flex-col gap-[var(--space-2)]">
                       {idleProcesses.map((process) => (
                         <ProcessCard key={process.id} process={process} />
                       ))}
@@ -262,14 +282,19 @@ export function AgentsPage() {
                   )}
                 </section>
 
-                <section className="agents-section">
-                  <h2>{t("agentsSectionStopped" as never)}</h2>
+                <section className="mb-12">
+                  <h2
+                    className="m-0 mb-4 text-[2rem] text-[var(--text-primary)]"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {t("agentsSectionStopped" as never)}
+                  </h2>
                   {terminatedProcesses.length === 0 ? (
-                    <p className="agents-empty">
+                    <p className="p-[var(--space-3)] italic text-[var(--text-muted)]">
                       {t("agentsEmptyStopped" as never)}
                     </p>
                   ) : (
-                    <div className="agents-list">
+                    <div className="flex flex-col gap-[var(--space-2)]">
                       {terminatedProcesses.map((process) => (
                         <ProcessCard
                           key={process.id}

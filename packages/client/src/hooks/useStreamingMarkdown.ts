@@ -64,7 +64,7 @@ export interface PendingEvent {
  *
  * // Attach refs to DOM elements
  * <div ref={containerRef} />
- * <span ref={pendingRef} className="streaming-pending" />
+ * <span ref={pendingRef} className="opacity-70" />
  *
  * // Call handlers when events arrive
  * onAugment({ blockIndex: 0, html: '<p>Hello</p>', type: 'paragraph' });
@@ -130,7 +130,7 @@ export function useStreamingMarkdown(): StreamingMarkdownState & {
 
     // Create new block element
     const blockElement = document.createElement("div");
-    blockElement.className = "streaming-block";
+    blockElement.dataset.streamingBlock = "true";
     blockElement.dataset.blockIndex = String(blockIndex);
     blockElement.innerHTML = html;
 

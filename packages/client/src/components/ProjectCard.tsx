@@ -53,60 +53,51 @@ export function ProjectCard({
     <li className="project-card">
       <Link
         to={`${basePath}/sessions?project=${project.id}`}
-        className="project-card__link"
+        className="block p-6 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-lg)] no-underline transition-colors duration-150 hover:bg-[var(--bg-hover)]"
       >
-        <div className="project-card__header">
-          <strong className="project-card__name">
+        <div className="flex items-start justify-between mb-3">
+          <h3
+            className="flex items-center gap-2 text-[var(--text-primary)] text-xl font-medium m-0"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
             {needsAttentionCount > 0 && (
-              <span className="project-card__attention-badge">
+              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 bg-[var(--attention-color)] text-white rounded-full text-xs font-semibold">
                 {needsAttentionCount}
               </span>
             )}
             {project.name}
-          </strong>
+          </h3>
           <button
             type="button"
-            className="project-card__new-session"
+            className="flex items-center justify-center w-8 h-8 p-0 bg-transparent border border-[var(--border-color)] rounded-full text-[var(--text-muted)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
             onClick={handleNewSession}
             title="New session"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
+            <span className="text-sm font-bold">+</span>
           </button>
         </div>
-        <div className="project-card__meta">
-          <span className="project-card__path" title={project.path}>
+        <div className="flex flex-col gap-1.5">
+          <span
+            className="text-sm text-[var(--text-muted)] truncate"
+            title={project.path}
+          >
             {shortenPath(project.path)}
           </span>
-          <span className="project-card__stats">
-            <span className="project-card__sessions">
+          <span className="flex items-center gap-2 text-xs tracking-wide uppercase text-[var(--text-dimmed)]">
+            <span>
               {project.sessionCount} session
               {project.sessionCount !== 1 ? "s" : ""}
             </span>
             {thinkingCount > 0 && (
-              <span className="project-card__thinking">
+              <span className="flex items-center gap-1">
                 <ThinkingIndicator />
                 <span>{thinkingCount}</span>
               </span>
             )}
             {project.lastActivity && (
               <>
-                <span className="project-card__separator">·</span>
-                <span className="project-card__time">
-                  {formatRelativeTime(project.lastActivity)}
-                </span>
+                <span>·</span>
+                <span>{formatRelativeTime(project.lastActivity)}</span>
               </>
             )}
           </span>

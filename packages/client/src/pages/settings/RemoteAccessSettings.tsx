@@ -19,9 +19,9 @@ export function RemoteAccessSettings() {
 
   const persistSessionsToggle = (
     <>
-      <div className="settings-group">
-        <div className="settings-item">
-          <div className="settings-item-info">
+      <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
+        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-1">
             <strong>{t("developmentPersistRemoteTitle")}</strong>
             <p>
               {t("developmentPersistRemoteDescriptionPrefix")}{" "}
@@ -29,9 +29,10 @@ export function RemoteAccessSettings() {
               {t("developmentPersistRemoteDescriptionSuffix")}
             </p>
           </div>
-          <label className="toggle-switch">
+          <label className="relative inline-block h-6 w-11 shrink-0 cursor-pointer">
             <input
               type="checkbox"
+              className="peer sr-only"
               checked={settings?.persistRemoteSessionsToDisk ?? false}
               disabled={isLoading}
               onChange={(e) =>
@@ -41,12 +42,15 @@ export function RemoteAccessSettings() {
                 )
               }
             />
-            <span className="toggle-slider" />
+            <span className="absolute inset-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-hover)] transition-all duration-200 peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:bg-[var(--accent-color,#3b82f6)]" />
+            <span className="absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-[var(--text-muted)] transition-all duration-200 peer-checked:translate-x-5 peer-checked:bg-white" />
           </label>
         </div>
       </div>
 
-      {error && <p className="settings-warning">{error}</p>}
+      {error && (
+        <p className="text-xs text-[var(--warning-color)] mt-1">{error}</p>
+      )}
     </>
   );
 
@@ -62,33 +66,38 @@ export function RemoteAccessSettings() {
       t("remoteAccessDefaultHost");
 
     return (
-      <section className="settings-section">
-        <h2>{t("remoteAccessConnectedTitle")}</h2>
-        <p className="settings-section-description">
+      <section className="flex flex-col gap-8 mb-12">
+        <h2
+          style={{ fontFamily: "var(--font-display)" }}
+          className="text-[2rem] text-[var(--text-primary)] mb-2"
+        >
+          {t("remoteAccessConnectedTitle")}
+        </h2>
+        <p className="mb-[var(--space-3)] text-sm text-[var(--text-muted)]">
           {t("remoteAccessConnectedDescription")}
         </p>
-        <div className="settings-group">
-          <div className="settings-item">
-            <div className="settings-item-info">
+        <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
+          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+            <div className="flex flex-col gap-1">
               <strong>{t("remoteAccessCurrentHostTitle")}</strong>
               <p>{displayName}</p>
             </div>
             <button
               type="button"
-              className="settings-button"
+              className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
               onClick={handleSwitchHost}
             >
               {t("sidebarSwitchHost")}
             </button>
           </div>
-          <div className="settings-item">
-            <div className="settings-item-info">
+          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+            <div className="flex flex-col gap-1">
               <strong>{t("remoteAccessLogoutTitle")}</strong>
               <p>{t("remoteAccessLogoutDescription")}</p>
             </div>
             <button
               type="button"
-              className="settings-button settings-button-danger"
+              className="px-[var(--space-3)] py-[var(--space-2)] rounded-[var(--radius-sm)] text-sm cursor-pointer transition-colors duration-150 whitespace-nowrap border bg-[var(--error-color)] border-[var(--error-color)] text-white hover:bg-[var(--error-hover,#b91c1c)] hover:border-[var(--error-hover,#b91c1c)] disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => remoteConnection.disconnect()}
             >
               {t("remoteAccessLogout")}
@@ -102,7 +111,7 @@ export function RemoteAccessSettings() {
 
   // Server-side: show relay configuration
   return (
-    <section className="settings-section">
+    <section className="flex flex-col gap-8 mb-12">
       <RemoteAccessSetup
         title={t("remoteAccessConnectedTitle")}
         description={t("remoteAccessSetupDescription")}

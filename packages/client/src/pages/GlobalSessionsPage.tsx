@@ -1,8 +1,7 @@
 import { ALL_PROVIDERS, type ProviderName } from "@yep-anywhere/shared";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { type GlobalSessionItem, api } from "../api/client";
-import { BulkActionBar } from "../components/BulkActionBar";
+import type { GlobalSessionItem } from "../api/client";
 import {
   FilterDropdown,
   type FilterOption,
@@ -14,10 +13,7 @@ import { useGlobalSessions } from "../hooks/useGlobalSessions";
 import { useRemoteBasePath } from "../hooks/useRemoteBasePath";
 import { useI18n } from "../i18n";
 import { useNavigationLayout } from "../layouts";
-import { getSessionDisplayTitle, toUrlProjectId } from "../utils";
-
-// Long-press threshold for entering selection mode on mobile
-const LONG_PRESS_MS = 500;
+import { getSessionDisplayTitle } from "../utils";
 
 // Status filter options
 type StatusFilter = "all" | "unread" | "starred" | "archived";
@@ -27,8 +23,8 @@ type AgeFilter = "3" | "7" | "14" | "30";
 
 // Provider colors for filter dropdown (matching ProviderBadge)
 const PROVIDER_COLORS: Record<ProviderName, string> = {
-  claude: "var(--app-yep-green)",
-  "claude-ollama": "var(--app-yep-green)", // Same as Claude
+  claude: "var(--accent-rust)",
+  "claude-ollama": "var(--accent-rust)", // Same as Claude
   codex: "#10a37f",
   "codex-oss": "#f97316",
   gemini: "#4285f4",
@@ -39,7 +35,6 @@ const PROVIDER_COLORS: Record<ProviderName, string> = {
 /**
  * Global sessions page showing all sessions across all projects.
  * Supports filtering by project, status, provider, and search query.
- * Includes multi-select mode with bulk actions.
  */
 export function GlobalSessionsPage() {
   const { t } = useI18n();
@@ -306,235 +301,8 @@ export function GlobalSessionsPage() {
     }));
   }, [stats.executorCounts, projectFilter, t]);
 
-  // Selection state for multi-select mode
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [isBulkActionPending, setIsBulkActionPending] = useState(false);
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressSessionRef = useRef<string | null>(null);
-  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
-
-  // Selection handlers
-  const handleSelect = useCallback((sessionId: string, selected: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (selected) {
-        next.add(sessionId);
-      } else {
-        next.delete(sessionId);
-      }
-      // Exit selection mode when nothing is selected
-      if (next.size === 0) {
-        setIsSelectionMode(false);
-      }
-      return next;
-    });
-  }, []);
-
-  const handleSelectAll = useCallback(() => {
-    setSelectedIds(new Set(filteredSessions.map((s) => s.id)));
-    setIsSelectionMode(true);
-  }, [filteredSessions]);
-
-  const handleClearSelection = useCallback(() => {
-    setSelectedIds(new Set());
-    setIsSelectionMode(false);
-  }, []);
-
-  // Long-press handlers for mobile selection mode
-  const handleLongPressStart = useCallback(
-    (sessionId: string, e: React.TouchEvent | React.MouseEvent) => {
-      // Already in selection mode or on desktop - don't start long-press
-      if (isSelectionMode || isWideScreen) return;
-
-      // Record starting position to detect movement (scrolling)
-      if ("touches" in e) {
-        const touch = e.touches[0];
-        if (touch) {
-          touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
-        }
-      } else if ("clientX" in e) {
-        touchStartPosRef.current = { x: e.clientX, y: e.clientY };
-      }
-
-      longPressSessionRef.current = sessionId;
-      longPressTimerRef.current = setTimeout(() => {
-        // Enter selection mode and select this session
-        setIsSelectionMode(true);
-        setSelectedIds(new Set([sessionId]));
-        longPressSessionRef.current = null;
-        touchStartPosRef.current = null;
-      }, LONG_PRESS_MS);
-    },
-    [isSelectionMode, isWideScreen],
-  );
-
-  const handleLongPressEnd = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    longPressSessionRef.current = null;
-    touchStartPosRef.current = null;
-  }, []);
-
-  // Cancel long press if user moves finger (scrolling)
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!touchStartPosRef.current || !longPressTimerRef.current) return;
-
-    const touch = e.touches[0];
-    if (!touch) return;
-
-    const dx = touch.clientX - touchStartPosRef.current.x;
-    const dy = touch.clientY - touchStartPosRef.current.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-
-    // Cancel if moved more than 10px (scrolling threshold)
-    if (distance > 10) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-      longPressSessionRef.current = null;
-      touchStartPosRef.current = null;
-    }
-  }, []);
-
-  // Prevent native context menu during long press
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent) => {
-      // Suppress context menu if long press is active or in selection mode
-      if (longPressTimerRef.current || isSelectionMode) {
-        e.preventDefault();
-      }
-    },
-    [isSelectionMode],
-  );
-
-  // Bulk action handlers
-  const handleBulkArchive = useCallback(async () => {
-    if (isBulkActionPending) return;
-    setIsBulkActionPending(true);
-    try {
-      await Promise.all(
-        Array.from(selectedIds).map((id) =>
-          api.updateSessionMetadata(id, { archived: true }),
-        ),
-      );
-      handleClearSelection();
-    } finally {
-      setIsBulkActionPending(false);
-    }
-  }, [selectedIds, isBulkActionPending, handleClearSelection]);
-
-  const handleBulkUnarchive = useCallback(async () => {
-    if (isBulkActionPending) return;
-    setIsBulkActionPending(true);
-    try {
-      await Promise.all(
-        Array.from(selectedIds).map((id) =>
-          api.updateSessionMetadata(id, { archived: false }),
-        ),
-      );
-      handleClearSelection();
-    } finally {
-      setIsBulkActionPending(false);
-    }
-  }, [selectedIds, isBulkActionPending, handleClearSelection]);
-
-  const handleBulkStar = useCallback(async () => {
-    if (isBulkActionPending) return;
-    setIsBulkActionPending(true);
-    try {
-      await Promise.all(
-        Array.from(selectedIds).map((id) =>
-          api.updateSessionMetadata(id, { starred: true }),
-        ),
-      );
-      handleClearSelection();
-    } finally {
-      setIsBulkActionPending(false);
-    }
-  }, [selectedIds, isBulkActionPending, handleClearSelection]);
-
-  const handleBulkUnstar = useCallback(async () => {
-    if (isBulkActionPending) return;
-    setIsBulkActionPending(true);
-    try {
-      await Promise.all(
-        Array.from(selectedIds).map((id) =>
-          api.updateSessionMetadata(id, { starred: false }),
-        ),
-      );
-      handleClearSelection();
-    } finally {
-      setIsBulkActionPending(false);
-    }
-  }, [selectedIds, isBulkActionPending, handleClearSelection]);
-
-  const handleBulkMarkRead = useCallback(async () => {
-    if (isBulkActionPending) return;
-    setIsBulkActionPending(true);
-    try {
-      await Promise.all(
-        Array.from(selectedIds).map((id) => api.markSessionSeen(id)),
-      );
-      handleClearSelection();
-    } finally {
-      setIsBulkActionPending(false);
-    }
-  }, [selectedIds, isBulkActionPending, handleClearSelection]);
-
-  const handleBulkMarkUnread = useCallback(async () => {
-    if (isBulkActionPending) return;
-    setIsBulkActionPending(true);
-    try {
-      await Promise.all(
-        Array.from(selectedIds).map((id) => api.markSessionUnread(id)),
-      );
-      handleClearSelection();
-    } finally {
-      setIsBulkActionPending(false);
-    }
-  }, [selectedIds, isBulkActionPending, handleClearSelection]);
-
-  // "Archive all" for filtered results (no manual selection needed)
-  const handleArchiveAllFiltered = useCallback(async () => {
-    if (isBulkActionPending) return;
-    const archivable = filteredSessions.filter((s) => !s.isArchived);
-    if (archivable.length === 0) return;
-    setIsBulkActionPending(true);
-    try {
-      await Promise.all(
-        archivable.map((s) =>
-          api.updateSessionMetadata(s.id, { archived: true }),
-        ),
-      );
-    } finally {
-      setIsBulkActionPending(false);
-    }
-  }, [filteredSessions, isBulkActionPending]);
-
-  // Count of archivable sessions in filtered results
-  const archivableFilteredCount = useMemo(
-    () => filteredSessions.filter((s) => !s.isArchived).length,
-    [filteredSessions],
-  );
-
-  // Compute which bulk actions are applicable based on selection
-  const bulkActionState = useMemo(() => {
-    const selectedSessions = sessions.filter((s) => selectedIds.has(s.id));
-    return {
-      canArchive: selectedSessions.some((s) => !s.isArchived),
-      canUnarchive: selectedSessions.some((s) => s.isArchived),
-      canStar: selectedSessions.some((s) => !s.isStarred),
-      canUnstar: selectedSessions.some((s) => s.isStarred),
-      canMarkRead: selectedSessions.some((s) => s.hasUnread),
-      canMarkUnread: selectedSessions.some((s) => !s.hasUnread),
-    };
-  }, [sessions, selectedIds]);
-
-  // Handle search form submit
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+  // Handle search submit
+  const handleSearch = useCallback(() => {
     const newParams = new URLSearchParams(searchParams);
     if (searchInput.trim()) {
       newParams.set("q", searchInput.trim());
@@ -542,7 +310,7 @@ export function GlobalSessionsPage() {
       newParams.delete("q");
     }
     setSearchParams(newParams);
-  };
+  }, [searchInput, searchParams, setSearchParams]);
 
   // Handle project filter change
   const handleProjectFilter = useCallback(
@@ -583,13 +351,17 @@ export function GlobalSessionsPage() {
 
   return (
     <div
-      className={isWideScreen ? "main-content-wrapper" : "main-content-mobile"}
+      className={
+        isWideScreen
+          ? "flex justify-center min-w-0 h-[100dvh] overflow-hidden"
+          : "flex-1 flex flex-col min-h-0"
+      }
     >
       <div
         className={
           isWideScreen
-            ? "main-content-constrained"
-            : "main-content-mobile-inner"
+            ? "w-full flex flex-col h-[100dvh]"
+            : "flex-1 flex flex-col min-h-0"
         }
       >
         <PageHeader
@@ -598,38 +370,54 @@ export function GlobalSessionsPage() {
           onToggleSidebar={toggleSidebar}
           isWideScreen={isWideScreen}
           isSidebarCollapsed={isSidebarCollapsed}
+          rightContent={
+            <div className="relative hidden sm:block w-56 md:w-64">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                type="text"
+                className="w-full rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] py-2 pl-9 pr-4 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-dimmed)] focus:border-[var(--focus-border)]"
+                placeholder={t("globalSessionsSearchPlaceholder")}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleSearch();
+                  }
+                }}
+              />
+            </div>
+          }
         />
 
-        <main className="page-scroll-container">
-          <div className="page-content-inner">
+        <main className="flex-1 min-h-0 overflow-y-auto">
+          <div className="max-w-[1200px] mx-auto px-6 py-8 md:px-10 md:py-10">
+            {/* Page intro */}
+            <div className="mb-8">
+              <h1 className="text-4xl md:text-5xl [font-family:var(--font-display)] text-[var(--text-primary)] mb-3">
+                {t("globalSessionsTitle")}
+              </h1>
+              <p className="text-base md:text-lg text-[var(--text-muted)] max-w-2xl leading-relaxed">
+                {t("globalSessionsSubtitle")}
+              </p>
+            </div>
+
             {/* Filter bar */}
-            <div className="filter-bar">
-              <form onSubmit={handleSearch} className="filter-search-form">
-                <input
-                  type="text"
-                  className="filter-search"
-                  placeholder={t("globalSessionsSearchPlaceholder")}
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                />
-                <button type="submit" className="filter-search-button">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  </svg>
-                </button>
-              </form>
-              <div className="filter-dropdowns">
+            <div className="mb-8 flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 {projectOptions.length > 0 && (
                   <FilterDropdown
                     label={t("inboxFilterProject")}
@@ -678,7 +466,7 @@ export function GlobalSessionsPage() {
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="filter-clear-button"
+                  className="rounded-md bg-transparent px-3 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                 >
                   {t("globalSessionsClearFilters")}
                 </button>
@@ -686,32 +474,26 @@ export function GlobalSessionsPage() {
             </div>
 
             {loading && sessions.length === 0 && (
-              <p className="loading">{t("sidebarLoadingSessions")}</p>
+              <p className="py-8 text-center text-sm text-[var(--text-muted)]">
+                {t("sidebarLoadingSessions")}
+              </p>
             )}
 
             {error && (
-              <p className="error">
+              <p className="py-8 text-center text-sm text-[var(--error-color)]">
                 {t("projectsErrorPrefix")} {error.message}
               </p>
             )}
 
             {!loading && !error && isEmpty && (
-              <div className="inbox-empty">
-                <svg
-                  width="48"
-                  height="48"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-                <h3>{t("globalSessionsNoResultsTitle")}</h3>
-                <p>
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <span className="text-5xl mb-4" aria-hidden="true">
+                  &#128172;
+                </span>
+                <h3 className="text-2xl [font-family:var(--font-display)] text-[var(--text-primary)]">
+                  {t("globalSessionsNoResultsTitle")}
+                </h3>
+                <p className="text-[var(--text-muted)] mt-2">
                   {hasFilters
                     ? t("globalSessionsNoResultsFiltered")
                     : t("globalSessionsNoResultsEmpty")}
@@ -721,50 +503,11 @@ export function GlobalSessionsPage() {
 
             {!error && !isEmpty && (
               <>
-                {/* Select all header (desktop or when in selection mode) */}
-                {(isWideScreen || isSelectionMode) &&
-                  filteredSessions.length > 0 && (
-                    <div className="session-list-header">
-                      <label className="session-list-header__select-all">
-                        <input
-                          type="checkbox"
-                          checked={
-                            selectedIds.size === filteredSessions.length &&
-                            filteredSessions.length > 0
-                          }
-                          onChange={(e) =>
-                            e.target.checked
-                              ? handleSelectAll()
-                              : handleClearSelection()
-                          }
-                        />
-                        <span>
-                          {selectedIds.size > 0
-                            ? t("bulkSelectedCount", {
-                                count: selectedIds.size,
-                              })
-                            : t("globalSessionsSelectAll")}
-                        </span>
-                      </label>
-                    </div>
-                  )}
-
-                <ul
-                  className={`session-list ${isSelectionMode ? "session-list--selection-mode" : ""}`}
-                >
-                  {filteredSessions.map((session) => (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredSessions.map((session, index) => (
                     <div
                       key={session.id}
-                      onTouchStart={(e) => handleLongPressStart(session.id, e)}
-                      onTouchMove={handleTouchMove}
-                      onTouchEnd={handleLongPressEnd}
-                      onTouchCancel={handleLongPressEnd}
-                      onMouseDown={(e) =>
-                        !isWideScreen && handleLongPressStart(session.id, e)
-                      }
-                      onMouseUp={handleLongPressEnd}
-                      onMouseLeave={handleLongPressEnd}
-                      onContextMenu={handleContextMenu}
+                      className={index === 0 ? "md:col-span-2" : ""}
                     >
                       <SessionListItem
                         sessionId={session.id}
@@ -780,24 +523,8 @@ export function GlobalSessionsPage() {
                         executor={session.executor}
                         isStarred={session.isStarred}
                         isArchived={session.isArchived}
-                        mode="card"
+                        mode={index === 0 ? "card" : "grid"}
                         showContextUsage={false}
-                        isSelected={selectedIds.has(session.id)}
-                        isSelectionMode={isSelectionMode && !isWideScreen}
-                        onNavigate={() => {
-                          // In selection mode on mobile, tap toggles selection
-                          if (isSelectionMode && !isWideScreen) {
-                            handleSelect(
-                              session.id,
-                              !selectedIds.has(session.id),
-                            );
-                          }
-                        }}
-                        onSelect={
-                          isWideScreen || isSelectionMode
-                            ? handleSelect
-                            : undefined
-                        }
                         showProjectName={!projectFilter}
                         projectName={session.projectName}
                         basePath={basePath}
@@ -806,14 +533,14 @@ export function GlobalSessionsPage() {
                       />
                     </div>
                   ))}
-                </ul>
+                </div>
 
                 {hasMore && (
-                  <div className="global-sessions-load-more">
+                  <div className="flex justify-center py-4">
                     <button
                       type="button"
                       onClick={loadMore}
-                      className="global-sessions-load-more-button"
+                      className="inline-flex items-center gap-1.5 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-tertiary)] px-4 py-1.5 text-xs text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:cursor-default disabled:opacity-60"
                       disabled={loading}
                     >
                       {loading
@@ -824,29 +551,6 @@ export function GlobalSessionsPage() {
                 )}
               </>
             )}
-
-            {/* Bulk action bar */}
-            <BulkActionBar
-              selectedCount={selectedIds.size}
-              onArchive={handleBulkArchive}
-              onUnarchive={handleBulkUnarchive}
-              onStar={handleBulkStar}
-              onUnstar={handleBulkUnstar}
-              onMarkRead={handleBulkMarkRead}
-              onMarkUnread={handleBulkMarkUnread}
-              onClearSelection={handleClearSelection}
-              isPending={isBulkActionPending}
-              canArchive={bulkActionState.canArchive}
-              canUnarchive={bulkActionState.canUnarchive}
-              canStar={bulkActionState.canStar}
-              canUnstar={bulkActionState.canUnstar}
-              canMarkRead={bulkActionState.canMarkRead}
-              canMarkUnread={bulkActionState.canMarkUnread}
-              onArchiveAllFiltered={
-                hasFilters ? handleArchiveAllFiltered : undefined
-              }
-              archivableFilteredCount={archivableFilteredCount}
-            />
           </div>
         </main>
       </div>

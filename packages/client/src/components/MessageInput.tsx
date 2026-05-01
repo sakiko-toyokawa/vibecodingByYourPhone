@@ -323,129 +323,140 @@ export function MessageInput({
   );
 
   return (
-    <div className="message-input-wrapper">
+    <div className="relative">
       {/* Floating toggle button - only show when user can control collapse (not externally collapsed) */}
       {!externalCollapsed && (
         <button
           type="button"
-          className="message-input-toggle"
+          className="absolute -top-3 left-1/2 -translate-x-1/2 z-[1] w-8 h-6 flex items-center justify-center bg-[var(--bg-code)] border border-[var(--border-color)] rounded-[var(--radius-md)] text-[var(--text-muted)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] hover:border-[var(--text-muted)]"
           onClick={() => setUserCollapsed(!userCollapsed)}
           aria-label={
             userCollapsed ? t("messageInputExpand") : t("messageInputCollapse")
           }
           aria-expanded={!userCollapsed}
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={userCollapsed ? "chevron-up" : "chevron-down"}
-            aria-hidden="true"
+          <span
+            className={`text-xs transition-transform duration-200 ease ${userCollapsed ? "rotate-180" : ""}`}
           >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
+            ▼
+          </span>
         </button>
       )}
       <div
-        className={`message-input ${collapsed ? "message-input-collapsed" : ""} ${interimTranscript ? "voice-recording" : ""}`}
+        className={`flex flex-col gap-0 ${collapsed ? "mt-[var(--space-2)] opacity-70 transition-opacity duration-150 focus-within:opacity-100" : ""} ${interimTranscript ? "relative before:content-[''] before:absolute before:top-0 before:left-0 before:right-0 before:h-0.5 before:bg-red-500 before:animate-[voice-pulse_1s_ease-in-out_infinite] before:rounded-t-[20px] before:z-[1]" : ""}`}
       >
-        <textarea
-          ref={textareaRef}
-          value={displayText}
-          onChange={(e) => {
-            // If user edits while recording, only update committed text
-            // This clears interim since they're now typing
-            setInterimTranscript("");
-            setText(e.target.value);
-          }}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          placeholder={
-            externalCollapsed ? t("messageInputContinueAbove") : placeholder
-          }
-          disabled={disabled}
-          rows={collapsed ? 1 : 3}
-        />
-
-        {/* Attachment chips - show below textarea when not collapsed */}
-        {!collapsed &&
-          (attachments.length > 0 || uploadProgress.length > 0) && (
-            <div className="attachment-list">
-              {attachments.map((file) => (
-                <div key={file.id} className="attachment-chip">
-                  <span className="attachment-name" title={file.path}>
-                    {file.originalName}
-                  </span>
-                  <span className="attachment-size">
-                    {formatSize(file.size)}
-                  </span>
-                  <button
-                    type="button"
-                    className="attachment-remove"
-                    onClick={() => onRemoveAttachment?.(file.id)}
-                    aria-label={t("messageInputRemoveAttachment", {
-                      name: file.originalName,
-                    })}
-                  >
-                    x
-                  </button>
-                </div>
-              ))}
-              {uploadProgress.map((progress) => (
-                <div
-                  key={progress.fileId}
-                  className="attachment-chip uploading"
-                >
-                  <span className="attachment-name">{progress.fileName}</span>
-                  <span className="attachment-progress">
-                    {progress.percent}%
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          style={{ display: "none" }}
-          onChange={handleFileSelect}
-        />
-
-        {!collapsed && (
-          <MessageInputToolbar
-            mode={mode}
-            onModeChange={onModeChange}
-            isHeld={isHeld}
-            onHoldChange={onHoldChange}
-            supportsPermissionMode={supportsPermissionMode}
-            supportsThinkingToggle={supportsThinkingToggle}
-            canAttach={canAttach}
-            attachmentCount={attachments.length}
-            onAttachClick={() => fileInputRef.current?.click()}
-            voiceButtonRef={voiceButtonRef}
-            onVoiceTranscript={handleVoiceTranscript}
-            onInterimTranscript={handleInterimTranscript}
-            onListeningStart={() => textareaRef.current?.focus()}
-            voiceDisabled={disabled}
-            slashCommands={slashCommands}
-            onSelectSlashCommand={handleSlashCommand}
-            contextUsage={contextUsage}
-            isRunning={isRunning}
-            isThinking={isThinking}
-            onStop={onStop}
-            onSend={handleSubmit}
-            onQueue={onQueue ? handleQueue : undefined}
-            canSend={!!(text.trim() || attachments.length > 0)}
+        {/* Unified card container */}
+        <div className="flex flex-col gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-[0_1px_0_rgba(20,20,19,0.03)] overflow-hidden">
+          <textarea
+            ref={textareaRef}
+            value={displayText}
+            onChange={(e) => {
+              // If user edits while recording, only update committed text
+              // This clears interim since they're now typing
+              setInterimTranscript("");
+              setText(e.target.value);
+            }}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            placeholder={
+              externalCollapsed ? t("messageInputContinueAbove") : placeholder
+            }
             disabled={disabled}
+            rows={collapsed ? 1 : 3}
+            className={`flex-1 bg-transparent border-none text-inherit [font-family:var(--font-sans)] [font-size:var(--font-size-base)] resize-none outline-none placeholder:text-[var(--text-dimmed)] ${collapsed ? "px-3 py-2 [font-size:var(--font-size-sm)] min-h-0" : "px-4 py-3"}`}
           />
+
+          {/* Attachment chips - show below textarea when not collapsed */}
+          {!collapsed &&
+            (attachments.length > 0 || uploadProgress.length > 0) && (
+              <div className="flex flex-wrap gap-[var(--space-2)] px-4 pb-2">
+                {attachments.map((file) => (
+                  <div
+                    key={file.id}
+                    className="flex items-center gap-[var(--space-1)] px-[var(--space-2)] pl-[var(--space-2)] pr-[var(--space-1)] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl [font-size:var(--font-size-xs)]"
+                  >
+                    <span
+                      className="max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap text-[var(--text-primary)] max-sm:max-w-20"
+                      title={file.path}
+                    >
+                      {file.originalName}
+                    </span>
+                    <span className="text-[var(--text-dimmed)] shrink-0">
+                      {formatSize(file.size)}
+                    </span>
+                    <button
+                      type="button"
+                      className="flex items-center justify-center w-[18px] h-[18px] p-0 ml-[var(--space-1)] bg-transparent border-none rounded-full text-[var(--text-dimmed)] [font-size:var(--font-size-sm)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                      onClick={() => onRemoveAttachment?.(file.id)}
+                      aria-label={t("messageInputRemoveAttachment", {
+                        name: file.originalName,
+                      })}
+                    >
+                      x
+                    </button>
+                  </div>
+                ))}
+                {uploadProgress.map((progress) => (
+                  <div
+                    key={progress.fileId}
+                    className="flex items-center gap-[var(--space-1)] px-[var(--space-2)] pl-[var(--space-2)] pr-[var(--space-1)] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl [font-size:var(--font-size-xs)] opacity-70"
+                  >
+                    <span className="max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap text-[var(--text-primary)] max-sm:max-w-20">
+                      {progress.fileName}
+                    </span>
+                    <span className="text-[var(--success-color)] font-medium shrink-0">
+                      {progress.percent}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            style={{ display: "none" }}
+            onChange={handleFileSelect}
+          />
+
+          {!collapsed && (
+            <MessageInputToolbar
+              mode={mode}
+              onModeChange={onModeChange}
+              isHeld={isHeld}
+              onHoldChange={onHoldChange}
+              supportsPermissionMode={supportsPermissionMode}
+              supportsThinkingToggle={supportsThinkingToggle}
+              canAttach={canAttach}
+              attachmentCount={attachments.length}
+              onAttachClick={() => fileInputRef.current?.click()}
+              voiceButtonRef={voiceButtonRef}
+              onVoiceTranscript={handleVoiceTranscript}
+              onInterimTranscript={handleInterimTranscript}
+              onListeningStart={() => textareaRef.current?.focus()}
+              voiceDisabled={disabled}
+              slashCommands={slashCommands}
+              onSelectSlashCommand={handleSlashCommand}
+              contextUsage={contextUsage}
+              isRunning={isRunning}
+              isThinking={isThinking}
+              onStop={onStop}
+              onSend={handleSubmit}
+              onQueue={onQueue ? handleQueue : undefined}
+              canSend={!!(text.trim() || attachments.length > 0)}
+              disabled={disabled}
+            />
+          )}
+        </div>
+
+        {/* Disclaimer */}
+        {!collapsed && (
+          <p className="mx-auto text-center text-[11px] text-[var(--text-dimmed)] mt-2">
+            AI-generated content may be inaccurate. Please verify important
+            information.
+          </p>
         )}
       </div>
     </div>

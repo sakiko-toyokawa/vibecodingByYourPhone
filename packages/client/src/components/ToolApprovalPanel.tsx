@@ -209,49 +209,40 @@ export function ToolApprovalPanel({
   );
 
   return (
-    <div className="tool-approval-wrapper">
+    <div className="my-2 rounded-lg border border-gray-200/60 overflow-hidden bg-white shadow-sm">
       {/* Floating toggle button */}
       <button
         type="button"
-        className={`tool-approval-toggle ${collapsed ? "has-pending" : ""}`}
+        className={`flex items-center justify-center w-full py-1.5 bg-gray-50 border-b border-gray-100 text-gray-400 cursor-pointer transition-colors duration-150 hover:bg-gray-100 hover:text-gray-600 ${collapsed ? "border-amber-300 bg-amber-50/50" : ""}`}
         onClick={() => onCollapsedChange?.(!collapsed)}
         aria-label={
           collapsed ? t("toolApprovalExpand") : t("toolApprovalCollapse")
         }
         aria-expanded={!collapsed}
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={collapsed ? "chevron-up" : "chevron-down"}
-          aria-hidden="true"
+        <span
+          className={`transition-transform duration-150 ${collapsed ? "" : "rotate-180"}`}
         >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
+          &#x25bc;
+        </span>
       </button>
 
       {!collapsed && (
-        <div className="tool-approval-panel">
-          <div className="tool-approval-header">
+        <div className="p-3">
+          <div className="flex flex-col gap-1 mb-3">
             {isExitPlanMode(request.toolName) ? (
               <>
-                <span className="tool-approval-title">
+                <span className="font-semibold text-sm text-gray-800">
                   {t("toolApprovalPlanTitle")}
                 </span>
-                <span className="tool-approval-subtitle">
+                <span className="text-xs text-gray-500">
                   {t("toolApprovalPlanSubtitle")}
                 </span>
               </>
             ) : (
               <>
-                <div className="tool-approval-question-row">
-                  <span className="tool-approval-question">
+                <div className="flex items-start gap-2 flex-wrap">
+                  <span className="text-sm text-gray-700 flex-1 min-w-0">
                     {t("toolApprovalAllow", {
                       tool: request.toolName ?? "",
                       summary: summary ?? "",
@@ -260,7 +251,7 @@ export function ToolApprovalPanel({
                   {showViewDetails && (
                     <button
                       type="button"
-                      className="tool-approval-view-details"
+                      className="shrink-0 text-xs text-blue-500 hover:text-blue-600 underline cursor-pointer bg-transparent border-none p-0"
                       onClick={() => setShowPreviewModal(true)}
                     >
                       {t("toolApprovalViewDetails")}
@@ -274,7 +265,7 @@ export function ToolApprovalPanel({
                     })}
                     onClose={() => setShowPreviewModal(false)}
                   >
-                    <div className="tool-use-expanded">
+                    <div className="pt-2">
                       {toolRegistry.renderToolUse(
                         request.toolName,
                         request.toolInput,
@@ -287,34 +278,40 @@ export function ToolApprovalPanel({
             )}
           </div>
 
-          <div className="tool-approval-options">
+          <div className="flex flex-col gap-1.5">
             {isExitPlanMode(request.toolName) ? (
               <>
                 <button
                   type="button"
-                  className="tool-approval-option primary"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--accent-rust)] text-white text-sm font-medium cursor-pointer transition-opacity duration-150 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={handleApproveAcceptEdits}
                   disabled={!armed || submitting || !onApproveAcceptEdits}
                 >
-                  <kbd>1</kbd>
+                  <kbd className="px-1.5 py-0.5 bg-white/20 rounded text-xs font-mono">
+                    1
+                  </kbd>
                   <span>{t("toolApprovalYesAuto")}</span>
                 </button>
                 <button
                   type="button"
-                  className="tool-approval-option"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md bg-gray-100 text-gray-700 text-sm cursor-pointer transition-colors duration-150 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={handleApprove}
                   disabled={!armed || submitting}
                 >
-                  <kbd>2</kbd>
+                  <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs font-mono text-gray-600">
+                    2
+                  </kbd>
                   <span>{t("toolApprovalYesManual")}</span>
                 </button>
                 <button
                   type="button"
-                  className="tool-approval-option"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md bg-gray-100 text-gray-700 text-sm cursor-pointer transition-colors duration-150 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={handleDeny}
                   disabled={!armed || submitting}
                 >
-                  <kbd>3</kbd>
+                  <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs font-mono text-gray-600">
+                    3
+                  </kbd>
                   <span>{t("toolApprovalNoKeepPlanning")}</span>
                 </button>
               </>
@@ -322,33 +319,39 @@ export function ToolApprovalPanel({
               <>
                 <button
                   type="button"
-                  className="tool-approval-option primary"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--accent-rust)] text-white text-sm font-medium cursor-pointer transition-opacity duration-150 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={handleApprove}
                   disabled={!armed || submitting}
                 >
-                  <kbd>1</kbd>
+                  <kbd className="px-1.5 py-0.5 bg-white/20 rounded text-xs font-mono">
+                    1
+                  </kbd>
                   <span>{t("toolApprovalYes")}</span>
                 </button>
 
                 {isEditTool && onApproveAcceptEdits && (
                   <button
                     type="button"
-                    className="tool-approval-option"
+                    className="flex items-center gap-2 px-3 py-2 rounded-md bg-gray-100 text-gray-700 text-sm cursor-pointer transition-colors duration-150 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={handleApproveAcceptEdits}
                     disabled={!armed || submitting}
                   >
-                    <kbd>2</kbd>
+                    <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs font-mono text-gray-600">
+                      2
+                    </kbd>
                     <span>{t("toolApprovalYesDontAsk")}</span>
                   </button>
                 )}
 
                 <button
                   type="button"
-                  className="tool-approval-option"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md bg-gray-100 text-gray-700 text-sm cursor-pointer transition-colors duration-150 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={handleDeny}
                   disabled={!armed || submitting}
                 >
-                  <kbd>{isEditTool && onApproveAcceptEdits ? "3" : "2"}</kbd>
+                  <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs font-mono text-gray-600">
+                    {isEditTool && onApproveAcceptEdits ? "3" : "2"}
+                  </kbd>
                   <span>{t("toolApprovalNo")}</span>
                 </button>
               </>
@@ -357,7 +360,7 @@ export function ToolApprovalPanel({
             {onDenyWithFeedback && !showFeedback && (
               <button
                 type="button"
-                className="tool-approval-option feedback-toggle"
+                className="px-3 py-2 rounded-md bg-transparent text-gray-500 text-sm cursor-pointer transition-colors duration-150 hover:bg-gray-50 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-left"
                 onClick={() => setShowFeedback(true)}
                 disabled={!armed || submitting}
               >
@@ -366,7 +369,7 @@ export function ToolApprovalPanel({
             )}
 
             {onDenyWithFeedback && showFeedback && (
-              <div className="tool-approval-feedback">
+              <div className="flex gap-2 mt-1">
                 <input
                   ref={feedbackInputRef}
                   type="text"
@@ -374,11 +377,11 @@ export function ToolApprovalPanel({
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
                   disabled={!armed || submitting}
-                  className="tool-approval-feedback-input"
+                  className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-700 outline-none focus:border-gray-400"
                 />
                 <button
                   type="button"
-                  className="tool-approval-feedback-submit"
+                  className="px-4 py-2 rounded-md bg-gray-800 text-white text-sm font-medium cursor-pointer transition-opacity duration-150 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                   onClick={handleDenyWithFeedback}
                   disabled={!armed || submitting || !feedback.trim()}
                 >

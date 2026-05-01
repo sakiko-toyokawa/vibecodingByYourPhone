@@ -132,14 +132,20 @@ const fallbackToolRenderer: ToolRenderer = {
   tool: "__fallback__",
   renderToolUse(input, _context) {
     return (
-      <pre className="tool-fallback">
+      <pre className="overflow-x-auto rounded-[16px] border border-black/10 bg-[#f7f2e8]/90 p-4 [font-family:var(--font-mono)] text-[13px] leading-6 text-[#2f2923] shadow-[0_1px_0_rgba(20,20,19,0.03)]">
         <code>{JSON.stringify(input, null, 2)}</code>
       </pre>
     );
   },
   renderToolResult(result, isError, _context) {
     return (
-      <pre className={`tool-fallback ${isError ? "tool-fallback-error" : ""}`}>
+      <pre
+        className={`overflow-x-auto rounded-[16px] border p-4 [font-family:var(--font-mono)] text-[13px] leading-6 shadow-[0_1px_0_rgba(20,20,19,0.03)] ${
+          isError
+            ? "border-[#edd2c8] bg-[#fbefea] text-[#8e4336]"
+            : "border-black/10 bg-[#f7f2e8]/90 text-[#2f2923]"
+        }`}
+      >
         <code>{JSON.stringify(result, null, 2)}</code>
       </pre>
     );

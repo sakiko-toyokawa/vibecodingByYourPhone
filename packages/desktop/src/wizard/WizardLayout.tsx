@@ -61,56 +61,30 @@ export function WizardLayout({ onComplete }: Props) {
   };
 
   return (
-    <div
-      style={{
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <div className="flex h-screen flex-col">
       {/* Title bar drag region */}
       <div
         data-tauri-drag-region
-        style={{
-          height: 32,
-          flexShrink: 0,
-        }}
+        className="shrink-0"
+        style={{ height: 32 }}
       />
 
       {/* Progress dots */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          gap: 8,
-          padding: "0 0 24px",
-        }}
+      <div className="flex justify-center gap-2 pb-6"
       >
         {STEPS.map((_, i) => (
           <div
             key={i}
+            className="h-2 w-2 rounded-full transition-colors duration-200"
             style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
               background: i <= step ? "var(--accent)" : "var(--border)",
-              transition: "background 0.2s",
             }}
           />
         ))}
       </div>
 
       {/* Step content */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "0 48px 48px",
-          overflow: "auto",
-        }}
+      <div className="flex flex-1 flex-col items-center justify-center overflow-auto px-12 pb-12"
       >
         {renderStep()}
       </div>

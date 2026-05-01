@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import type { ZodError } from "zod";
 import { useSchemaValidationContext } from "../../../contexts/SchemaValidationContext";
 import {
@@ -13,7 +13,7 @@ import type { BashInput, BashResult, ToolRenderer } from "./types";
 const MAX_LINES_COLLAPSED = 20;
 const MAX_LINES_TOOL_USE = 12;
 const DEFAULT_PREVIEW_LINES = 4;
-const DEFAULT_PREVIEW_MAX_CHARS = 400; // 4 * 100 chars
+const DEFAULT_PREVIEW_MAX_CHARS = 400;
 const CODEX_PREVIEW_LINES = 2;
 const CODEX_PREVIEW_MAX_CHARS = 220;
 
@@ -22,10 +22,33 @@ const CODEX_NOISE_PATTERNS = [
   /^this will stop working in the next major version of npm\.?$/i,
 ];
 
-/**
- * Normalize bash result - handles both structured objects and plain strings
- * SDK may return a plain string for errors instead of { stdout, stderr }
- */
+const terminalFrameClasses =
+  "rounded-[16px] border border-black/10 bg-[#171717] px-4 py-3 [font-family:var(--font-mono)] text-[13px] leading-6 text-[#e8e3d8] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]";
+
+const subtleButtonClasses =
+  "min-h-[40px] rounded-full border border-black/10 bg-white/85 px-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7c6f63] transition-colors hover:bg-[#f7f2e8] hover:text-[#2f2923]";
+
+function StatusPill({
+  tone,
+  children,
+}: {
+  tone: "amber" | "blue";
+  children: ReactNode;
+}) {
+  const tones = {
+    amber: "border-[#edd2a8] bg-[#fbf2df] text-[#9d622c]",
+    blue: "border-[#cad7ea] bg-[#edf3fb] text-[#46698d]",
+  };
+
+  return (
+    <span
+      className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${tones[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
 function normalizeBashResult(
   result: BashResult | string | undefined,
   isError: boolean,
@@ -34,7 +57,6 @@ function normalizeBashResult(
     return { stdout: "", stderr: "", interrupted: false, isImage: false };
   }
   if (typeof result === "string") {
-    // Plain string result - put in stderr if error, stdout otherwise
     return {
       stdout: isError ? "" : result,
       stderr: isError ? result : "",
@@ -64,11 +86,7 @@ function sanitizeOutputForPreview(output: string, provider?: string): string {
     return !CODEX_NOISE_PATTERNS.some((pattern) => pattern.test(trimmed));
   });
 
-  if (filtered.length === 0) {
-    return normalized;
-  }
-
-  return filtered.join("\n");
+  return filtered.length === 0 ? normalized : filtered.join("\n");
 }
 
 function getPreviewLimits(provider?: string): {
@@ -88,9 +106,22 @@ function getPreviewLimits(provider?: string): {
   };
 }
 
-/**
- * Modal content for viewing full bash input and output
- */
+function CodePanel({
+  children,
+  tone = "default",
+}: {
+  children: ReactNode;
+  tone?: "default" | "error";
+}) {
+  return (
+    <pre
+      className={`${terminalFrameClasses} overflow-x-auto whitespace-pre-wrap break-words ${tone === "error" ? "border-[#6d342b] text-[#f3b3a1]" : ""}`}
+    >
+      <code>{children}</code>
+    </pre>
+  );
+}
+
 function BashModalContent({
   input,
   result: rawResult,
@@ -100,7 +131,6 @@ function BashModalContent({
   result: BashResult | string | undefined;
   isError: boolean;
 }) {
-  // Normalize result to handle both structured and string formats
   const result = rawResult
     ? normalizeBashResult(rawResult, isError)
     : undefined;
@@ -109,62 +139,42 @@ function BashModalContent({
   const stderr = result?.stderr || "";
 
   return (
-    <div className="bash-modal-sections">
-      <div className="bash-modal-section">
-        <div className="bash-modal-label">Command</div>
-        <div className="bash-modal-code">
-          <pre className="code-block">
-            <code>{command}</code>
-          </pre>
+    <div className="flex flex-col gap-4">
+      <section className="flex flex-col gap-2">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8f8578]">
+          Command
         </div>
-      </div>
+        <CodePanel>{command}</CodePanel>
+      </section>
       {stdout && (
-        <div className="bash-modal-section">
-          <div className="bash-modal-label">Output</div>
-          <div className="bash-modal-code">
-            <pre className="code-block">
-              <code>{stdout}</code>
-            </pre>
+        <section className="flex flex-col gap-2">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8f8578]">
+            Output
           </div>
-        </div>
+          <CodePanel>{stdout}</CodePanel>
+        </section>
       )}
       {stderr && (
-        <div className="bash-modal-section">
-          <div className="bash-modal-label bash-modal-label-error">
+        <section className="flex flex-col gap-2">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#b05d4e]">
             {isError ? "Error" : "Stderr"}
           </div>
-          <div className="bash-modal-code bash-modal-code-error">
-            <pre className="code-block code-block-error">
-              <code>{stderr}</code>
-            </pre>
-          </div>
-        </div>
+          <CodePanel tone="error">{stderr}</CodePanel>
+        </section>
       )}
       {!stdout && !stderr && result && !result.interrupted && (
-        <div className="bash-modal-section">
-          <div className="bash-modal-label">Output</div>
-          <div className="bash-modal-empty">No output</div>
-        </div>
+        <div className="text-sm italic text-[#8f8578]">No output</div>
       )}
-      {result?.interrupted && (
-        <div className="bash-modal-section">
-          <span className="badge badge-warning">Interrupted</span>
-        </div>
-      )}
+      {result?.interrupted && <StatusPill tone="amber">Interrupted</StatusPill>}
       {result?.backgroundTaskId && (
-        <div className="bash-modal-section">
-          <span className="badge badge-info">
-            Background: {result.backgroundTaskId}
-          </span>
-        </div>
+        <StatusPill tone="blue">
+          Background: {result.backgroundTaskId}
+        </StatusPill>
       )}
     </div>
   );
 }
 
-/**
- * Bash tool use - shows command in code block with collapse for long commands
- */
 function BashToolUse({ input }: { input: BashInput }) {
   const command = getBashCommand(input);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -176,15 +186,13 @@ function BashToolUse({ input }: { input: BashInput }) {
       : command;
 
   return (
-    <div className="bash-tool-use">
-      <pre className="code-block">
-        <code>{displayCommand}</code>
-      </pre>
+    <div className="flex flex-col gap-3">
+      <CodePanel>{displayCommand}</CodePanel>
       {needsCollapse && (
         <button
           type="button"
-          className="expand-button"
-          onClick={() => setIsExpanded(!isExpanded)}
+          className={subtleButtonClasses}
+          onClick={() => setIsExpanded((current) => !current)}
         >
           {isExpanded ? "Show less" : `Show all ${lines.length} lines`}
         </button>
@@ -193,9 +201,6 @@ function BashToolUse({ input }: { input: BashInput }) {
   );
 }
 
-/**
- * Bash tool result - shows stdout/stderr with collapse for long output
- */
 function BashToolResult({
   result: rawResult,
   isError,
@@ -210,7 +215,6 @@ function BashToolResult({
     null,
   );
 
-  // Normalize result to handle both structured and string formats
   const result = normalizeBashResult(rawResult, isError);
 
   useEffect(() => {
@@ -238,53 +242,34 @@ function BashToolResult({
       : stdout;
 
   return (
-    <div className={`bash-result ${isError ? "bash-result-error" : ""}`}>
+    <div className="flex flex-col gap-3">
       {showValidationWarning && validationErrors && (
         <SchemaWarning toolName="Bash" errors={validationErrors} />
       )}
-      {result?.interrupted && (
-        <span className="badge badge-warning">Interrupted</span>
-      )}
-      {result?.backgroundTaskId && (
-        <span className="badge badge-info">
+      {result.interrupted && <StatusPill tone="amber">Interrupted</StatusPill>}
+      {result.backgroundTaskId && (
+        <StatusPill tone="blue">
           Background: {result.backgroundTaskId}
-        </span>
+        </StatusPill>
       )}
-      {stdout && (
-        <div className="bash-stdout">
-          <pre className="code-block">
-            <code>{displayStdout}</code>
-          </pre>
-          {needsCollapse && (
-            <button
-              type="button"
-              className="expand-button"
-              onClick={() => setIsExpanded(!isExpanded)}
-            >
-              {isExpanded
-                ? "Show less"
-                : `Show all ${stdoutLines.length} lines`}
-            </button>
-          )}
-        </div>
+      {stdout && <CodePanel>{displayStdout}</CodePanel>}
+      {needsCollapse && (
+        <button
+          type="button"
+          className={subtleButtonClasses}
+          onClick={() => setIsExpanded((current) => !current)}
+        >
+          {isExpanded ? "Show less" : `Show all ${stdoutLines.length} lines`}
+        </button>
       )}
-      {stderr && (
-        <div className="bash-stderr">
-          <pre className="code-block code-block-error">
-            <code>{stderr}</code>
-          </pre>
-        </div>
-      )}
-      {!stdout && !stderr && !result?.interrupted && (
-        <div className="bash-empty">No output</div>
+      {stderr && <CodePanel tone="error">{stderr}</CodePanel>}
+      {!stdout && !stderr && !result.interrupted && (
+        <div className="text-sm italic text-[#8f8578]">No output</div>
       )}
     </div>
   );
 }
 
-/**
- * Truncate text to a maximum number of lines and characters
- */
 function truncateOutput(
   text: string,
   limits: { maxLines: number; maxChars: number },
@@ -311,10 +296,6 @@ function truncateOutput(
   return { text: result.trimEnd(), truncated: false };
 }
 
-/**
- * Collapsed preview showing IN (command) and OUT (first few lines)
- * Clicking opens a modal with the full output
- */
 function BashCollapsedPreview({
   input,
   result: rawResult,
@@ -333,7 +314,6 @@ function BashCollapsedPreview({
     null,
   );
 
-  // Normalize result to handle both structured and string formats
   const result = rawResult
     ? normalizeBashResult(rawResult, isError)
     : undefined;
@@ -376,39 +356,74 @@ function BashCollapsedPreview({
     <>
       <button
         type="button"
-        className="bash-collapsed-preview"
+        className="group w-full overflow-hidden rounded-[16px] border border-black/10 bg-[#171717] text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-black/20"
         onClick={handleClick}
       >
-        <div className="bash-preview-row">
-          <span className="bash-preview-label">IN</span>
-          <code className="bash-preview-command">{command}</code>
+        <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#978b7e"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
+          </svg>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#978b7e]">
+            Bash Output
+          </span>
+          <span className="ml-auto text-[10px] text-[#978b7e] opacity-0 transition-opacity group-hover:opacity-100">
+            Click to expand
+          </span>
+        </div>
+        <div className="flex gap-3 border-b border-white/10 px-3 py-2">
+          <span className="w-8 shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#978b7e]">
+            In
+          </span>
+          <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap [font-family:var(--font-mono)] text-[13px] text-[#e8e3d8]">
+            {command}
+          </code>
           {showValidationWarning && validationErrors && (
             <SchemaWarning toolName="Bash" errors={validationErrors} />
           )}
         </div>
         {hasOutput && (
-          <div className="bash-preview-row bash-preview-output-row">
-            <span className="bash-preview-label">OUT</span>
-            <div
-              className={`bash-preview-output ${truncated ? "bash-preview-truncated" : ""} ${isError || result?.stderr ? "bash-preview-error" : ""}`}
-            >
-              <pre>
+          <div className="flex gap-3 px-3 py-2">
+            <span className="w-8 shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#978b7e]">
+              Out
+            </span>
+            <div className="relative min-w-0 flex-1 overflow-hidden">
+              <pre
+                className={`m-0 whitespace-pre-wrap break-words [font-family:var(--font-mono)] text-[13px] leading-6 ${isError || result?.stderr ? "text-[#f3b3a1]" : "text-[#c4bcaf]"}`}
+              >
                 <code>{previewText}</code>
               </pre>
-              {truncated && <div className="bash-preview-fade" />}
+              {truncated && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[#171717] to-transparent" />
+              )}
             </div>
           </div>
         )}
         {!hasOutput && result && !result.interrupted && (
-          <div className="bash-preview-row">
-            <span className="bash-preview-label">OUT</span>
-            <span className="bash-preview-empty">No output</span>
+          <div className="flex gap-3 px-3 py-2">
+            <span className="w-8 shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#978b7e]">
+              Out
+            </span>
+            <span className="text-sm italic text-[#8f8578]">No output</span>
           </div>
         )}
         {result?.interrupted && (
-          <div className="bash-preview-row">
-            <span className="bash-preview-label">OUT</span>
-            <span className="bash-preview-interrupted">Interrupted</span>
+          <div className="flex gap-3 px-3 py-2">
+            <span className="w-8 shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#978b7e]">
+              Out
+            </span>
+            <span className="text-sm italic text-[#d4a55f]">Interrupted</span>
           </div>
         )}
       </button>
@@ -438,16 +453,12 @@ export const bashRenderer: ToolRenderer<BashInput, BashResult> = {
   getUseSummary(input) {
     const i = input as BashInput;
     const command = getBashCommand(i);
-    // Show description if available, otherwise truncated command.
-    // Row-level truncation is handled by CSS (.tool-summary text-overflow),
-    // but we also truncate here to avoid massive strings in the approval panel.
     if (i.description) {
       return i.description;
     }
     if (!command) {
       return "Bash command";
     }
-    // Truncate long commands (e.g., heredocs) - first line only, max 200 chars
     const firstLine = command.split("\n")[0] ?? command;
     if (firstLine.length > 200) {
       return `${firstLine.slice(0, 200)}...`;
@@ -462,7 +473,6 @@ export const bashRenderer: ToolRenderer<BashInput, BashResult> = {
     const r = result as BashResult;
     if (r?.interrupted) return "Interrupted";
     if (isError || r?.stderr) return "Error";
-    // Return empty string - the preview shows the output
     return "";
   },
 
@@ -470,7 +480,7 @@ export const bashRenderer: ToolRenderer<BashInput, BashResult> = {
     return (
       <BashCollapsedPreview
         input={input as BashInput}
-        result={result as BashResult | undefined}
+        result={result as BashResult | string | undefined}
         isError={isError}
         provider={context.provider}
       />

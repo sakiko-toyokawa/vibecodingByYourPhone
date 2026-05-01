@@ -13,33 +13,20 @@ export function ProviderSendButton({
 }: ProviderSendButtonProps) {
   const { activeProvider } = useProviderTheme();
 
-  const baseStyles: React.CSSProperties = {
-    padding: "10px 20px",
-    borderRadius: activeProvider === "opencode" ? "4px" : "8px",
-    border:
-      activeProvider === "opencode"
-        ? "1px solid var(--accent-primary)"
-        : "none",
-    background:
-      activeProvider === "gemini"
-        ? "linear-gradient(135deg, #4285f4, #ea4335)"
-        : activeProvider === "opencode"
-          ? "transparent"
-          : "var(--accent-primary)",
-    color: activeProvider === "opencode" ? "var(--accent-primary)" : "#ffffff",
-    fontFamily: "var(--font-body)",
-    fontWeight: 600,
-    fontSize: "14px",
-    cursor: disabled ? "not-allowed" : "pointer",
-    opacity: disabled ? 0.5 : 1,
-    transition: activeProvider === "opencode" ? "none" : "all 200ms ease",
-  };
+  const baseClasses =
+    "send-button px-5 py-2.5 font-sans font-semibold text-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 hover:opacity-[0.85]";
+
+  const providerClasses =
+    activeProvider === "gemini"
+      ? "bg-gradient-to-br from-[#4285f4] to-[#ea4335] text-white rounded-lg transition-all duration-200"
+      : activeProvider === "opencode"
+        ? "bg-transparent text-[var(--accent-primary)] rounded border border-[var(--accent-primary)] transition-none"
+        : "bg-[var(--accent-primary)] text-white rounded-lg transition-all duration-200";
 
   return (
     <button
       type="button"
-      className="send-button"
-      style={baseStyles}
+      className={`${baseClasses} ${providerClasses}`}
       onClick={onClick}
       disabled={disabled}
     >

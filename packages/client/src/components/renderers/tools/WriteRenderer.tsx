@@ -53,9 +53,13 @@ function WriteToolUse({ input }: { input: WriteInput }) {
   const fileName = getFileName(input.file_path);
   const lineCount = input.content.split("\n").length;
   return (
-    <div className="write-tool-use">
-      <span className="file-path">{fileName}</span>
-      <span className="write-info">{lineCount} lines</span>
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
+        {fileName}
+      </span>
+      <span className="text-[var(--text-muted)] [font-size:var(--font-size-base)]">
+        {lineCount} lines
+      </span>
     </div>
   );
 }
@@ -78,17 +82,17 @@ function WriteModalContent({
 
   // Toggle button for markdown files
   const toggleButton = hasMarkdownPreview && (
-    <div className="markdown-view-toggle">
+    <div className="flex gap-0 p-2 px-3 border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
       <button
         type="button"
-        className={`toggle-btn ${!showPreview ? "active" : ""}`}
+        className={`px-3 py-1.5 border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-muted)] [font-size:var(--font-size-sm)] cursor-pointer transition-all duration-150 hover:bg-[var(--bg-hover)] rounded-l ${!showPreview ? "bg-[var(--primary-color)] text-white border-[var(--primary-color)]" : ""}`}
         onClick={() => setShowPreview(false)}
       >
         Source
       </button>
       <button
         type="button"
-        className={`toggle-btn ${showPreview ? "active" : ""}`}
+        className={`px-3 py-1.5 border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-muted)] [font-size:var(--font-size-sm)] cursor-pointer transition-all duration-150 hover:bg-[var(--bg-hover)] rounded-r border-l-0 ${showPreview ? "bg-[var(--primary-color)] text-white border-[var(--primary-color)]" : ""}`}
         onClick={() => setShowPreview(true)}
       >
         Preview
@@ -99,11 +103,11 @@ function WriteModalContent({
   // Show rendered markdown preview
   if (showPreview && input?._renderedMarkdownHtml) {
     return (
-      <div className="file-content-modal">
+      <div className="bg-[var(--bg-code)] rounded overflow-auto">
         {toggleButton}
-        <div className="markdown-preview">
+        <div className="overflow-auto">
           <div
-            className="markdown-rendered"
+            className="p-4 leading-relaxed text-[var(--text-primary)]"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
             dangerouslySetInnerHTML={{ __html: input._renderedMarkdownHtml }}
           />
@@ -115,16 +119,16 @@ function WriteModalContent({
   // Use highlighted HTML if available from input augment
   if (input?._highlightedContentHtml) {
     return (
-      <div className="file-content-modal">
+      <div className="bg-[var(--bg-code)] rounded overflow-auto">
         {toggleButton}
-        <div className="file-viewer-code file-viewer-code-highlighted">
+        <div className="font-mono [font-size:var(--font-size-base)] leading-relaxed bg-[var(--bg-code)] overflow-x-auto">
           <div
-            className="shiki-container"
+            className="p-3"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
             dangerouslySetInnerHTML={{ __html: input._highlightedContentHtml }}
           />
           {input._highlightedTruncated && (
-            <div className="file-viewer-truncated">
+            <div className="py-2 px-3 [font-size:var(--font-size-sm)] text-[var(--text-muted)] border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
               Content truncated for highlighting (showing first 2000 lines)
             </div>
           )}
@@ -135,15 +139,15 @@ function WriteModalContent({
 
   // Fallback: plain text with line numbers
   return (
-    <div className="file-content-modal">
+    <div className="bg-[var(--bg-code)] rounded overflow-auto">
       {toggleButton}
-      <div className="file-content-with-lines">
-        <div className="line-numbers">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] font-mono [font-size:var(--font-size-base)] bg-[var(--bg-code)] tab-[var(--tab-size)] border border-[var(--border-color)] rounded-md">
+        <div className="text-right py-3 px-2 text-[var(--text-muted)] select-none border-r border-[var(--border-color)] bg-[var(--bg-secondary)]">
           {lines.map((_, i) => (
             <div key={`ln-${i + 1}`}>{file.startLine + i}</div>
           ))}
         </div>
-        <pre className="line-content">
+        <pre className="py-3 px-3 m-0 overflow-x-auto leading-relaxed">
           <code>{file.content}</code>
         </pre>
       </div>
@@ -198,7 +202,7 @@ function WriteToolResult({
       }
     }
     return (
-      <div className="write-error">
+      <div className="text-[var(--error-color)] p-2 bg-[var(--bg-error,rgba(207,34,46,0.1))] rounded">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="Write" errors={validationErrors} />
         )}
@@ -215,22 +219,26 @@ function WriteToolResult({
   // Use highlighted HTML if available from input augment
   if (input?._highlightedContentHtml) {
     return (
-      <div className="write-result">
-        <div className="file-header">
-          <span className="file-path">{fileName}</span>
-          <span className="file-range">{file.numLines} lines written</span>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
+            {fileName}
+          </span>
+          <span className="text-[var(--text-muted)] [font-size:var(--font-size-sm)]">
+            {file.numLines} lines written
+          </span>
           {showValidationWarning && validationErrors && (
             <SchemaWarning toolName="Write" errors={validationErrors} />
           )}
         </div>
-        <div className="file-viewer-code file-viewer-code-highlighted">
+        <div className="font-mono [font-size:var(--font-size-base)] leading-relaxed bg-[var(--bg-code)] overflow-x-auto">
           <div
-            className="shiki-container"
+            className="p-3"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
             dangerouslySetInnerHTML={{ __html: input._highlightedContentHtml }}
           />
           {input._highlightedTruncated && (
-            <div className="file-viewer-truncated">
+            <div className="py-2 px-3 [font-size:var(--font-size-sm)] text-[var(--text-muted)] border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
               Content truncated for highlighting (showing first 2000 lines)
             </div>
           )}
@@ -244,30 +252,34 @@ function WriteToolResult({
     needsCollapse && !isExpanded ? lines.slice(0, MAX_LINES_COLLAPSED) : lines;
 
   return (
-    <div className="write-result">
-      <div className="file-header">
-        <span className="file-path">{fileName}</span>
-        <span className="file-range">{file.numLines} lines written</span>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
+          {fileName}
+        </span>
+        <span className="text-[var(--text-muted)] [font-size:var(--font-size-sm)]">
+          {file.numLines} lines written
+        </span>
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="Write" errors={validationErrors} />
         )}
       </div>
-      <div className="file-content-with-lines">
-        <div className="line-numbers">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] font-mono [font-size:var(--font-size-base)] bg-[var(--bg-code)] tab-[var(--tab-size)] border border-[var(--border-color)] rounded-md">
+        <div className="text-right py-3 px-2 text-[var(--text-muted)] select-none border-r border-[var(--border-color)] bg-[var(--bg-secondary)]">
           {displayLines.map((_, i) => {
             const lineNum = file.startLine + i;
             return <div key={`line-${lineNum}`}>{lineNum}</div>;
           })}
           {needsCollapse && !isExpanded && <div>...</div>}
         </div>
-        <pre className="line-content">
+        <pre className="py-3 px-3 m-0 overflow-x-auto leading-relaxed">
           <code>{displayLines.join("\n")}</code>
         </pre>
       </div>
       {needsCollapse && (
         <button
           type="button"
-          className="expand-button"
+          className="px-4 py-2 bg-transparent border border-[var(--border-color)] rounded-lg text-[var(--text-muted)] cursor-pointer [font-size:var(--font-size-sm)] mt-2 min-h-[40px] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]"
           onClick={() => setIsExpanded(!isExpanded)}
         >
           {isExpanded ? "Show less" : `Show all ${lines.length} lines`}
@@ -355,11 +367,13 @@ function WriteCollapsedPreview({
       }
     }
     return (
-      <div className="write-collapsed-preview write-collapsed-error">
+      <div className="flex flex-col gap-0 [font-size:var(--font-size-base)] bg-[var(--bg-code)] border border-[var(--error-color)] rounded-md overflow-hidden w-full p-2 text-left cursor-default">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="Write" errors={validationErrors} />
         )}
-        <span className="write-preview-error">{errorMessage}</span>
+        <span className="text-[var(--error-color)] [font-size:var(--font-size-base)]">
+          {errorMessage}
+        </span>
       </div>
     );
   }
@@ -368,35 +382,41 @@ function WriteCollapsedPreview({
     <>
       <button
         type="button"
-        className="write-collapsed-preview"
+        className="flex flex-col gap-0 [font-size:var(--font-size-base)] bg-[var(--bg-code)] border border-[var(--border-color)] rounded-md overflow-hidden w-full p-0 text-left cursor-pointer transition-colors hover:border-[var(--border-input)] mt-1"
         onClick={handleClick}
       >
-        <div className="write-preview-lines">
+        <div className="text-[var(--text-muted)] [font-size:var(--font-size-sm)] py-1 px-2">
           {lineCount} lines
           {showValidationWarning && validationErrors && (
             <SchemaWarning toolName="Write" errors={validationErrors} />
           )}
         </div>
         <div
-          className={`write-preview-content ${isTruncated ? "write-preview-truncated" : ""}`}
+          className={`relative py-1.5 px-2 ${isTruncated ? "max-h-[4.5rem] overflow-hidden" : ""}`}
         >
           {previewHtml ? (
             <div
-              className="shiki-container"
+              className="p-3"
               // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
               dangerouslySetInnerHTML={{ __html: previewHtml }}
             />
           ) : (
-            <pre>
+            <pre className="m-0 font-mono [font-size:var(--font-size-base)] leading-snug whitespace-pre-wrap break-words text-[var(--text-secondary)]">
               <code>{lines.slice(0, PREVIEW_LINES).join("\n")}</code>
             </pre>
           )}
-          {isTruncated && <div className="write-preview-fade" />}
+          {isTruncated && (
+            <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-b from-transparent to-[var(--bg-code)] pointer-events-none" />
+          )}
         </div>
       </button>
       {isModalOpen && (
         <Modal
-          title={<span className="file-path">{fileName}</span>}
+          title={
+            <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
+              {fileName}
+            </span>
+          }
           onClose={handleClose}
         >
           <WriteModalContent

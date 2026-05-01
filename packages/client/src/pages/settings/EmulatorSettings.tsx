@@ -95,49 +95,58 @@ export function EmulatorSettings() {
   const deviceBridgeEnabled = settings?.deviceBridgeEnabled ?? false;
 
   return (
-    <section className="settings-section">
-      <h2>{t("emulatorSectionTitle")}</h2>
-      <p className="settings-description">{t("emulatorSectionDescription")}</p>
+    <section className="flex flex-col gap-8 mb-12">
+      <h2
+        style={{ fontFamily: "var(--font-display)" }}
+        className="text-[2rem] text-[var(--text-primary)] mb-2"
+      >
+        {t("emulatorSectionTitle")}
+      </h2>
+      <p className="text-sm text-[var(--text-dimmed)]">
+        {t("emulatorSectionDescription")}
+      </p>
 
-      <div className="settings-group">
-        <div className="settings-item">
-          <div className="settings-item-info">
+      <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
+        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-1">
             <strong>{t("emulatorEnableTitle")}</strong>
             <p>{t("emulatorEnableDescription")}</p>
           </div>
-          <label className="toggle-switch">
+          <label className="relative inline-block h-6 w-11 shrink-0 cursor-pointer">
             <input
               type="checkbox"
+              className="peer sr-only"
               checked={deviceBridgeEnabled}
               onChange={(e) => {
                 void updateSetting("deviceBridgeEnabled", e.target.checked);
               }}
               disabled={settingsLoading}
             />
-            <span className="toggle-slider" />
+            <span className="absolute inset-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-hover)] transition-all duration-200 peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:bg-[var(--accent-color,#3b82f6)]" />
+            <span className="absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-[var(--text-muted)] transition-all duration-200 peer-checked:translate-x-5 peer-checked:bg-white" />
           </label>
         </div>
       </div>
 
       {!deviceBridgeEnabled ? null : (
         <>
-          <div className="settings-group">
+          <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
             <h3>{t("emulatorStreamQualityTitle")}</h3>
-            <p className="settings-description">
+            <p className="text-sm text-[var(--text-dimmed)]">
               {t("emulatorStreamQualityDescription")}
             </p>
 
-            <div className="settings-item">
-              <div className="settings-item-info">
+            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+              <div className="flex flex-col gap-1">
                 <strong>{t("emulatorFrameRateTitle")}</strong>
                 <p>{t("emulatorFrameRateDescription")}</p>
               </div>
-              <div className="font-size-selector">
+              <div className="flex gap-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-0.5">
                 {EMULATOR_FPS_OPTIONS.map((fps) => (
                   <button
                     key={fps}
                     type="button"
-                    className={`font-size-option ${maxFps === fps ? "active" : ""}`}
+                    className={`px-[var(--space-2)] py-[var(--space-1)] bg-transparent border-none rounded-[var(--radius-sm)] text-[var(--text-muted)] text-sm cursor-pointer transition-colors duration-150 whitespace-nowrap hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] ${maxFps === fps ? "bg-[var(--text-primary)] text-white" : ""}`}
                     onClick={() => setMaxFps(fps)}
                   >
                     {fps} fps
@@ -146,17 +155,17 @@ export function EmulatorSettings() {
               </div>
             </div>
 
-            <div className="settings-item">
-              <div className="settings-item-info">
+            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+              <div className="flex flex-col gap-1">
                 <strong>{t("emulatorResolutionTitle")}</strong>
                 <p>{t("emulatorResolutionDescription")}</p>
               </div>
-              <div className="font-size-selector">
+              <div className="flex gap-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-0.5">
                 {EMULATOR_WIDTH_OPTIONS.map((w) => (
                   <button
                     key={w}
                     type="button"
-                    className={`font-size-option ${maxWidth === w ? "active" : ""}`}
+                    className={`px-[var(--space-2)] py-[var(--space-1)] bg-transparent border-none rounded-[var(--radius-sm)] text-[var(--text-muted)] text-sm cursor-pointer transition-colors duration-150 whitespace-nowrap hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] ${maxWidth === w ? "bg-[var(--text-primary)] text-white" : ""}`}
                     onClick={() => setMaxWidth(w)}
                   >
                     {w}p
@@ -165,17 +174,17 @@ export function EmulatorSettings() {
               </div>
             </div>
 
-            <div className="settings-item">
-              <div className="settings-item-info">
+            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+              <div className="flex flex-col gap-1">
                 <strong>{t("emulatorQualityTitle")}</strong>
                 <p>{t("emulatorQualityDescription")}</p>
               </div>
-              <div className="font-size-selector">
+              <div className="flex gap-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-0.5">
                 {QUALITY_OPTIONS.map((q) => (
                   <button
                     key={q}
                     type="button"
-                    className={`font-size-option ${quality === q ? "active" : ""}`}
+                    className={`px-[var(--space-2)] py-[var(--space-1)] bg-transparent border-none rounded-[var(--radius-sm)] text-[var(--text-muted)] text-sm cursor-pointer transition-colors duration-150 whitespace-nowrap hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] ${quality === q ? "bg-[var(--text-primary)] text-white" : ""}`}
                     onClick={() => setQuality(q)}
                   >
                     {getQualityLabel(q)}
@@ -184,37 +193,39 @@ export function EmulatorSettings() {
               </div>
             </div>
 
-            <div className="settings-item">
-              <div className="settings-item-info">
+            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+              <div className="flex flex-col gap-1">
                 <strong>{t("emulatorAdaptiveFpsTitle")}</strong>
                 <p>{t("emulatorAdaptiveFpsDescription")}</p>
               </div>
-              <label className="toggle-switch">
+              <label className="relative inline-block h-6 w-11 shrink-0 cursor-pointer">
                 <input
                   type="checkbox"
+                  className="peer sr-only"
                   checked={adaptiveFps}
                   onChange={(e) => setAdaptiveFps(e.target.checked)}
                 />
-                <span className="toggle-slider" />
+                <span className="absolute inset-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-hover)] transition-all duration-200 peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:bg-[var(--accent-color,#3b82f6)]" />
+                <span className="absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-[var(--text-muted)] transition-all duration-200 peer-checked:translate-x-5 peer-checked:bg-white" />
               </label>
             </div>
           </div>
 
-          <div className="settings-group">
+          <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
             <h3>{t("emulatorChromeOsHostsTitle")}</h3>
-            <p className="settings-description">
+            <p className="text-sm text-[var(--text-dimmed)]">
               {t("emulatorChromeOsHostsDescription")}
               <code> chromeroot</code>
               {t("emulatorChromeOsHostsDescriptionSuffix")}
             </p>
 
-            <div className="settings-item">
-              <div className="settings-item-info">
+            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+              <div className="flex flex-col gap-1">
                 <strong>{t("emulatorAddHostAliasTitle")}</strong>
                 <p>{t("emulatorAddHostAliasDescription")}</p>
               </div>
               <form
-                className="settings-item-actions"
+                className="flex items-center gap-[var(--space-2)] shrink-0"
                 onSubmit={(event) => {
                   event.preventDefault();
                   void addHost();
@@ -224,14 +235,14 @@ export function EmulatorSettings() {
                   type="text"
                   name="chromeosHost"
                   placeholder={t("emulatorHostAliasPlaceholder")}
-                  className="settings-select"
+                  className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] cursor-pointer"
                   autoComplete="off"
                   value={hostInput}
                   onChange={(event) => setHostInput(event.target.value)}
                 />
                 <button
                   type="submit"
-                  className="settings-button"
+                  className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
                   disabled={settingsLoading}
                 >
                   {t("projectsAddConfirm")}
@@ -240,25 +251,38 @@ export function EmulatorSettings() {
             </div>
 
             {chromeOsHostError && (
-              <p className="settings-error">{chromeOsHostError}</p>
+              <p className="text-xs text-[var(--error-color)] mt-1">
+                {chromeOsHostError}
+              </p>
             )}
-            {settingsError && <p className="settings-error">{settingsError}</p>}
+            {settingsError && (
+              <p className="text-xs text-[var(--error-color)] mt-1">
+                {settingsError}
+              </p>
+            )}
 
             {chromeOsHosts.length === 0 ? (
-              <p className="settings-muted">{t("emulatorNoChromeOsHosts")}</p>
+              <p className="text-sm text-[var(--text-muted)]">
+                {t("emulatorNoChromeOsHosts")}
+              </p>
             ) : (
               chromeOsHosts.map((host) => (
-                <div key={host} className="settings-item">
-                  <div className="settings-item-info">
-                    <span className="settings-item-label">{host}</span>
-                    <span className="settings-item-description">
+                <div
+                  key={host}
+                  className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]"
+                >
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-medium text-[var(--text-primary)]">
+                      {host}
+                    </span>
+                    <span className="text-sm text-[var(--text-muted)]">
                       Device ID: chromeos:{host}
                     </span>
                   </div>
-                  <div className="settings-item-action">
+                  <div className="shrink-0">
                     <button
                       type="button"
-                      className="settings-button"
+                      className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
                       onClick={() => {
                         void removeHost(host);
                       }}
@@ -272,33 +296,42 @@ export function EmulatorSettings() {
             )}
           </div>
 
-          <div className="settings-group">
+          <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
             <h3>{t("emulatorDiscoveredDevicesTitle")}</h3>
 
             {loading && (
-              <p className="settings-muted">{t("projectsLoading")}</p>
+              <p className="text-sm text-[var(--text-muted)]">
+                {t("projectsLoading")}
+              </p>
             )}
-            {error && <p className="settings-error">{error}</p>}
+            {error && (
+              <p className="text-xs text-[var(--error-color)] mt-1">{error}</p>
+            )}
 
             {!loading && emulators.length === 0 && (
-              <p className="settings-muted">{t("emulatorNoDevicesFound")}</p>
+              <p className="text-sm text-[var(--text-muted)]">
+                {t("emulatorNoDevicesFound")}
+              </p>
             )}
 
             {emulators.map((device) => (
-              <div key={device.id} className="settings-item">
-                <div className="settings-item-info">
-                  <span className="settings-item-label">
+              <div
+                key={device.id}
+                className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]"
+              >
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm font-medium text-[var(--text-primary)]">
                     {device.label || device.avd || device.id}
                   </span>
-                  <span className="settings-item-description">
+                  <span className="text-sm text-[var(--text-muted)]">
                     {device.type} - {device.id} - {device.state}
                   </span>
                 </div>
-                <div className="settings-item-action">
+                <div className="shrink-0">
                   {canStopDevice(device.type, device.state, device.actions) ? (
                     <button
                       type="button"
-                      className="settings-button"
+                      className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
                       onClick={() => stopEmulator(device.id)}
                     >
                       {t("emulatorStop")}
@@ -310,7 +343,7 @@ export function EmulatorSettings() {
                     ) ? (
                     <button
                       type="button"
-                      className="settings-button"
+                      className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
                       onClick={() => startEmulator(device.id)}
                     >
                       {t("emulatorStart")}

@@ -14,28 +14,13 @@ export function ConfigPage({
   onNext,
 }: Props) {
   return (
-    <div style={{ width: "100%", maxWidth: 400 }}>
-      <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>
-        Settings
-      </h2>
-      <p
-        style={{
-          color: "var(--text-secondary)",
-          fontSize: 14,
-          marginBottom: 24,
-        }}
-      >
+    <div className="w-full max-w-[400px]">
+      <h2 className="mb-2 text-[22px] font-semibold">Settings</h2>
+      <p className="mb-6 text-sm text-[var(--text-secondary)]">
         Configure how Yep Anywhere runs. You can change these later.
       </p>
 
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 4,
-          marginBottom: 32,
-        }}
-      >
+      <div className="mb-8 flex flex-col gap-1">
         <label className="toggle">
           <span>Start when I log in</span>
           <input
@@ -53,10 +38,9 @@ export function ConfigPage({
             onChange={(e) => onStartMinimizedChange(e.target.checked)}
           />
         </label>
-
       </div>
 
-      <button className="btn-primary" onClick={onNext} style={{ width: "100%" }}>
+      <button className="btn-primary w-full" onClick={onNext}>
         Continue
       </button>
     </div>

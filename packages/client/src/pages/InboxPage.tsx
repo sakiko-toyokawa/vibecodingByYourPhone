@@ -37,13 +37,17 @@ export function InboxPage() {
 
   return (
     <div
-      className={isWideScreen ? "main-content-wrapper" : "main-content-mobile"}
+      className={
+        isWideScreen
+          ? "flex justify-center min-w-0 h-[100dvh] overflow-hidden"
+          : "flex-1 flex flex-col min-h-0"
+      }
     >
       <div
         className={
           isWideScreen
-            ? "main-content-constrained"
-            : "main-content-mobile-inner"
+            ? "w-full flex flex-col h-[100dvh]"
+            : "flex-1 flex flex-col min-h-0"
         }
       >
         <PageHeader

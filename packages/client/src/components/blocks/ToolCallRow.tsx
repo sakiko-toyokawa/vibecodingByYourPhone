@@ -25,7 +25,6 @@ export const ToolCallRow = memo(function ToolCallRow({
   status,
   sessionProvider,
 }: Props) {
-  // Create a minimal render context for tool renderers
   const renderContext: RenderContext = useMemo(
     () => ({
       isStreaming: status === "pending",
@@ -36,10 +35,7 @@ export const ToolCallRow = memo(function ToolCallRow({
     [status, id, sessionProvider],
   );
 
-  // Get structured result for interactive summary
   const structuredResult = toolResult?.structured ?? toolResult?.content;
-
-  // Check if this tool renders inline (bypasses entire tool-row structure)
   const hasInlineRenderer = toolRegistry.hasInlineRenderer(toolName);
   const suppressCollapsedPreview = shouldSuppressBashCollapsedPreview(
     toolName,
@@ -102,10 +98,8 @@ export const ToolCallRow = memo(function ToolCallRow({
     status === "pending" &&
     hasCollapsedPreview &&
     isCodexLikeBashInput(toolInput, sessionProvider);
-  // Tools with collapsed preview or interactive summary don't expand
   const isNonExpandable = hasInteractiveSummary || hasCollapsedPreview;
 
-  // Edit and TodoWrite tools are expanded by default
   const [expanded, setExpanded] = useState(
     !isNonExpandable && (toolName === "Edit" || toolName === "TodoWrite"),
   );
@@ -120,10 +114,9 @@ export const ToolCallRow = memo(function ToolCallRow({
     }
   };
 
-  // Inline renderers bypass the entire tool-row structure
   if (hasInlineRenderer) {
     return (
-      <div className="tool-inline timeline-item">
+      <div className="my-2 overflow-hidden rounded-lg">
         {toolRegistry.renderInline(
           toolName,
           toolInput,
@@ -136,12 +129,16 @@ export const ToolCallRow = memo(function ToolCallRow({
     );
   }
 
+  const statusBorderColor = "border-l-[var(--border-subtle)]";
+
+  const statusBgColor = "bg-[var(--bg-secondary)]";
+
   return (
     <div
-      className={`tool-row timeline-item ${expanded ? "expanded" : "collapsed"} status-${status} ${isNonExpandable ? "interactive" : ""}`}
+      className={`my-2 overflow-hidden rounded-lg border border-black/5 border-l-[3px] ${statusBorderColor} ${statusBgColor} shadow-[0_1px_0_rgba(20,20,19,0.03)] transition-all duration-150 ${isNonExpandable ? "" : "hover:border-black/10"}`}
     >
       <div
-        className={`tool-row-header ${isNonExpandable ? "non-expandable" : ""}`}
+        className={`flex items-center gap-2 px-4 py-3 text-sm ${isNonExpandable ? "" : "cursor-pointer hover:bg-black/[0.02]"}`}
         onClick={isNonExpandable ? undefined : handleToggle}
         onKeyDown={
           isNonExpandable
@@ -152,49 +149,51 @@ export const ToolCallRow = memo(function ToolCallRow({
         tabIndex={isNonExpandable ? undefined : 0}
       >
         {status === "pending" && (
-          <span className="tool-spinner" aria-label="Running">
+          <span className="shrink-0" aria-label="Running">
             <Spinner />
           </span>
         )}
         {status === "aborted" && (
-          <span className="tool-aborted-icon" aria-label="Interrupted">
-            ⨯
+          <span
+            className="shrink-0 text-xs font-bold text-[var(--text-muted)]"
+            aria-label="Interrupted"
+          >
+            !
           </span>
         )}
 
-        <span className="tool-name">
+        <span className="shrink-0 text-[11px] font-medium uppercase tracking-[0.18em] text-gray-600">
           {toolRegistry.getDisplayName(toolName)}
         </span>
 
         {hasInteractiveSummary && status === "complete" ? (
-          <span className="tool-summary interactive-summary">
+          <span className="min-w-0 flex-1 truncate text-xs text-gray-500">
             {interactiveSummaryContent}
           </span>
         ) : !hideSummaryWhenPreviewVisible ? (
-          <span className="tool-summary">
+          <span className="min-w-0 flex-1 truncate text-xs text-gray-500">
             {summary}
             {status === "aborted" && (
-              <span className="tool-aborted-label"> (interrupted)</span>
+              <span className="ml-1 text-[var(--text-muted)]">
+                (interrupted)
+              </span>
             )}
           </span>
         ) : null}
 
         {!isNonExpandable && (
-          <span className="expand-chevron" aria-hidden="true">
+          <span className="shrink-0 text-xs text-gray-400" aria-hidden="true">
             {expanded ? "▾" : "▸"}
           </span>
         )}
       </div>
 
-      {/* Collapsed preview - shown when tool supports it (non-expandable) */}
       {hasCollapsedPreview && (
-        <div className="tool-row-collapsed-preview">
-          {collapsedPreviewContent}
-        </div>
+        <div className="px-4 pb-3">{collapsedPreviewContent}</div>
       )}
 
       {expanded && !isNonExpandable && (
-        <div className="tool-row-content">
+        <div className="border-t border-black/5 px-4 pb-4">
           {status === "pending" || status === "aborted" ? (
             <ToolUseExpanded
               toolName={toolName}
@@ -229,8 +228,6 @@ function shouldSuppressBashCollapsedPreview(
     return false;
   }
 
-  // Keep Codex bash rows compact by default (header + expandable details) for
-  // both running and completed commands to avoid persistent IN/OUT cards.
   if (
     status === "pending" ||
     status === "complete" ||
@@ -258,7 +255,7 @@ function ToolUseExpanded({
   context: RenderContext;
 }) {
   return (
-    <div className="tool-use-expanded">
+    <div className="pt-3">
       {toolRegistry.renderToolUse(toolName, toolInput, context)}
     </div>
   );
@@ -276,14 +273,15 @@ function ToolResultExpanded({
   context: RenderContext;
 }) {
   if (!toolResult) {
-    return <div className="tool-no-result">No result data</div>;
+    return (
+      <div className="pt-3 text-sm italic text-gray-400">No result data</div>
+    );
   }
 
-  // Use structured result if available, otherwise fall back to content
   const result = toolResult.structured ?? toolResult.content;
 
   return (
-    <div className="tool-result-expanded">
+    <div className="pt-3">
       {toolRegistry.renderToolResult(
         toolName,
         result,
@@ -298,7 +296,7 @@ function ToolResultExpanded({
 function Spinner() {
   return (
     <svg
-      className="spinner"
+      className="animate-spin text-amber-400"
       viewBox="0 0 16 16"
       width="12"
       height="12"

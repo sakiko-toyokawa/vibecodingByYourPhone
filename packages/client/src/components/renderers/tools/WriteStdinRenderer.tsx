@@ -186,9 +186,13 @@ function ReadViaPtyFile({
   const fileName = getFileName(filePath);
   const lines = output.split("\n");
   const lineCount = countContentLines(output);
-  const buttonClass = inline ? "file-link-inline" : "file-link-button";
-  const lineCountClass = inline ? "file-line-count-inline" : "file-line-count";
-  const wrapperClass = inline ? undefined : "read-text-result";
+  const buttonClass = inline
+    ? "inline-flex items-center gap-2 bg-transparent border-none p-0 font-mono text-inherit text-[var(--link-color)] cursor-pointer underline underline-transparent hover:underline-current"
+    : "inline-flex items-center gap-3 bg-transparent border border-[var(--border-color)] rounded-lg px-3 py-2 font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] cursor-pointer text-left transition-colors hover:bg-[var(--bg-hover)] hover:border-[var(--border-input)]";
+  const lineCountClass = inline
+    ? "text-[var(--text-muted)] text-[0.85em] no-underline"
+    : "text-[var(--text-muted)] ml-auto";
+  const wrapperClass = inline ? undefined : "flex flex-col gap-2";
 
   return (
     <>
@@ -204,17 +208,21 @@ function ReadViaPtyFile({
       </div>
       {showModal && (
         <Modal
-          title={<span className="file-path">{fileName}</span>}
+          title={
+            <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
+              {fileName}
+            </span>
+          }
           onClose={() => setShowModal(false)}
         >
-          <div className="file-content-modal">
-            <div className="file-content-with-lines">
-              <div className="line-numbers">
+          <div className="bg-[var(--bg-code)] rounded overflow-auto">
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] font-mono [font-size:var(--font-size-base)] bg-[var(--bg-code)] tab-[var(--tab-size)] border border-[var(--border-color)] rounded-md">
+              <div className="text-right py-3 px-2 text-[var(--text-muted)] select-none border-r border-[var(--border-color)] bg-[var(--bg-secondary)]">
                 {lines.map((_, i) => (
                   <div key={`ln-${i + 1}`}>{i + 1}</div>
                 ))}
               </div>
-              <pre className="line-content">
+              <pre className="py-3 px-3 m-0 overflow-x-auto leading-relaxed">
                 <code>{output}</code>
               </pre>
             </div>
@@ -248,8 +256,8 @@ export const writeStdinRenderer: ToolRenderer<
     const commandLine = command ? `command: ${command}\n` : "";
 
     return (
-      <div className="bash-tool-use">
-        <pre className="code-block">
+      <div className="flex flex-col gap-2">
+        <pre className="bg-[var(--bg-code)] border border-[var(--border-color)] rounded-md p-3 overflow-x-auto font-mono [font-size:var(--font-size-base)] leading-normal my-2 whitespace-pre-wrap break-words tab-[var(--tab-size)]">
           <code>{`${originLine}${fileLine}${commandLine}command session ${sessionId}\n${action}`}</code>
         </pre>
       </div>
@@ -265,10 +273,14 @@ export const writeStdinRenderer: ToolRenderer<
     if (!parsed.output.trim()) {
       if (parsed.exitCode !== undefined) {
         return (
-          <div className="bash-empty">{`Command exited with code ${parsed.exitCode}`}</div>
+          <div className="text-[var(--text-muted)] italic [font-size:var(--font-size-lg)]">{`Command exited with code ${parsed.exitCode}`}</div>
         );
       }
-      return <div className="bash-empty">No output</div>;
+      return (
+        <div className="text-[var(--text-muted)] italic [font-size:var(--font-size-lg)]">
+          No output
+        </div>
+      );
     }
 
     if (linkedToolName === "Read" && linkedFilePath) {
@@ -278,8 +290,10 @@ export const writeStdinRenderer: ToolRenderer<
     }
 
     return (
-      <div className={`bash-result ${isError ? "bash-result-error" : ""}`}>
-        <pre className={`code-block ${isError ? "code-block-error" : ""}`}>
+      <div className={`flex flex-col gap-2 ${isError ? "" : ""}`}>
+        <pre
+          className={`bg-[var(--bg-code)] border border-[var(--border-color)] rounded-md p-3 overflow-x-auto font-mono [font-size:var(--font-size-base)] leading-normal my-2 whitespace-pre-wrap break-words tab-[var(--tab-size)] ${isError ? "border-[var(--error-color)] bg-[var(--bg-error,rgba(207,34,46,0.1))]" : ""}`}
+        >
           <code>{parsed.output}</code>
         </pre>
       </div>

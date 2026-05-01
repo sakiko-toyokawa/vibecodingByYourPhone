@@ -40,7 +40,13 @@ export function NotificationBadge({ variant, label }: NotificationBadgeProps) {
   const defaultLabel = variant === "needs-input" ? "Input Needed" : "New";
 
   return (
-    <span className={`status-badge notification-${variant}`}>
+    <span
+      className={`inline-block px-2 py-0.5 rounded text-sm font-medium ml-2 ${
+        variant === "needs-input"
+          ? "bg-[var(--status-badge-input-bg)] text-[var(--status-badge-input-text)] animate-[pulse-blue_2s_ease-in-out_infinite]"
+          : ""
+      }`}
+    >
       {label ?? defaultLabel}
     </span>
   );
@@ -60,7 +66,11 @@ export function SessionStatusBadge({
   // External sessions always show the external badge
   // We can't track fine-grained state (in-turn, needs input) for external sessions
   if (status.owner === "external") {
-    return <span className="status-badge status-external">External</span>;
+    return (
+      <span className="inline-block px-2 py-0.5 rounded text-sm font-medium ml-2 bg-[var(--status-badge-external-bg)] text-[var(--status-badge-external-text)]">
+        External
+      </span>
+    );
   }
 
   // Priority 1: Needs input (tool approval or user question)
@@ -99,5 +109,12 @@ export function ActiveCountBadge({ variant, count }: CountBadgeProps) {
 
   if (!label) return null;
 
-  return <span className={`status-badge status-${variant}`}>{label}</span>;
+  const baseClasses =
+    "inline-block px-2 py-0.5 rounded text-sm font-medium ml-2";
+  const variantClasses =
+    variant === "self"
+      ? "bg-[var(--status-badge-owned-bg)] text-[var(--status-badge-owned-text)]"
+      : "bg-[var(--status-badge-external-bg)] text-[var(--status-badge-external-text)]";
+
+  return <span className={`${baseClasses} ${variantClasses}`}>{label}</span>;
 }

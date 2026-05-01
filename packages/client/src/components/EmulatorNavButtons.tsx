@@ -29,75 +29,39 @@ export function EmulatorNavButtons({
   const disabled = !dataChannel || dataChannel.readyState !== "open";
 
   return (
-    <div className="emulator-nav-buttons">
+    <div className="flex justify-center gap-6 border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3">
       {showAndroidNav && (
         <button
           type="button"
-          className="emulator-nav-btn"
+          className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] transition-colors duration-150 hover:bg-[var(--bg-hover)] disabled:cursor-default disabled:opacity-40"
           onClick={() => sendKey("GoBack")}
           disabled={disabled}
           title="Back"
           aria-label="Back"
         >
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
+          <span className="text-lg">&#x2039;</span>
         </button>
       )}
       <button
         type="button"
-        className="emulator-nav-btn"
+        className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] transition-colors duration-150 hover:bg-[var(--bg-hover)] disabled:cursor-default disabled:opacity-40"
         onClick={() => sendKey("GoHome")}
         disabled={disabled}
         title="Home"
         aria-label="Home"
       >
-        <svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="12" r="4" />
-        </svg>
+        <span className="text-lg">&#x25cf;</span>
       </button>
       {showAndroidNav && (
         <button
           type="button"
-          className="emulator-nav-btn"
+          className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] transition-colors duration-150 hover:bg-[var(--bg-hover)] disabled:cursor-default disabled:opacity-40"
           onClick={() => sendKey("AppSwitch")}
           disabled={disabled}
           title="Recents"
           aria-label="Recents"
         >
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <rect x="6" y="6" width="12" height="12" rx="1" />
-          </svg>
+          <span className="text-lg">&#x25a1;</span>
         </button>
       )}
     </div>

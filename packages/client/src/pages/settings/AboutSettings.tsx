@@ -58,13 +58,18 @@ export function AboutSettings() {
   }, []);
 
   return (
-    <section className="settings-section">
-      <h2>{t("aboutTitle")}</h2>
-      <div className="settings-group">
+    <section className="flex flex-col gap-8 mb-12">
+      <h2
+        style={{ fontFamily: "var(--font-display)" }}
+        className="text-[2rem] text-[var(--text-primary)] mb-2"
+      >
+        {t("aboutTitle")}
+      </h2>
+      <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
         {/* Only show Install option if install is possible or already installed */}
         {(canInstall || isInstalled) && (
-          <div className="settings-item">
-            <div className="settings-item-info">
+          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+            <div className="flex flex-col gap-1">
               <strong>{t("aboutInstallTitle")}</strong>
               <p>
                 {isInstalled
@@ -73,13 +78,13 @@ export function AboutSettings() {
               </p>
             </div>
             {isInstalled ? (
-              <span className="settings-status-badge">
+              <span className="px-[var(--space-2)] py-[var(--space-1)] rounded-[var(--radius-sm)] bg-[var(--text-primary)] text-white [font-size:var(--font-size-sm)] font-medium">
                 {t("aboutInstalled")}
               </span>
             ) : (
               <button
                 type="button"
-                className="settings-button"
+                className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
                 onClick={install}
               >
                 {t("aboutInstall")}
@@ -87,8 +92,8 @@ export function AboutSettings() {
             )}
           </div>
         )}
-        <div className="settings-item">
-          <div className="settings-item-info">
+        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-1">
             <strong>{t("aboutVersionTitle")}</strong>
             <p>
               {t("aboutServerVersion")}{" "}
@@ -96,14 +101,14 @@ export function AboutSettings() {
                 <>
                   v{versionInfo.current}
                   {versionInfo.updateAvailable && versionInfo.latest ? (
-                    <span className="settings-update-available">
+                    <span className="text-[var(--success-color)] font-medium">
                       {" "}
                       {t("aboutVersionAvailable", {
                         version: versionInfo.latest,
                       })}
                     </span>
                   ) : versionInfo.latest ? (
-                    <span className="settings-up-to-date">
+                    <span className="text-[var(--text-muted)]">
                       {" "}
                       {t("aboutUpToDate")}
                     </span>
@@ -117,30 +122,36 @@ export function AboutSettings() {
               {t("aboutClientVersion")} v{__APP_VERSION__}
             </p>
             {versionError && (
-              <p className="settings-warning">{t("aboutUnableRefresh")}</p>
+              <p className="text-xs text-[var(--warning-color)] mt-1">
+                {t("aboutUnableRefresh")}
+              </p>
             )}
             {showRelayResumeUpdateWarning && (
-              <p className="settings-warning">{t("aboutRelayResumeWarning")}</p>
+              <p className="text-xs text-[var(--warning-color)] mt-1">
+                {t("aboutRelayResumeWarning")}
+              </p>
             )}
             {versionInfo?.updateAvailable && (
-              <p className="settings-update-hint">{t("aboutUpdateHint")}</p>
+              <p className="mt-[var(--space-1)] [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                {t("aboutUpdateHint")}
+              </p>
             )}
           </div>
           <button
             type="button"
-            className="settings-button"
+            className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
             onClick={() => void refetchVersionFresh()}
             disabled={versionLoading}
           >
             {versionLoading ? t("aboutChecking") : t("aboutCheckUpdates")}
           </button>
         </div>
-        <div className="settings-item">
-          <div className="settings-item-info">
+        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-1">
             <strong>{t("developmentRestartTitle")}</strong>
             <p>{t("developmentRestartDescription")}</p>
             {activeWorkers > 0 && !restarting && (
-              <p className="settings-warning">
+              <p className="text-xs text-[var(--warning-color)] mt-1">
                 {t("developmentInterruptedWarning", {
                   count: activeWorkers,
                   suffix: activeWorkers !== 1 ? "s " : " ",
@@ -150,7 +161,7 @@ export function AboutSettings() {
           </div>
           <button
             type="button"
-            className={`settings-button ${activeWorkers > 0 ? "settings-button-danger" : ""}`}
+            className={`px-[var(--space-2)] py-[var(--space-2)] bg-[var(--bg-hover)] border border-[var(--border-color)] rounded-[var(--radius-sm)] text-[var(--text-primary)] [font-size:var(--font-size-sm)] cursor-pointer transition-[background] duration-150 whitespace-nowrap ${activeWorkers > 0 ? "bg-[var(--error-color)] border-[var(--error-color)] text-white hover:bg-[var(--error-hover,#b91c1c)] hover:border-[var(--error-hover,#b91c1c)]" : "hover:bg-[var(--border-color)]"}`}
             onClick={handleRestart}
             disabled={restarting}
           >
@@ -161,8 +172,8 @@ export function AboutSettings() {
                 : t("developmentRestart")}
           </button>
         </div>
-        <div className="settings-item">
-          <div className="settings-item-info">
+        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-1">
             <strong>{t("aboutReportBugTitle")}</strong>
             <p>{t("aboutReportBugDescription")}</p>
           </div>
@@ -170,36 +181,37 @@ export function AboutSettings() {
             href="https://github.com/kzahel/yepanywhere/issues"
             target="_blank"
             rel="noopener noreferrer"
-            className="settings-button"
+            className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
           >
             {t("aboutReportBug")}
           </a>
         </div>
-        <div className="settings-item">
-          <div className="settings-item-info">
+        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-1">
             <strong>{t("aboutSetupWizardTitle")}</strong>
             <p>{t("aboutSetupWizardDescription")}</p>
           </div>
           <button
             type="button"
-            className="settings-button"
+            className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
             onClick={resetOnboarding}
           >
             {t("aboutLaunchWizard")}
           </button>
         </div>
-        <div className="settings-item">
-          <div className="settings-item-info">
+        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-1">
             <strong>{t("aboutDiagnosticsTitle")}</strong>
             <p>{t("aboutDiagnosticsDescription")}</p>
           </div>
-          <label className="toggle-switch">
+          <label className="relative inline-block w-[44px] h-[24px] shrink-0">
             <input
               type="checkbox"
+              className="opacity-0 w-0 h-0"
               checked={remoteLogCollectionEnabled}
               onChange={(e) => setRemoteLogCollectionEnabled(e.target.checked)}
             />
-            <span className="toggle-slider" />
+            <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
           </label>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import type { ZodError } from "zod";
 import { useSchemaValidationContext } from "../../../contexts/SchemaValidationContext";
 import { validateToolResult } from "../../../lib/validateToolResult";
@@ -7,9 +7,12 @@ import type { BashOutputInput, BashOutputResult, ToolRenderer } from "./types";
 
 const MAX_LINES_COLLAPSED = 20;
 
-/**
- * Format timestamp to relative time
- */
+const terminalFrameClasses =
+  "rounded-lg border border-[var(--border-subtle)] bg-[#171717] px-4 py-3 [font-family:var(--font-mono)] text-[13px] leading-6 text-[#e8e3d8] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]";
+
+const subtleButtonClasses =
+  "min-h-[40px] rounded-full border border-black/10 bg-white/85 px-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7c6f63] transition-colors hover:bg-[#f7f2e8] hover:text-[#2f2923]";
+
 function formatTimestamp(timestamp: string): string {
   try {
     const date = new Date(timestamp);
@@ -25,38 +28,68 @@ function formatTimestamp(timestamp: string): string {
   }
 }
 
-/**
- * Status indicator component
- */
 function StatusIndicator({ status }: { status: string }) {
   const statusConfig = {
-    running: { icon: "⟳", className: "status-running" },
-    completed: { icon: "✓", className: "status-completed" },
-    failed: { icon: "✗", className: "status-failed" },
-  };
+    running: {
+      icon: "●",
+      className:
+        "border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]",
+    },
+    completed: {
+      icon: "✓",
+      className:
+        "border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]",
+    },
+    failed: {
+      icon: "×",
+      className:
+        "border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]",
+    },
+  } as const;
 
-  const config = statusConfig[status as keyof typeof statusConfig] || {
+  const config = statusConfig[status as keyof typeof statusConfig] ?? {
     icon: "?",
-    className: "",
+    className:
+      "border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]",
   };
 
   return (
-    <span className={`bashoutput-status ${config.className}`}>
-      {config.icon} {status}
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${config.className}`}
+    >
+      <span aria-hidden="true">{config.icon}</span>
+      {status}
     </span>
   );
 }
 
-/**
- * BashOutput tool use - shows bash_id being polled
- */
+function CodePanel({
+  children,
+  tone = "default",
+}: {
+  children: ReactNode;
+  tone?: "default" | "error";
+}) {
+  return (
+    <pre
+      className={`${terminalFrameClasses} overflow-x-auto whitespace-pre-wrap break-words ${tone === "error" ? "border-[#6d342b] text-[#f3b3a1]" : ""}`}
+    >
+      <code>{children}</code>
+    </pre>
+  );
+}
+
 function BashOutputToolUse({ input }: { input: BashOutputInput }) {
   return (
-    <div className="bashoutput-tool-use">
-      <span className="bashoutput-label">Polling background shell</span>
-      <code className="bashoutput-id">{input.bash_id}</code>
+    <div className="flex flex-wrap items-center gap-2 text-sm text-[#7c6f63]">
+      <span className="font-medium text-[#5f564d]">
+        Polling background shell
+      </span>
+      <code className="rounded-full border border-black/10 bg-[#f7f2e8] px-2.5 py-1 [font-family:var(--font-mono)] text-[12px] text-[#4a433c]">
+        {input.bash_id}
+      </code>
       {input.block !== undefined && (
-        <span className="badge">
+        <span className="rounded-full border border-black/10 bg-white/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7c6f63]">
           {input.block ? "blocking" : "non-blocking"}
         </span>
       )}
@@ -64,9 +97,6 @@ function BashOutputToolUse({ input }: { input: BashOutputInput }) {
   );
 }
 
-/**
- * BashOutput tool result - shows async bash result
- */
 function BashOutputToolResult({
   result,
   isError,
@@ -99,7 +129,7 @@ function BashOutputToolResult({
   if (isError) {
     const errorResult = result as unknown as { content?: unknown } | undefined;
     return (
-      <div className="bashoutput-error">
+      <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-4 py-3 text-sm text-[var(--text-primary)]">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="BashOutput" errors={validationErrors} />
         )}
@@ -111,7 +141,7 @@ function BashOutputToolResult({
   }
 
   if (!result) {
-    return <div className="bashoutput-empty">No output</div>;
+    return <div className="text-sm italic text-[#8f8578]">No output</div>;
   }
 
   const stdoutLines = result.stdout?.split("\n") || [];
@@ -125,21 +155,21 @@ function BashOutputToolResult({
       : stdoutLines;
 
   return (
-    <div className="bashoutput-result">
-      <div className="bashoutput-header">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-[#7c6f63]">
         <StatusIndicator status={result.status} />
         {result.command && (
-          <code className="bashoutput-command">{result.command}</code>
+          <code className="[font-family:var(--font-mono)] text-[12px] text-[#6d645b]">
+            {result.command}
+          </code>
         )}
         {result.exitCode !== null && (
-          <span
-            className={`badge ${result.exitCode === 0 ? "badge-success" : "badge-error"}`}
-          >
+          <span className="rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]">
             exit {result.exitCode}
           </span>
         )}
         {result.timestamp && (
-          <span className="bashoutput-timestamp">
+          <span className="text-[11px] uppercase tracking-[0.18em] text-[#9a9083]">
             {formatTimestamp(result.timestamp)}
           </span>
         )}
@@ -147,28 +177,16 @@ function BashOutputToolResult({
           <SchemaWarning toolName="BashOutput" errors={validationErrors} />
         )}
       </div>
-      {(result.stdout || result.stderr) && (
-        <>
-          {result.stdout && (
-            <pre className="bash-stdout code-block">
-              <code>{displayStdout.join("\n")}</code>
-            </pre>
-          )}
-          {result.stderr && (
-            <pre className="bash-stderr code-block">
-              <code>{result.stderr}</code>
-            </pre>
-          )}
-          {needsCollapse && (
-            <button
-              type="button"
-              className="expand-button"
-              onClick={() => setIsExpanded(!isExpanded)}
-            >
-              {isExpanded ? "Show less" : `Show all ${totalLines} lines`}
-            </button>
-          )}
-        </>
+      {result.stdout && <CodePanel>{displayStdout.join("\n")}</CodePanel>}
+      {result.stderr && <CodePanel tone="error">{result.stderr}</CodePanel>}
+      {needsCollapse && (
+        <button
+          type="button"
+          className={subtleButtonClasses}
+          onClick={() => setIsExpanded((current) => !current)}
+        >
+          {isExpanded ? "Show less" : `Show all ${totalLines} lines`}
+        </button>
       )}
     </div>
   );

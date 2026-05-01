@@ -36,6 +36,9 @@ export function ProviderThemeProvider({
   useEffect(() => {
     const html = document.documentElement;
 
+    // Debug: log theme changes
+    console.debug("[ProviderTheme] setting provider:", activeProvider);
+
     // Set or remove data-provider attribute
     if (activeProvider) {
       html.setAttribute("data-provider", activeProvider);

@@ -44,15 +44,19 @@ export function GitStatusPage() {
   };
 
   if (!effectiveProjectId && !projectsLoading && projects.length === 0) {
-    return <div className="error">{t("gitStatusNoProjects")}</div>;
+    return (
+      <div className="text-[var(--error-color)] p-2 bg-[var(--bg-error,rgba(207,34,46,0.1))] rounded">
+        {t("gitStatusNoProjects")}
+      </div>
+    );
   }
 
   const wrapperClass = isWideScreen
-    ? "main-content-wrapper"
-    : "main-content-mobile";
+    ? "flex justify-center min-w-0 h-[100dvh] overflow-hidden"
+    : "flex-1 flex flex-col min-h-0";
   const innerClass = isWideScreen
-    ? "main-content-constrained"
-    : "main-content-mobile-inner";
+    ? "w-full flex flex-col h-[100dvh]"
+    : "flex-1 flex flex-col min-h-0";
 
   return (
     <div className={wrapperClass}>
@@ -74,16 +78,20 @@ export function GitStatusPage() {
           isSidebarCollapsed={isSidebarCollapsed}
         />
 
-        <main className="page-scroll-container">
-          <div className="page-content-inner">
+        <main className="flex-1 overflow-y-auto min-h-0">
+          <div className="px-6 py-8 md:px-10 md:py-10">
             {loading || projectsLoading ? (
-              <div className="loading">{t("gitStatusLoading")}</div>
+              <div className="text-[var(--text-muted)] italic [font-size:var(--font-size-lg)]">
+                {t("gitStatusLoading")}
+              </div>
             ) : error ? (
-              <div className="error">
+              <div className="text-[var(--error-color)] p-2 bg-[var(--bg-error,rgba(207,34,46,0.1))] rounded">
                 {t("gitStatusErrorPrefix")} {error.message}
               </div>
             ) : gitStatus && !gitStatus.isGitRepo ? (
-              <div className="git-status-empty">{t("gitStatusNotRepo")}</div>
+              <div className="text-[var(--text-muted)] italic p-4 text-center">
+                {t("gitStatusNotRepo")}
+              </div>
             ) : gitStatus && effectiveProjectId ? (
               <GitStatusContent
                 status={gitStatus}
@@ -116,47 +124,37 @@ function GitStatusContent({
   const untrackedFiles = status.files.filter((f) => f.status === "?");
 
   return (
-    <div className="git-status">
-      <div className="git-status-branch">
-        <span className="git-branch-icon">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <line x1="6" y1="3" x2="6" y2="15" />
-            <circle cx="18" cy="6" r="3" />
-            <circle cx="6" cy="18" r="3" />
-            <path d="M18 9a9 9 0 0 1-9 9" />
-          </svg>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-2 flex-wrap text-[0.95rem] p-3 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[var(--radius-md)]">
+        <span className="flex items-center text-[var(--text-muted)]">
+          {"\u2387"}
         </span>
-        <span className="git-branch-name">
+        <span className="font-semibold text-[var(--text-primary)]">
           {status.branch ?? t("gitStatusDetachedHead")}
         </span>
         {status.upstream && (
-          <span className="git-upstream"> → {status.upstream}</span>
+          <span className="text-[var(--text-muted)] text-[0.85rem]">
+            {" "}
+            → {status.upstream}
+          </span>
         )}
         {(status.ahead > 0 || status.behind > 0) && (
-          <span className="git-ahead-behind">
+          <span className="text-[var(--warning-color)] text-[0.85rem] font-medium">
             {status.ahead > 0 && ` ↑${status.ahead}`}
             {status.behind > 0 && ` ↓${status.behind}`}
           </span>
         )}
         <span
-          className={`git-clean-badge ${status.isClean ? "git-clean" : "git-dirty"}`}
+          className={`ml-auto text-[0.75rem] font-semibold px-2 py-0.5 rounded-[var(--radius-full,999px)] uppercase tracking-wide ${status.isClean ? "bg-[color-mix(in_srgb,var(--success-color)_20%,transparent)] text-[var(--success-color)]" : "bg-[color-mix(in_srgb,var(--warning-color)_20%,transparent)] text-[var(--warning-color)]"}`}
         >
           {status.isClean ? t("gitStatusClean") : t("gitStatusDirty")}
         </span>
       </div>
 
       {status.isClean ? (
-        <div className="git-status-empty">{t("gitStatusWorkingTreeClean")}</div>
+        <div className="text-[var(--text-muted)] italic p-4 text-center">
+          {t("gitStatusWorkingTreeClean")}
+        </div>
       ) : (
         <>
           {stagedFiles.length > 0 && (
@@ -205,11 +203,11 @@ function GitFileSection({
   onFileClick: (file: GitFileChange) => void;
 }) {
   return (
-    <div className="git-file-section">
-      <h3 className="git-file-section-title">
-        {title} <span className="git-file-count">({files.length})</span>
+    <div className="flex flex-col">
+      <h3 className="text-[0.85rem] font-semibold text-[var(--text-muted)] uppercase tracking-wide m-0 mb-2">
+        {title} <span className="font-normal">({files.length})</span>
       </h3>
-      <ul className="git-file-list">
+      <ul className="list-none m-0 p-0 flex flex-col">
         {files.map((file) => (
           <GitFileItem
             key={`${file.path}-${file.staged}`}
@@ -232,15 +230,15 @@ function GitFileItem({
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard nav not needed for file list
     <li
-      className="git-file-item git-file-item-clickable"
+      className="flex items-center gap-2 py-2 px-3 border-b border-[var(--border-color)] text-[0.85rem] min-w-0 cursor-pointer transition-colors hover:bg-[var(--bg-hover)] active:bg-[var(--bg-active)] last:border-b-0"
       onClick={() => onClick(file)}
     >
       <span
-        className={`git-status-badge git-status-${file.status.toLowerCase()}`}
+        className={`flex-shrink-0 w-5 h-5 flex items-center justify-center text-[0.7rem] font-bold rounded-[var(--radius-sm)] uppercase ${getGitStatusClass(file.status)}`}
       >
         {file.status}
       </span>
-      <span className="git-file-path">
+      <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[var(--text-primary)] font-mono text-[0.8rem]">
         {file.origPath ? (
           <>
             {file.origPath} → {file.path}
@@ -250,17 +248,42 @@ function GitFileItem({
         )}
       </span>
       {(file.linesAdded !== null || file.linesDeleted !== null) && (
-        <span className="git-line-counts">
+        <span className="flex-shrink-0 flex gap-2 font-mono text-[0.75rem]">
           {file.linesAdded !== null && (
-            <span className="git-lines-added">+{file.linesAdded}</span>
+            <span className="text-[var(--success-color)]">
+              +{file.linesAdded}
+            </span>
           )}
           {file.linesDeleted !== null && (
-            <span className="git-lines-deleted">-{file.linesDeleted}</span>
+            <span className="text-[var(--error-color)]">
+              -{file.linesDeleted}
+            </span>
           )}
         </span>
       )}
     </li>
   );
+}
+
+function getGitStatusClass(status: string): string {
+  switch (status.toLowerCase()) {
+    case "m":
+      return "bg-[color-mix(in_srgb,var(--warning-color)_20%,transparent)] text-[var(--warning-color)]";
+    case "a":
+      return "bg-[color-mix(in_srgb,var(--success-color)_20%,transparent)] text-[var(--success-color)]";
+    case "d":
+      return "bg-[color-mix(in_srgb,var(--error-color)_20%,transparent)] text-[var(--error-color)]";
+    case "r":
+      return "bg-[color-mix(in_srgb,var(--accent-color)_20%,transparent)] text-[var(--accent-color)]";
+    case "?":
+      return "text-[var(--text-muted)] bg-[color-mix(in_srgb,var(--text-muted)_15%,transparent)]";
+    case "u":
+      return "bg-[color-mix(in_srgb,var(--error-color)_20%,transparent)] text-[var(--error-color)]";
+    case "t":
+      return "bg-[color-mix(in_srgb,var(--accent-color)_20%,transparent)] text-[var(--accent-color)]";
+    default:
+      return "bg-[var(--bg-secondary)] text-[var(--text-muted)]";
+  }
 }
 
 function GitDiffModal({
@@ -312,9 +335,11 @@ function GitDiffModal({
   return (
     <Modal title={fileName} onClose={onClose}>
       {loading ? (
-        <div className="git-diff-loading">{t("gitStatusLoadingDiff")}</div>
+        <div className="p-4 text-center text-[var(--text-muted)]">
+          {t("gitStatusLoadingDiff")}
+        </div>
       ) : error ? (
-        <div className="git-diff-error">{error}</div>
+        <div className="p-4 text-center text-[var(--error-color)]">{error}</div>
       ) : diffResult ? (
         <GitDiffModalContent
           file={file}
@@ -404,14 +429,16 @@ function GitDiffModalContent({
     fullContextResult?.markdownHtml || diffResult.markdownHtml;
 
   return (
-    <div className="diff-modal-content" ref={contentRef}>
-      <div className="diff-context-controls">
-        <span className="diff-context-path">{file.path}</span>
-        <div className="diff-context-buttons">
+    <div className="bg-[var(--bg-code)] rounded overflow-auto" ref={contentRef}>
+      <div className="flex gap-2 items-center mb-3 p-2 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] sticky top-0 z-[1]">
+        <span className="flex-1 font-mono [font-size:var(--font-size-sm)] text-[var(--text-secondary)] overflow-hidden text-ellipsis whitespace-nowrap">
+          {file.path}
+        </span>
+        <div className="flex gap-1">
           {hasMarkdownPreview && (
             <button
               type="button"
-              className={`diff-context-toggle ${showMarkdownPreview ? "active" : ""}`}
+              className={`px-3 py-1 [font-size:var(--font-size-base)] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded cursor-pointer text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:opacity-60 disabled:cursor-wait ${showMarkdownPreview ? "bg-[var(--accent-color)] text-white" : ""}`}
               onClick={() => setShowMarkdownPreview(!showMarkdownPreview)}
             >
               {showMarkdownPreview ? t("gitStatusDiff") : t("gitStatusPreview")}
@@ -420,7 +447,7 @@ function GitDiffModalContent({
           {!showMarkdownPreview && (
             <button
               type="button"
-              className="diff-context-toggle"
+              className="px-3 py-1 [font-size:var(--font-size-base)] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded cursor-pointer text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:opacity-60 disabled:cursor-wait"
               onClick={handleToggleContext}
               disabled={contextLoading}
             >
@@ -433,14 +460,16 @@ function GitDiffModalContent({
           )}
         </div>
         {contextError && (
-          <span className="diff-context-error">{contextError}</span>
+          <span className="text-[var(--text-error)] [font-size:var(--font-size-sm)]">
+            {contextError}
+          </span>
         )}
       </div>
 
       {showMarkdownPreview && markdownHtml ? (
-        <div className="markdown-preview">
+        <div className="overflow-auto">
           <div
-            className="markdown-rendered"
+            className="p-4 leading-relaxed text-[var(--text-primary)]"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
             dangerouslySetInnerHTML={{ __html: markdownHtml }}
           />
@@ -464,7 +493,7 @@ const HighlightedDiff = memo(function HighlightedDiff({
 }) {
   return (
     <div
-      className="highlighted-diff"
+      className="font-mono [font-size:var(--font-size-base)] leading-relaxed tab-[var(--tab-size)]"
       // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki output is safe
       dangerouslySetInnerHTML={{ __html: diffHtml }}
     />
@@ -474,18 +503,21 @@ const HighlightedDiff = memo(function HighlightedDiff({
 /** Fallback plain-text diff renderer */
 const DiffLines = memo(function DiffLines({ lines }: { lines: string[] }) {
   return (
-    <div className="diff-hunk">
-      <pre className="diff-content">
+    <div className="my-2 first:mt-0 rounded overflow-hidden border border-[var(--border-color)]">
+      <pre className="m-0 p-0 bg-[var(--bg-code)] overflow-x-auto tab-[var(--tab-size)]">
         {lines.map((line, i) => {
           const prefix = line[0];
-          const className =
+          const lineClass =
             prefix === "-"
-              ? "diff-removed"
+              ? "bg-[var(--bg-diff-removed,rgba(207,34,46,0.15))] text-[var(--text-diff-removed,var(--error-color))]"
               : prefix === "+"
-                ? "diff-added"
-                : "diff-context";
+                ? "bg-[var(--bg-diff-added,rgba(26,127,55,0.15))] text-[var(--text-diff-added,var(--success-color))]"
+                : "text-[var(--text-muted)]";
           return (
-            <div key={`${i}-${line.slice(0, 50)}`} className={className}>
+            <div
+              key={`${i}-${line.slice(0, 50)}`}
+              className={`px-2 leading-relaxed ${lineClass}`}
+            >
               {line}
             </div>
           );

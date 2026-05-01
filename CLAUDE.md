@@ -148,6 +148,18 @@ ls ~/.yep-anywhere/node_modules/yepanywhere/node_modules/@hono/node-server/packa
 
 **How it works:** The desktop app copies `yepanywhere-server` from bundled resources to `{dataDir}/node_modules/yepanywhere/`. The bundled package **includes `node_modules`** (installed via `pnpm deploy --prod` during the build), so `bun install` is skipped when core dependencies are present. If the data directory was previously used by a CLI-installed version (different dependency tree), remove the old `node_modules` to avoid module resolution conflicts.
 
+## Frontend Styling
+
+Three frontend targets share code, but styling is not centralized in one place. When modifying styles, you must consider the impact on all three:
+
+| Target | Package | Styling | Notes |
+|--------|---------|---------|-------|
+| **Web** | `packages/client` | Tailwind CSS v4 + `src/styles/index.css` | Also used by Desktop main app and Mobile |
+| **Desktop** | `packages/desktop` | `src/styles/index.css` (custom CSS) | Only for the setup wizard. Main app mounts `packages/client` via `renderDesktopClient()` |
+| **Mobile** | `packages/mobile` | Inherits from `packages/client` | Tauri v2 app; `frontendDist` points to client `dist-remote`. No own frontend code |
+
+**Key rule:** Changes to `packages/client/src/styles/index.css` or Tailwind classes affect **Web, Desktop (main app), and Mobile**. Changes to `packages/desktop/src/styles/index.css` affect **only the Desktop setup wizard**.
+
 ## After Editing Code
 
 After editing TypeScript or other source files, verify your changes compile and pass checks:

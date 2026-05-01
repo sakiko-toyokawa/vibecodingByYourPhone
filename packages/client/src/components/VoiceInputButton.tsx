@@ -94,6 +94,16 @@ export const VoiceInputButton = forwardRef(function VoiceInputButton(
   });
 
   const isAvailable = isSupported && voiceInputEnabled && serverVoiceEnabled;
+  const statusLabelClasses =
+    status === "error" || error
+      ? "text-[rgb(239,68,68)]"
+      : status === "reconnecting"
+        ? "animate-[status-blink_0.8s_ease-in-out_infinite] text-[rgb(234,179,8)]"
+        : status === "receiving"
+          ? "font-medium text-[rgb(34,197,94)]"
+          : status === "listening"
+            ? "text-[rgb(239,68,68)]"
+            : "text-[var(--text-muted)]";
 
   // Get display text for status
   const statusLabel = error || SPEECH_STATUS_LABELS[status];
@@ -144,24 +154,14 @@ export const VoiceInputButton = forwardRef(function VoiceInputButton(
     return null;
   }
 
-  // Determine status class for styling
-  const statusClass =
-    status === "error" || error
-      ? "status-error"
-      : status === "reconnecting"
-        ? "status-reconnecting"
-        : status === "starting"
-          ? "status-starting"
-          : status === "receiving"
-            ? "status-receiving"
-            : status === "listening"
-              ? "status-listening"
-              : "";
-
   const button = (
     <button
       type="button"
-      className={`voice-input-button ${isListening ? "listening" : ""} ${className}`}
+      className={`${className} inline-flex items-center justify-center rounded-md border px-2 py-2 transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 ${
+        isListening
+          ? "border-[rgb(239,68,68)] bg-[rgba(239,68,68,0.15)] text-[rgb(239,68,68)] hover:bg-[rgba(239,68,68,0.25)]"
+          : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:border-[var(--border-input)] hover:bg-[var(--bg-hover)]"
+      }`}
       onClick={handleClick}
       disabled={disabled}
       title={
@@ -186,16 +186,25 @@ export const VoiceInputButton = forwardRef(function VoiceInputButton(
           viewBox="0 0 24 24"
           fill="currentColor"
           aria-hidden="true"
-          className="voice-input-recording"
+          className="h-4 w-4"
         >
-          <rect x="4" y="8" width="3" height="8" rx="1" className="bar bar-1" />
+          <rect
+            x="4"
+            y="8"
+            width="3"
+            height="8"
+            rx="1"
+            className="animate-[voice-bar-pulse_0.8s_ease-in-out_infinite]"
+            style={{ animationDelay: "0s" }}
+          />
           <rect
             x="10.5"
             y="5"
             width="3"
             height="14"
             rx="1"
-            className="bar bar-2"
+            className="animate-[voice-bar-pulse_0.8s_ease-in-out_infinite]"
+            style={{ animationDelay: "0.2s" }}
           />
           <rect
             x="17"
@@ -203,7 +212,8 @@ export const VoiceInputButton = forwardRef(function VoiceInputButton(
             width="3"
             height="8"
             rx="1"
-            className="bar bar-3"
+            className="animate-[voice-bar-pulse_0.8s_ease-in-out_infinite]"
+            style={{ animationDelay: "0.4s" }}
           />
         </svg>
       ) : (
@@ -231,11 +241,13 @@ export const VoiceInputButton = forwardRef(function VoiceInputButton(
   // If showing status text, wrap in container; otherwise just return the button
   if (showStatusText && isListening) {
     return (
-      <div
-        className={`voice-input-container ${isListening ? "listening" : ""} ${statusClass}`}
-      >
+      <div className="flex items-center gap-1">
         {button}
-        <span className="voice-input-status">{statusLabel}</span>
+        <span
+          className={`min-w-20 whitespace-nowrap text-xs transition-colors ${statusLabelClasses}`}
+        >
+          {statusLabel}
+        </span>
       </div>
     );
   }

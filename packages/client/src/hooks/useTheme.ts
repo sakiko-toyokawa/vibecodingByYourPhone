@@ -1,26 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { UI_KEYS } from "../lib/storageKeys";
 
-export type Theme = "auto" | "light" | "dark" | "verydark";
+export type Theme = "claude" | "codex" | "gemini";
 
 const themeLabels: Record<Theme, string> = {
-  auto: "Auto",
-  light: "Light",
-  dark: "Dark",
-  verydark: "Very Dark",
+  claude: "Claude",
+  codex: "Codex",
+  gemini: "Gemini",
 };
 
-export const THEMES: Theme[] = ["auto", "light", "dark", "verydark"];
+export const THEMES: Theme[] = ["claude", "codex", "gemini"];
 
 export function getThemeLabel(theme: Theme): string {
   return themeLabels[theme];
-}
-
-function isLightTheme(theme: Theme): boolean {
-  if (theme === "auto") {
-    return window.matchMedia("(prefers-color-scheme: light)").matches;
-  }
-  return theme === "light";
 }
 
 function syncSystemBars(theme: Theme) {
@@ -35,7 +27,7 @@ function syncSystemBars(theme: Theme) {
     | undefined;
   if (tauri?.invoke) {
     tauri
-      .invoke("set_system_bars", { light: isLightTheme(theme) })
+      .invoke("set_system_bars", { light: theme !== "codex" })
       .catch(() => {});
   }
 }
@@ -48,19 +40,15 @@ function applyTheme(theme: Theme) {
 
 function loadTheme(): Theme {
   const stored = localStorage.getItem(UI_KEYS.theme);
-  if (stored && THEMES.includes(stored as Theme)) {
-    return stored as Theme;
-  }
-  return "auto";
-}
-
-function saveTheme(theme: Theme) {
-  localStorage.setItem(UI_KEYS.theme, theme);
+  if (stored === "codex") return "codex";
+  if (stored === "gemini") return "gemini";
+  // Backward compat: old "light" value maps to claude mode
+  return "claude";
 }
 
 /**
  * Hook to manage theme preference.
- * Persists to localStorage and applies data-theme attribute.
+ * Supports "claude" (light warm), "codex" (dark exchange), and "gemini" (light futuristic) modes.
  */
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(loadTheme);
@@ -70,8 +58,8 @@ export function useTheme() {
   }, [theme]);
 
   const setTheme = useCallback((newTheme: Theme) => {
+    localStorage.setItem(UI_KEYS.theme, newTheme);
     setThemeState(newTheme);
-    saveTheme(newTheme);
   }, []);
 
   return { theme, setTheme };
@@ -79,7 +67,6 @@ export function useTheme() {
 
 /**
  * Initialize theme on app load (call once at startup).
- * This runs before React renders to avoid flash of wrong theme.
  */
 export function initializeTheme() {
   const theme = loadTheme();
@@ -87,56 +74,15 @@ export function initializeTheme() {
 }
 
 /**
- * Get current resolved theme (useful for components that need
- * to know if we're actually in light or dark mode when auto)
+ * Get current resolved theme.
  */
-export function getResolvedTheme(): "light" | "dark" {
-  const stored = loadTheme();
-  if (stored === "auto") {
-    return window.matchMedia("(prefers-color-scheme: light)").matches
-      ? "light"
-      : "dark";
-  }
-  return stored === "light" ? "light" : "dark";
+export function getResolvedTheme(): Theme {
+  return loadTheme();
 }
 
 /**
- * Hook to reactively get the resolved theme (light or dark).
- * Listens for both localStorage changes and system preference changes.
+ * Hook to reactively get the resolved theme.
  */
-export function useResolvedTheme(): "light" | "dark" {
-  const [resolved, setResolved] = useState<"light" | "dark">(getResolvedTheme);
-
-  useEffect(() => {
-    const update = () => setResolved(getResolvedTheme());
-
-    // Listen for system preference changes
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: light)");
-    mediaQuery.addEventListener("change", update);
-
-    // Listen for storage changes (theme changed in another tab or by useTheme)
-    window.addEventListener("storage", update);
-
-    // Also listen for attribute changes on documentElement (for same-tab updates)
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        if (
-          mutation.type === "attributes" &&
-          mutation.attributeName === "data-theme"
-        ) {
-          update();
-          break;
-        }
-      }
-    });
-    observer.observe(document.documentElement, { attributes: true });
-
-    return () => {
-      mediaQuery.removeEventListener("change", update);
-      window.removeEventListener("storage", update);
-      observer.disconnect();
-    };
-  }, []);
-
-  return resolved;
+export function useResolvedTheme(): Theme {
+  return useTheme().theme;
 }

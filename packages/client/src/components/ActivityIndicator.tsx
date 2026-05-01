@@ -18,11 +18,21 @@ export function ActivityIndicator({
   variant = "dot",
   className,
 }: ActivityIndicatorProps) {
-  const dot = <span className="activity-dot" />;
+  const dot = (
+    <span className="inline-block w-2 h-2 rounded-full bg-[var(--thinking-color)] animate-[thinking-pulse_1.5s_ease-in-out_infinite]" />
+  );
 
   if (variant === "badge") {
-    return <span className={`activity-badge ${className ?? ""}`}>{dot}</span>;
+    return (
+      <span
+        className={`inline-flex items-center justify-center w-5 h-5 rounded-full bg-[var(--bg-hover)] ${className ?? ""}`}
+      >
+        {dot}
+      </span>
+    );
   }
 
-  return <span className={`activity-indicator ${className ?? ""}`}>{dot}</span>;
+  return (
+    <span className={`inline-flex items-center ${className ?? ""}`}>{dot}</span>
+  );
 }

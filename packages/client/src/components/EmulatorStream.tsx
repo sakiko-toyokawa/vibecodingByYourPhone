@@ -605,7 +605,7 @@ export function EmulatorStream({
   return (
     <video
       ref={videoRef}
-      className="emulator-video"
+      className="max-w-full max-h-full object-contain touch-none select-none"
       autoPlay
       playsInline
       muted

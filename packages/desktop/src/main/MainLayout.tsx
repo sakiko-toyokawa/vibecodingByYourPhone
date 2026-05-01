@@ -112,21 +112,11 @@ export function MainLayout() {
 
   if (error) {
     return (
-      <div
-        style={{
-          height: "100vh",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "var(--text-danger, #ff4444)",
-          padding: "2rem",
-          textAlign: "center",
-          gap: "1rem",
-        }}
+      <div className="flex h-screen flex-col items-center justify-center gap-4 p-8 text-center text-[var(--text-danger,#ff4444)]"
       >
         <div>Failed to load app: {error}</div>
-        <div style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+        <div className="text-sm text-[var(--text-secondary)]"
+        >
           Server running on port {port}. Check DevTools (Ctrl+Shift+I) for details.
         </div>
       </div>
@@ -134,14 +124,7 @@ export function MainLayout() {
   }
 
   return (
-    <div
-      style={{
-        height: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "var(--text-secondary)",
-      }}
+    <div className="flex h-screen items-center justify-center text-[var(--text-secondary)]"
     >
       {serverStatus === "error"
         ? "Server error. Use tray menu to restart."

@@ -265,18 +265,18 @@ export const MessageList = memo(function MessageList({
   }, [renderItems.length, scrollToBottom]);
 
   return (
-    <div className="message-list" ref={containerRef}>
+    <div className="flex flex-col gap-3" ref={containerRef}>
       {hasOlderMessages && (
-        <div className="load-older-messages">
+        <div className="flex justify-center px-4 pt-3 pb-1">
           <button
             type="button"
-            className="load-older-button"
+            className="inline-flex items-center gap-1.5 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-tertiary)] px-4 py-1.5 text-xs text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:cursor-default disabled:opacity-60"
             onClick={handleLoadOlder}
             disabled={loadingOlder}
           >
             {loadingOlder ? (
               <>
-                <span className="spinning">&#x21BB;</span> Loading...
+                <span className="animate-spin">&#x21BB;</span> Loading...
               </>
             ) : (
               "Load older messages"
@@ -304,7 +304,7 @@ export const MessageList = memo(function MessageList({
         const firstItem = group.items[0];
         if (!firstItem) return null;
         return (
-          <div key={`turn-${firstItem.id}`} className="assistant-turn">
+          <div key={`turn-${firstItem.id}`} className="relative pl-6">
             {group.items.map((item) => (
               <RenderItemComponent
                 key={item.id}
@@ -320,32 +320,29 @@ export const MessageList = memo(function MessageList({
       })}
       {/* Pending messages - shown as "Uploading..." or "Sending..." until server confirms */}
       {pendingMessages.map((pending) => (
-        <div key={pending.tempId} className="pending-message">
-          <div className="message-user-prompt pending-message-bubble">
+        <div key={pending.tempId} className="mb-3">
+          <div className="w-fit max-w-[80%] rounded-md bg-[var(--bg-secondary)] px-2 py-1 text-[13px] opacity-70">
             {pending.content}
           </div>
-          <div className="pending-message-status">
+          <div className="mt-1 text-[10px] italic text-[var(--text-dimmed)]">
             {pending.status || "Sending..."}
           </div>
         </div>
       ))}
       {/* Deferred messages - queued server-side, waiting for agent turn to end */}
       {deferredMessages.map((deferred, index) => (
-        <div
-          key={deferred.tempId ?? `deferred-${index}`}
-          className="deferred-message"
-        >
-          <div className="message-user-prompt deferred-message-bubble">
+        <div key={deferred.tempId ?? `deferred-${index}`} className="mb-3">
+          <div className="w-fit max-w-[80%] rounded-md border-l-[3px] border-[var(--attention-color)] bg-[var(--bg-secondary)] px-2 py-1 pl-3 text-[13px] opacity-70">
             {deferred.content}
           </div>
-          <div className="deferred-message-footer">
-            <span className="deferred-message-status">
+          <div className="mt-1 flex items-center gap-2">
+            <span className="text-[10px] italic text-[var(--attention-color)]">
               {index === 0 ? "Queued (next)" : `Queued (#${index + 1})`}
             </span>
             {deferred.tempId && onCancelDeferred && (
               <button
                 type="button"
-                className="deferred-message-cancel"
+                className="cursor-pointer rounded-sm bg-transparent px-1 py-0 text-sm leading-none text-[var(--text-dimmed)] hover:text-[var(--error-color)]"
                 onClick={() => onCancelDeferred(deferred.tempId as string)}
                 aria-label="Cancel queued message"
               >
@@ -357,9 +354,9 @@ export const MessageList = memo(function MessageList({
       ))}
       {/* Compacting indicator - shown when context is being compressed */}
       {isCompacting && (
-        <div className="system-message system-message-compacting">
-          <span className="system-message-icon spinning">⟳</span>
-          <span className="system-message-text">Compacting context...</span>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-md text-xs bg-[var(--bg-secondary)] text-[var(--text-muted)] animate-pulse">
+          <span className="font-bold animate-spin">⟳</span>
+          <span className="flex-1">Compacting context...</span>
         </div>
       )}
       <ProcessingIndicator isProcessing={isProcessing} />

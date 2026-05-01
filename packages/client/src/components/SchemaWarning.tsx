@@ -110,61 +110,76 @@ export function SchemaWarning({ toolName, errors }: SchemaWarningProps) {
       <span
         role="button"
         tabIndex={0}
-        className="schema-warning"
+        className="relative ml-2 inline-flex cursor-pointer items-center justify-center border-none bg-none p-0"
         onClick={handleClick}
         onKeyDown={handleKeyDown}
         title={t("schemaWarningTooltip" as never, { tool: toolName })}
       >
-        <span className="schema-warning-icon" aria-hidden="true">
+        <span
+          className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[var(--warning-color)] text-[10px] font-bold text-[var(--bg-surface)] select-none"
+          aria-hidden="true"
+        >
           !
         </span>
       </span>
       {isModalOpen && (
         <Modal
           title={
-            <span className="schema-warning-modal-title">
+            <span className="text-[var(--warning-color)]">
               Schema validation failed: {toolName}
               {t("schemaWarningTitle" as never, { tool: toolName })}
             </span>
           }
           onClose={handleClose}
         >
-          <div className="schema-warning-modal-content">
+          <div className="flex flex-col gap-4">
             {missing.length > 0 && (
-              <div className="schema-warning-section">
-                <div className="schema-warning-section-title">
+              <div className="flex flex-col gap-2">
+                <div className="[font-size:var(--font-size-sm)] font-semibold text-[var(--text-secondary)]">
                   {t("schemaWarningMissing" as never)}
                 </div>
-                <ul className="schema-warning-list">
+                <ul className="m-0 flex list-none flex-col gap-2 p-0">
                   {missing.map((field) => (
-                    <li key={field} className="schema-warning-item">
-                      <code>{field}</code>
+                    <li
+                      key={field}
+                      className="flex flex-col gap-1 rounded-[var(--radius-sm)] bg-[var(--bg-code)] p-[var(--space-2)]"
+                    >
+                      <code className="[font-family:var(--font-mono)] [font-size:var(--font-size-sm)] text-[var(--warning-color)]">
+                        {field}
+                      </code>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
             {invalid.length > 0 && (
-              <div className="schema-warning-section">
-                <div className="schema-warning-section-title">
+              <div className="flex flex-col gap-2">
+                <div className="[font-size:var(--font-size-sm)] font-semibold text-[var(--text-secondary)]">
                   {t("schemaWarningInvalid" as never)}
                 </div>
-                <ul className="schema-warning-list">
+                <ul className="m-0 flex list-none flex-col gap-2 p-0">
                   {invalid.map(({ path, message }) => (
-                    <li key={path} className="schema-warning-item">
-                      <code>{path}</code>
-                      <span className="schema-warning-message">{message}</span>
+                    <li
+                      key={path}
+                      className="flex flex-col gap-1 rounded-[var(--radius-sm)] bg-[var(--bg-code)] p-[var(--space-2)]"
+                    >
+                      <code className="[font-family:var(--font-mono)] [font-size:var(--font-size-sm)] text-[var(--warning-color)]">
+                        {path}
+                      </code>
+                      <span className="[font-size:var(--font-size-xs)] text-[var(--text-muted)]">
+                        {message}
+                      </span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-            <div className="schema-warning-footer">
+            <div className="border-t border-[var(--border-subtle)] pt-[var(--space-2)]">
               <a
                 href={issueUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="schema-warning-report-link"
+                className="[font-size:var(--font-size-sm)] text-[var(--link-color)] no-underline hover:underline"
                 onClick={(e) => e.stopPropagation()}
               >
                 {t("schemaWarningReport" as never)}

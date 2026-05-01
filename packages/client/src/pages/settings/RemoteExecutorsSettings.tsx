@@ -88,20 +88,25 @@ export function RemoteExecutorsSettings() {
   };
 
   return (
-    <section className="settings-section">
-      <h2>{t("remoteExecutorsTitle")}</h2>
-      <p className="settings-section-description">
+    <section className="flex flex-col gap-8 mb-12">
+      <h2
+        style={{ fontFamily: "var(--font-display)" }}
+        className="text-[2rem] text-[var(--text-primary)] mb-2"
+      >
+        {t("remoteExecutorsTitle")}
+      </h2>
+      <p className="m-0 mb-[var(--space-3)] [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
         {t("remoteExecutorsDescription")}
       </p>
 
       {/* Add new executor */}
-      <div className="settings-group">
-        <div className="settings-item">
-          <div className="settings-item-info">
+      <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
+        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-1">
             <strong>{t("remoteExecutorsAddTitle")}</strong>
             <p>{t("remoteExecutorsAddDescription")}</p>
           </div>
-          <div className="remote-executor-add">
+          <div className="flex gap-[var(--space-2)] mt-[var(--space-2)]">
             <input
               type="text"
               value={newHost}
@@ -109,39 +114,50 @@ export function RemoteExecutorsSettings() {
               onKeyDown={handleKeyDown}
               placeholder={t("remoteExecutorsHostPlaceholder")}
               disabled={isAdding}
-              className="remote-executor-input"
+              className="flex-1 px-[var(--space-2)] py-[var(--space-2)] bg-[var(--bg-input)] border border-[var(--border-input)] rounded-[var(--radius-sm)] text-[var(--text-primary)] [font-size:var(--font-size-sm)] outline-none focus:border-[var(--focus-border)]"
             />
             <button
               type="button"
               onClick={handleAddExecutor}
               disabled={!newHost.trim() || isAdding}
-              className="remote-executor-add-button"
+              className="px-[var(--space-2)] py-[var(--space-2)] bg-[var(--text-primary)] border-none rounded-[var(--radius-sm)] text-white [font-size:var(--font-size-sm)] cursor-pointer transition-opacity duration-150 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isAdding ? t("remoteExecutorsAdding") : t("remoteExecutorsAdd")}
             </button>
           </div>
-          {addError && <p className="settings-error">{addError}</p>}
+          {addError && (
+            <p className="text-xs text-[var(--error-color)] mt-1">{addError}</p>
+          )}
         </div>
       </div>
 
       {/* Executor list */}
-      <div className="settings-group">
+      <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
         <h3>{t("remoteExecutorsConfigured")}</h3>
         {loading ? (
-          <p className="settings-loading">{t("loginLoading")}</p>
+          <p className="flex items-center justify-center py-8 text-sm text-[var(--text-muted)]">
+            {t("loginLoading")}
+          </p>
         ) : executors.length === 0 ? (
-          <p className="settings-empty">{t("remoteExecutorsEmpty")}</p>
+          <p className="text-center py-8 text-sm text-[var(--text-dimmed)]">
+            {t("remoteExecutorsEmpty")}
+          </p>
         ) : (
-          <div className="remote-executor-list">
+          <div className="flex flex-col gap-[var(--space-2)]">
             {executors.map((host) => {
               const status = executorStatus[host];
               return (
-                <div key={host} className="remote-executor-item">
-                  <div className="remote-executor-item-info">
-                    <span className="remote-executor-host">{host}</span>
+                <div
+                  key={host}
+                  className="p-[var(--space-3)] bg-[var(--bg-secondary)] rounded-[var(--radius-md)]"
+                >
+                  <div className="flex items-center gap-[var(--space-2)] mb-[var(--space-2)]">
+                    <span className="font-medium [font-family:var(--font-mono)]">
+                      {host}
+                    </span>
                     {status?.result && (
                       <span
-                        className={`settings-status-badge ${status.result.success ? "settings-status-detected" : "settings-status-not-detected"}`}
+                        className={`px-[var(--space-2)] py-[var(--space-1)] rounded-[var(--radius-sm)] [font-size:var(--font-size-sm)] font-medium ${status.result.success ? "bg-[var(--bg-hover)] text-[var(--text-secondary)]" : "bg-[var(--bg-hover)] text-[var(--text-muted)]"}`}
                       >
                         {status.result.success
                           ? t("remoteExecutorsConnected")
@@ -150,12 +166,12 @@ export function RemoteExecutorsSettings() {
                     )}
                   </div>
                   {status?.result && !status.result.success && (
-                    <p className="settings-error remote-executor-error">
+                    <p className="text-xs text-[var(--error-color)] my-[var(--space-2)]">
                       {status.result.error}
                     </p>
                   )}
                   {status?.result?.success && (
-                    <p className="remote-executor-details">
+                    <p className="[font-size:var(--font-size-sm)] text-[var(--text-muted)] my-[var(--space-2)]">
                       {status.result.claudeAvailable
                         ? status.result.claudeVersion
                           ? t("remoteExecutorsClaudeVersion", {
@@ -165,12 +181,12 @@ export function RemoteExecutorsSettings() {
                         : t("remoteExecutorsClaudeMissing")}
                     </p>
                   )}
-                  <div className="remote-executor-actions">
+                  <div className="flex gap-[var(--space-2)]">
                     <button
                       type="button"
                       onClick={() => handleTestExecutor(host)}
                       disabled={status?.testing}
-                      className="remote-executor-test-button"
+                      className="px-[var(--space-2)] py-[var(--space-1)] bg-[var(--bg-hover)] border border-[var(--border-color)] rounded-[var(--radius-sm)] text-[var(--text-primary)] [font-size:var(--font-size-xs)] cursor-pointer transition-[background] duration-150 hover:bg-[var(--border-color)] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {status?.testing
                         ? t("remoteExecutorsTesting")
@@ -179,7 +195,7 @@ export function RemoteExecutorsSettings() {
                     <button
                       type="button"
                       onClick={() => handleRemoveExecutor(host)}
-                      className="remote-executor-remove-button"
+                      className="px-[var(--space-2)] py-[var(--space-1)] bg-[var(--bg-hover)] border border-[var(--border-color)] rounded-[var(--radius-sm)] text-[var(--error-color)] [font-size:var(--font-size-xs)] cursor-pointer transition-[background] duration-150 hover:bg-[var(--border-color)] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {t("remoteExecutorsRemove")}
                     </button>
@@ -192,13 +208,21 @@ export function RemoteExecutorsSettings() {
       </div>
 
       {/* Help text */}
-      <div className="settings-group">
+      <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
         <h3>{t("remoteExecutorsSetupRequirements")}</h3>
-        <ul className="settings-requirements">
-          <li>{t("remoteExecutorsRequirementSshConfig")}</li>
-          <li>{t("remoteExecutorsRequirementKeyAuth")}</li>
-          <li>{t("remoteExecutorsRequirementClaude")}</li>
-          <li>{t("remoteExecutorsRequirementPaths")}</li>
+        <ul className="m-0 pl-[var(--space-4)] [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+          <li className="mb-[var(--space-1)]">
+            {t("remoteExecutorsRequirementSshConfig")}
+          </li>
+          <li className="mb-[var(--space-1)]">
+            {t("remoteExecutorsRequirementKeyAuth")}
+          </li>
+          <li className="mb-[var(--space-1)]">
+            {t("remoteExecutorsRequirementClaude")}
+          </li>
+          <li className="mb-[var(--space-1)]">
+            {t("remoteExecutorsRequirementPaths")}
+          </li>
         </ul>
       </div>
     </section>

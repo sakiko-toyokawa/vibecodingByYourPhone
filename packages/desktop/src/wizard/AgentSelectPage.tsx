@@ -32,22 +32,14 @@ export function AgentSelectPage({ agents, onAgentsChange, onNext }: Props) {
   };
 
   return (
-    <div style={{ width: "100%", maxWidth: 400 }}>
-      <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>
-        Choose your agents
-      </h2>
-      <p
-        style={{
-          color: "var(--text-secondary)",
-          fontSize: 14,
-          marginBottom: 24,
-        }}
-      >
+    <div className="w-full max-w-[400px]">
+      <h2 className="mb-2 text-[22px] font-semibold">Choose your agents</h2>
+      <p className="mb-6 text-sm text-[var(--text-secondary)]">
         Select which AI coding agents you want to use. You can change this
         later.
       </p>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 32 }}>
+      <div className="mb-8 flex flex-col gap-3">
         {AVAILABLE_AGENTS.map((agent) => (
           <label
             key={agent.id}
@@ -59,8 +51,8 @@ export function AgentSelectPage({ agents, onAgentsChange, onNext }: Props) {
               onChange={() => toggle(agent.id)}
             />
             <div>
-              <div style={{ fontWeight: 500 }}>{agent.name}</div>
-              <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+              <div className="font-medium">{agent.name}</div>
+              <div className="text-[13px] text-[var(--text-secondary)]">
                 {agent.description}
               </div>
             </div>
@@ -69,10 +61,9 @@ export function AgentSelectPage({ agents, onAgentsChange, onNext }: Props) {
       </div>
 
       <button
-        className="btn-primary"
+        className="btn-primary w-full"
         onClick={onNext}
         disabled={agents.length === 0}
-        style={{ width: "100%" }}
       >
         Continue
       </button>

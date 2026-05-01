@@ -10,7 +10,9 @@ import { ProcessInfoModal } from "../components/ProcessInfoModal";
 import { ProviderBadge } from "../components/ProviderBadge";
 import { QuestionAnswerPanel } from "../components/QuestionAnswerPanel";
 import { RecentSessionsDropdown } from "../components/RecentSessionsDropdown";
+import { RollbackPanel } from "../components/RollbackPanel";
 import { SessionMenu } from "../components/SessionMenu";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { ToolApprovalPanel } from "../components/ToolApprovalPanel";
 import { AgentContentProvider } from "../contexts/AgentContentContext";
 import { SessionMetadataProvider } from "../contexts/SessionMetadataContext";
@@ -36,6 +38,7 @@ import {
 } from "../hooks/useSession";
 import { useI18n } from "../i18n";
 import { useNavigationLayout } from "../layouts";
+import { type FileChangeEvent, activityBus } from "../lib/activityBus";
 import { preprocessMessages } from "../lib/preprocessMessages";
 import { generateUUID } from "../lib/uuid";
 import { getSessionDisplayTitle } from "../utils";
@@ -66,7 +69,11 @@ export function SessionPage() {
 
 function SessionPageInvalidRoute() {
   const { t } = useI18n();
-  return <div className="error">{t("sessionInvalidUrl")}</div>;
+  return (
+    <div className="flex h-screen items-center justify-center text-sm text-red-600 dark:text-red-400">
+      {t("sessionInvalidUrl")}
+    </div>
+  );
 }
 
 function SessionPageContent({
@@ -290,6 +297,25 @@ function SessionPageContent({
     new Map(),
   );
 
+  // Abort handler - defined early so useEffect can reference it
+  const handleAbort = useCallback(async () => {
+    if (status.owner === "self" && "processId" in status) {
+      // Try interrupt first (graceful stop), fall back to abort if not supported
+      try {
+        const result = await api.interruptProcess(status.processId);
+        if (result.interrupted) {
+          // Successfully interrupted - process is still alive
+          return;
+        }
+        // Interrupt not supported or failed, fall back to abort
+      } catch {
+        // Interrupt endpoint failed (404 = old server, or other error)
+      }
+      // Fall back to abort (kills the process)
+      await api.abortProcess(status.processId);
+    }
+  }, [status]);
+
   // Approval panel collapsed state (separate from message input collapse)
   const [approvalCollapsed, setApprovalCollapsed] = useState(false);
 
@@ -298,6 +324,63 @@ function SessionPageContent({
 
   // Model switch modal state
   const [showModelSwitchModal, setShowModelSwitchModal] = useState(false);
+
+  // Rollback panel state
+  const [showRollbackPanel, setShowRollbackPanel] = useState(false);
+
+  // Track file changes during agent "in-turn" for rollback
+  const agentFileChangesRef = useRef<Map<string, FileChangeEvent>>(new Map());
+  const lastProcessStateRef = useRef<string>(processState);
+
+  // Subscribe to file-change events during agent runs
+  useEffect(() => {
+    const unsub = activityBus.on("file-change", (event: FileChangeEvent) => {
+      // Only track changes when our session's agent is actively running
+      if (processState === "in-turn" && status.owner === "self") {
+        agentFileChangesRef.current.set(event.relativePath, event);
+      }
+    });
+    return unsub;
+  }, [processState, status.owner]);
+
+  // Clear file changes when a new agent turn starts
+  useEffect(() => {
+    const prev = lastProcessStateRef.current;
+    lastProcessStateRef.current = processState;
+    // If transitioning from idle/waiting-input to in-turn, clear previous changes
+    if (processState === "in-turn" && prev !== "in-turn") {
+      agentFileChangesRef.current.clear();
+    }
+  }, [processState]);
+
+  // Double-Esc keyboard handler
+  const lastEscTimeRef = useRef<number>(0);
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+
+      const now = Date.now();
+      const timeSinceLastEsc = now - lastEscTimeRef.current;
+      lastEscTimeRef.current = now;
+
+      // Double-esc: within 400ms
+      if (timeSinceLastEsc <= 400) {
+        // Only trigger if agent is running
+        if (status.owner === "self" && processState === "in-turn") {
+          e.preventDefault();
+          e.stopPropagation();
+          // Abort the agent
+          void handleAbort();
+          showToast(t("agentInterrupted"), "info");
+          // Show rollback panel with accumulated changes
+          setShowRollbackPanel(true);
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [status.owner, processState, handleAbort, showToast, t]);
 
   // Track user engagement to mark session as "seen"
   // Only enabled when not in external session (we own or it's idle)
@@ -507,24 +590,6 @@ function SessionPageContent({
     }
     return false;
   }, []);
-
-  const handleAbort = async () => {
-    if (status.owner === "self" && status.processId) {
-      // Try interrupt first (graceful stop), fall back to abort if not supported
-      try {
-        const result = await api.interruptProcess(status.processId);
-        if (result.interrupted) {
-          // Successfully interrupted - process is still alive
-          return;
-        }
-        // Interrupt not supported or failed, fall back to abort
-      } catch {
-        // Interrupt endpoint failed (404 = old server, or other error)
-      }
-      // Fall back to abort (kills the process)
-      await api.abortProcess(status.processId);
-    }
-  };
 
   const handleApprove = useCallback(async () => {
     if (pendingInputRequest) {
@@ -865,49 +930,37 @@ function SessionPageContent({
 
   if (error)
     return (
-      <div className="error">
+      <div className="flex h-screen items-center justify-center text-sm text-red-600 dark:text-red-400">
         {t("sessionErrorPrefix")} {error.message}
       </div>
     );
 
-  // Sidebar icon component
-  const SidebarIcon = () => (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <line x1="9" y1="3" x2="9" y2="21" />
-    </svg>
-  );
-
   return (
     <div
-      className={isWideScreen ? "main-content-wrapper" : "main-content-mobile"}
+      className={
+        isWideScreen
+          ? "flex min-w-0 justify-center overflow-hidden bg-[var(--bg-surface)]"
+          : "flex flex-1 flex-col overflow-hidden bg-[var(--bg-surface)]"
+      }
+      style={isWideScreen ? { height: "100dvh" } : undefined}
     >
       <div
         className={
           isWideScreen
-            ? "main-content-constrained"
-            : "main-content-mobile-inner"
+            ? "flex w-full flex-col overflow-hidden"
+            : "flex flex-1 flex-col overflow-hidden"
         }
+        style={isWideScreen ? { height: "100dvh" } : undefined}
       >
-        <header className="session-header">
-          <div className="session-header-inner">
-            <div className="session-header-left">
+        <header className="relative z-10 shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+          <div className="flex min-h-[56px] items-center justify-between px-6 py-4">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               {/* Sidebar toggle - on mobile: opens sidebar, on desktop: collapses/expands */}
               {/* Hide on desktop when collapsed (sidebar has its own toggle) */}
               {!(isWideScreen && isSidebarCollapsed) && (
                 <button
                   type="button"
-                  className="sidebar-toggle"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent p-1 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                   onClick={isWideScreen ? toggleSidebar : openSidebar}
                   title={
                     isWideScreen
@@ -920,14 +973,14 @@ function SessionPageContent({
                       : t("sessionOpenSidebar")
                   }
                 >
-                  <SidebarIcon />
+                  <span className="text-sm font-medium">☰</span>
                 </button>
               )}
               {/* Project breadcrumb */}
               {project?.name && (
                 <Link
                   to={`${basePath}/sessions?project=${projectId}`}
-                  className="project-breadcrumb"
+                  className="shrink-0 whitespace-nowrap px-0 py-1 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
                   title={project.name}
                 >
                   {project.name.length > 12
@@ -935,30 +988,24 @@ function SessionPageContent({
                     : project.name}
                 </Link>
               )}
-              <div className="session-title-row">
+              <div className="flex min-w-0 flex-1 items-center gap-1">
                 {isStarred && (
-                  <svg
-                    className="star-indicator-inline"
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    role="img"
+                  <span
+                    className="mr-1 shrink-0 text-amber-500 text-xs"
                     aria-label={t("sessionStarredLabel")}
+                    title={t("sessionStarredLabel")}
                   >
-                    <title>{t("sessionStarredLabel")}</title>
-                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                  </svg>
+                    ★
+                  </span>
                 )}
                 {loading ? (
-                  <span className="session-title-skeleton" />
+                  <span className="inline-block h-[1em] w-[120px] animate-pulse rounded bg-[var(--bg-secondary)]" />
                 ) : isEditingTitle ? (
                   <input
                     ref={renameInputRef}
                     type="text"
-                    className="session-title-input"
+                    className="min-w-[120px] max-w-[calc(100vw-150px)] rounded border border-[var(--border-input)] bg-[var(--bg-input)] px-1.5 py-0.5 text-sm font-medium text-[var(--text-primary)] focus:border-[var(--focus-border)] focus:outline-none"
+                    style={{ boxShadow: "0 0 0 2px rgba(0,102,204,0.2)" }}
                     value={renameValue}
                     onChange={(e) => setRenameValue(e.target.value)}
                     onKeyDown={handleTitleKeyDown}
@@ -970,25 +1017,14 @@ function SessionPageContent({
                     <button
                       ref={titleButtonRef}
                       type="button"
-                      className="session-title session-title-dropdown-trigger"
+                      className="inline-flex max-w-[calc(100vw-150px)] items-center gap-1 overflow-hidden bg-transparent p-0 text-left text-sm font-medium text-[var(--text-primary)] hover:text-[var(--text-secondary)]"
                       onClick={() => setShowRecentSessions(!showRecentSessions)}
                       title={session?.fullTitle ?? displayTitle}
                     >
-                      <span className="session-title-text">{displayTitle}</span>
-                      <svg
-                        className="session-title-chevron"
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <polyline points="6 9 12 15 18 9" />
-                      </svg>
+                      <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap [font-family:var(--font-display)] text-[1.05rem] leading-none">
+                        {displayTitle}
+                      </span>
+                      <span className="shrink-0 text-xs opacity-60">▼</span>
                     </button>
                     <RecentSessionsDropdown
                       currentSessionId={sessionId}
@@ -1001,7 +1037,7 @@ function SessionPageContent({
                   </>
                 )}
                 {!loading && isArchived && (
-                  <span className="archived-badge">
+                  <span className="ml-1 shrink-0 whitespace-nowrap rounded bg-[var(--bg-secondary)] px-1.5 py-0.5 text-[10px] text-[var(--text-dimmed)]">
                     {t("sessionArchivedBadge")}
                   </span>
                 )}
@@ -1034,11 +1070,12 @@ function SessionPageContent({
                 )}
               </div>
             </div>
-            <div className="session-header-right">
+            <div className="ml-0.5 flex shrink-0 items-center gap-2">
+              <ThemeToggle />
               {!loading && effectiveProvider && (
                 <button
                   type="button"
-                  className="provider-badge-button"
+                  className="inline-flex rounded-sm bg-transparent p-0 opacity-100 transition-opacity hover:opacity-80 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
                   onClick={() => setShowProcessInfoModal(true)}
                   title={t("sessionViewInfo")}
                 >
@@ -1087,20 +1124,25 @@ function SessionPageContent({
           )}
 
         {status.owner === "external" && (
-          <div className="external-session-warning">
+          <div className="border border-[var(--warning-color)] bg-[rgba(154,103,0,0.06)] px-4 py-3 text-center text-sm font-medium text-[var(--warning-color)]">
             {t("sessionExternalWarning")}
           </div>
         )}
 
         {hasPendingToolCalls && (
-          <div className="external-session-warning pending-tool-warning">
+          <div className="border border-[var(--attention-color)] bg-[rgba(0,102,204,0.06)] px-4 py-3 text-center text-sm font-medium text-[var(--attention-color)]">
             {t("sessionPendingElsewhereWarning")}
           </div>
         )}
 
-        <main className="session-messages">
+        <main
+          data-session-messages
+          className="min-h-0 flex-1 overflow-y-auto px-6 py-8 md:px-10 md:py-10"
+        >
           {loading ? (
-            <div className="loading">{t("sessionLoading")}</div>
+            <div className="flex h-full items-center justify-center text-sm text-[var(--text-muted)]">
+              {t("sessionLoading")}
+            </div>
           ) : (
             <SessionMetadataProvider
               projectId={projectId}
@@ -1114,35 +1156,45 @@ function SessionPageContent({
                 projectId={projectId}
                 sessionId={sessionId}
               >
-                <MessageList
-                  messages={messages}
-                  provider={session?.provider}
-                  isProcessing={
-                    status.owner === "self" && processState === "in-turn"
-                  }
-                  isCompacting={isCompacting}
-                  scrollTrigger={scrollTrigger}
-                  pendingMessages={pendingMessages}
-                  deferredMessages={deferredMessages}
-                  onCancelDeferred={(tempId) =>
-                    api.cancelDeferredMessage(sessionId, tempId)
-                  }
-                  markdownAugments={markdownAugments}
-                  activeToolApproval={activeToolApproval}
-                  hasOlderMessages={pagination?.hasOlderMessages}
-                  loadingOlder={loadingOlder}
-                  onLoadOlderMessages={loadOlderMessages}
-                />
+                <div className="mx-auto max-w-[52rem]">
+                  <MessageList
+                    messages={messages}
+                    provider={session?.provider}
+                    isProcessing={
+                      status.owner === "self" && processState === "in-turn"
+                    }
+                    isCompacting={isCompacting}
+                    scrollTrigger={scrollTrigger}
+                    pendingMessages={pendingMessages}
+                    deferredMessages={deferredMessages}
+                    onCancelDeferred={(tempId) =>
+                      api.cancelDeferredMessage(sessionId, tempId)
+                    }
+                    markdownAugments={markdownAugments}
+                    activeToolApproval={activeToolApproval}
+                    hasOlderMessages={pagination?.hasOlderMessages}
+                    loadingOlder={loadingOlder}
+                    onLoadOlderMessages={loadOlderMessages}
+                  />
+                </div>
               </AgentContentProvider>
             </SessionMetadataProvider>
           )}
         </main>
 
-        <footer className="session-input">
+        <footer className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3">
           <div
-            className={`session-connection-bar session-connection-${sessionConnectionStatus}`}
+            className={`pointer-events-none mb-0.5 h-px transition-colors duration-300 ${
+              sessionConnectionStatus === "connected"
+                ? "bg-green-500"
+                : sessionConnectionStatus === "connecting"
+                  ? "animate-pulse bg-amber-500"
+                  : sessionConnectionStatus === "disconnected"
+                    ? "bg-red-500"
+                    : "bg-[var(--border-subtle)]"
+            }`}
           />
-          <div className="session-input-inner">
+          <div className="mx-auto max-w-[52rem]">
             {/* User question panel */}
             {pendingInputRequest &&
               pendingInputRequest.sessionId === actualSessionId &&
@@ -1243,6 +1295,19 @@ function SessionPageContent({
             )}
           </div>
         </footer>
+
+        {/* Rollback panel */}
+        {showRollbackPanel && (
+          <RollbackPanel
+            changes={Array.from(agentFileChangesRef.current.values())}
+            projectId={projectId}
+            onClose={() => setShowRollbackPanel(false)}
+            onRestoreSuccess={() => {
+              agentFileChangesRef.current.clear();
+              setShowRollbackPanel(false);
+            }}
+          />
+        )}
       </div>
     </div>
   );

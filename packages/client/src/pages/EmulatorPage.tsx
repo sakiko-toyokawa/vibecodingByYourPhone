@@ -78,20 +78,22 @@ function EmulatorListItem({
   const canStop = hasAction(device, "stop");
 
   return (
-    <div className="emulator-list-item">
-      <div className="emulator-list-item-info">
-        <span className="emulator-list-item-name">{deviceLabel(device)}</span>
+    <div className="flex items-center justify-between px-4 py-3 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg">
+      <div className="flex flex-col gap-0.5">
+        <span className="font-medium text-[var(--text-primary)]">
+          {deviceLabel(device)}
+        </span>
         <span
-          className={`emulator-list-item-status ${device.state === "stopped" ? "stopped" : "running"}`}
+          className={`text-[0.8em] ${device.state === "stopped" ? "text-[var(--text-muted)]" : "text-[var(--accent-rust)]"}`}
         >
           {device.state}
         </span>
       </div>
-      <div className="emulator-list-item-actions">
+      <div className="flex gap-2">
         {canConnect && (
           <button
             type="button"
-            className="emulator-btn emulator-btn-primary"
+            className="px-3.5 py-1.5 rounded-md text-[0.85em] cursor-pointer transition-colors duration-150 border-none bg-[var(--accent-rust)] text-white hover:bg-[var(--accent-rust)] hover:opacity-90"
             onClick={() => onConnect(device)}
           >
             Connect
@@ -100,7 +102,7 @@ function EmulatorListItem({
         {canStop && (
           <button
             type="button"
-            className="emulator-btn emulator-btn-secondary"
+            className="px-3.5 py-1.5 rounded-md text-[0.85em] cursor-pointer transition-colors duration-150 border-none bg-[var(--bg-hover)] text-[var(--text-primary)] hover:bg-[var(--bg-active)]"
             onClick={() => onStop(device.id)}
           >
             Stop
@@ -109,14 +111,16 @@ function EmulatorListItem({
         {!canStop && canStart && (
           <button
             type="button"
-            className="emulator-btn emulator-btn-secondary"
+            className="px-3.5 py-1.5 rounded-md text-[0.85em] cursor-pointer transition-colors duration-150 border-none bg-[var(--bg-hover)] text-[var(--text-primary)] hover:bg-[var(--bg-active)]"
             onClick={() => onStart(device.id)}
           >
             Start
           </button>
         )}
         {!canConnect && !canStop && !canStart && (
-          <span className="emulator-list-item-status">No actions</span>
+          <span className="text-[0.8em] text-[var(--text-secondary)]">
+            No actions
+          </span>
         )}
       </div>
     </div>
@@ -151,12 +155,12 @@ function DeviceList({
   }, [devices]);
 
   return (
-    <div className="emulator-list">
+    <div className="flex flex-col gap-3">
       {Array.from(grouped.entries()).map(([type, entries]) => {
         if (entries.length === 0) return null;
         return (
-          <section key={type} className="emulator-list-group">
-            <h3 className="emulator-list-group-title">
+          <section key={type} className="flex flex-col gap-2">
+            <h3 className="m-0 text-[0.9rem] font-semibold text-[var(--text-secondary)] uppercase tracking-wide">
               {deviceTypeLabel(type)}
             </h3>
             {entries.map((device) => (
@@ -273,23 +277,26 @@ function StreamView({
   };
 
   return (
-    <div className="emulator-stream-view" ref={streamViewRef}>
-      <div className="emulator-stream-header">
+    <div
+      className="flex flex-col h-[100dvh] max-h-[100dvh]"
+      ref={streamViewRef}
+    >
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2 px-4 py-2 border-b border-[var(--border-subtle)]">
         <button
           type="button"
-          className="emulator-btn emulator-btn-secondary"
+          className="px-3.5 py-1.5 rounded-md text-[0.85em] cursor-pointer transition-colors duration-150 border-none bg-[var(--bg-hover)] text-[var(--text-primary)] hover:bg-[var(--bg-active)]"
           onClick={handleBack}
         >
           Back
         </button>
-        <span className="emulator-connection-state">
+        <span className="text-[0.85em] text-[var(--text-secondary)] capitalize text-center">
           {deviceLabel(device)} - {connectionState}
         </span>
-        <div className="emulator-stream-header-actions">
+        <div className="flex justify-end">
           {supportsImmersiveKeyboard && (
             <button
               type="button"
-              className="emulator-btn emulator-btn-secondary"
+              className="px-3.5 py-1.5 rounded-md text-[0.85em] cursor-pointer transition-colors duration-150 border-none bg-[var(--bg-hover)] text-[var(--text-primary)] hover:bg-[var(--bg-active)] disabled:opacity-40 disabled:cursor-default"
               onClick={() => {
                 if (immersiveKeyboardActive) {
                   void exitImmersiveKeyboard();
@@ -311,18 +318,20 @@ function StreamView({
       </div>
 
       {supportsImmersiveKeyboard && (
-        <div className="emulator-keyboard-state">
+        <div className="px-4 py-1.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] text-[0.75em]">
           Keyboard mode:{" "}
           {immersiveKeyboardActive ? "immersive (fullscreen)" : "standard"}
         </div>
       )}
 
       {immersiveKeyboardError && (
-        <div className="emulator-error">{immersiveKeyboardError}</div>
+        <div className="px-4 py-3 my-2 bg-[var(--bg-error,rgba(207,34,46,0.1))] text-[var(--error-color)] rounded-md text-[0.9em]">
+          {immersiveKeyboardError}
+        </div>
       )}
 
       {latestProfileEvent && (
-        <div className="emulator-profile-state">
+        <div className="px-4 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] text-[0.8em]">
           Profile {latestProfileEvent.direction}: tier {latestProfileEvent.tier}
           /{latestProfileEvent.totalTiers} ({latestProfileEvent.width}x
           {latestProfileEvent.height}@{latestProfileEvent.fps}fps,{" "}
@@ -332,22 +341,22 @@ function StreamView({
 
       {profileEventHistory.length > 0 && (
         <div
-          className="emulator-profile-timeline"
+          className="flex flex-col gap-1 px-4 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]"
           data-testid="profile-timeline"
         >
           {profileEventHistory.map((event, idx) => (
             <div
               key={`${event.receivedAt}-${event.direction}-${event.tier}-${idx}`}
-              className={`emulator-profile-timeline-item ${idx === 0 ? "latest" : ""}`}
+              className={`flex gap-2 text-[0.75em] text-[var(--text-secondary)] whitespace-nowrap overflow-hidden text-ellipsis ${idx === 0 ? "text-[var(--text-primary)]" : ""}`}
             >
-              <span className="emulator-profile-timeline-time">
+              <span className="tabular-nums opacity-85">
                 {new Date(event.receivedAt).toLocaleTimeString([], {
                   hour: "2-digit",
                   minute: "2-digit",
                   second: "2-digit",
                 })}
               </span>
-              <span className="emulator-profile-timeline-detail">
+              <span className="min-w-0 overflow-hidden text-ellipsis">
                 {event.direction} tier {event.tier}/{event.totalTiers} (
                 {event.width}x{event.height}@{event.fps})
               </span>
@@ -356,13 +365,19 @@ function StreamView({
         </div>
       )}
 
-      {error && <div className="emulator-error">{error}</div>}
-
-      {connectionState === "connecting" && (
-        <div className="emulator-connecting">Connecting...</div>
+      {error && (
+        <div className="px-4 py-3 my-2 bg-[var(--bg-error,rgba(207,34,46,0.1))] text-[var(--error-color)] rounded-md text-[0.9em]">
+          {error}
+        </div>
       )}
 
-      <div className="emulator-stream-container">
+      {connectionState === "connecting" && (
+        <div className="p-6 text-center text-[var(--text-secondary)]">
+          Connecting...
+        </div>
+      )}
+
+      <div className="flex-1 min-h-0 flex items-center justify-center bg-black overflow-hidden">
         <EmulatorStream
           stream={remoteStream}
           dataChannel={dataChannel}
@@ -410,8 +425,8 @@ export function BridgeRuntimePrompt({
   };
 
   return (
-    <div className="emulator-download-prompt">
-      <p>
+    <div className="px-6 py-8 text-center text-[var(--text-secondary)]">
+      <p className="m-0 mb-4">
         {mode === "update" ? (
           <>
             Device streaming needs a bridge runtime update before use.
@@ -426,10 +441,14 @@ export function BridgeRuntimePrompt({
           </>
         )}
       </p>
-      {error && <div className="emulator-error">{error}</div>}
+      {error && (
+        <div className="px-4 py-3 mb-4 bg-[var(--bg-error,rgba(207,34,46,0.1))] text-[var(--error-color)] rounded-md text-[0.9em]">
+          {error}
+        </div>
+      )}
       <button
         type="button"
-        className="emulator-btn emulator-btn-primary"
+        className="px-3.5 py-1.5 rounded-md text-[0.85em] cursor-pointer transition-colors duration-150 border-none bg-[var(--accent-rust)] text-white hover:bg-[var(--accent-rust)] hover:opacity-90 disabled:opacity-40 disabled:cursor-default"
         onClick={handleDownload}
         disabled={downloading}
       >
@@ -474,8 +493,8 @@ export function EmulatorPage() {
 
   if (activeDevice) {
     return (
-      <div className="main-content-wrapper">
-        <div className="main-content-constrained">
+      <div className="flex justify-center min-w-0 h-[100dvh] overflow-hidden">
+        <div className="w-full flex flex-col h-[100dvh]">
           <StreamView
             device={activeDevice}
             onBack={() => setActiveDevice(null)}
@@ -486,8 +505,8 @@ export function EmulatorPage() {
   }
 
   return (
-    <div className="main-content-wrapper">
-      <div className="main-content-constrained">
+    <div className="flex justify-center min-w-0 h-[100dvh] overflow-hidden">
+      <div className="w-full flex flex-col h-[100dvh]">
         <PageHeader
           title="Devices"
           onOpenSidebar={openSidebar}
@@ -495,8 +514,8 @@ export function EmulatorPage() {
           isWideScreen={isWideScreen}
           isSidebarCollapsed={isSidebarCollapsed}
         />
-        <main className="page-scroll-container">
-          <div className="page-content-inner">
+        <main className="flex-1 overflow-y-auto min-h-0">
+          <div className="px-6 py-8 md:px-10 md:py-10">
             {bridgeRuntimeMode ? (
               <BridgeRuntimePrompt
                 mode={bridgeRuntimeMode}
@@ -506,10 +525,18 @@ export function EmulatorPage() {
               />
             ) : (
               <>
-                {loading && <div className="emulator-loading">Loading...</div>}
-                {error && <div className="emulator-error">{error}</div>}
+                {loading && (
+                  <div className="p-6 text-center text-[var(--text-secondary)]">
+                    Loading...
+                  </div>
+                )}
+                {error && (
+                  <div className="px-4 py-3 my-2 bg-[var(--bg-error,rgba(207,34,46,0.1))] text-[var(--error-color)] rounded-md text-[0.9em]">
+                    {error}
+                  </div>
+                )}
                 {!loading && emulators.length === 0 && (
-                  <div className="emulator-empty">
+                  <div className="p-6 text-center text-[var(--text-secondary)]">
                     No devices detected. Connect an Android emulator/device or
                     add a ChromeOS SSH host alias in Settings.
                   </div>

@@ -86,8 +86,8 @@ export function MessageInputToolbar({
   const { thinkingMode, cycleThinkingMode, thinkingLevel } = useModelSettings();
 
   return (
-    <div className="message-input-toolbar">
-      <div className="message-input-left">
+    <div className="flex items-center justify-between gap-2 px-4 pb-3">
+      <div className="flex items-center gap-2 min-w-0 flex-1">
         {onModeChange && supportsPermissionMode && (
           <ModeSelector
             mode={mode}
@@ -98,32 +98,24 @@ export function MessageInputToolbar({
         )}
         <button
           type="button"
-          className="attach-button"
+          className="relative flex items-center justify-center w-7 h-7 bg-transparent border border-[var(--border-subtle)] rounded-lg text-[var(--text-muted)] text-sm cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:border-[var(--border-input)] disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={onAttachClick}
           disabled={!canAttach}
           title={
             canAttach ? t("toolbarAttachFiles") : t("toolbarAttachDisabled")
           }
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            aria-hidden="true"
-          >
-            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-          </svg>
+          <span className="text-sm">&#x1f4ce;</span>
           {attachmentCount > 0 && (
-            <span className="attach-count">{attachmentCount}</span>
+            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 bg-[var(--text-primary)] text-white rounded-lg text-[10px] flex items-center justify-center font-medium">
+              {attachmentCount}
+            </span>
           )}
         </button>
         {supportsThinkingToggle && (
           <button
             type="button"
-            className={`thinking-toggle-button ${thinkingMode !== "off" ? `active ${thinkingMode}` : ""}`}
+            className={`flex items-center justify-center w-7 h-7 bg-transparent border border-[var(--border-subtle)] rounded-lg text-[var(--text-muted)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:border-[var(--border-input)] ${thinkingMode !== "off" ? (thinkingMode === "auto" ? "bg-[rgba(180,140,60,0.12)] border-[rgba(180,140,60,0.5)] text-[rgb(180,140,60)] hover:bg-[rgba(180,140,60,0.2)]" : "bg-[rgba(59,130,246,0.15)] border-[rgb(59,130,246)] text-[rgb(59,130,246)] hover:bg-[rgba(59,130,246,0.25)]") : ""}`}
             onClick={cycleThinkingMode}
             title={
               thinkingMode === "off"
@@ -134,44 +126,7 @@ export function MessageInputToolbar({
             }
             aria-label={t("newSessionThinkingMode", { mode: thinkingMode })}
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-              {thinkingMode === "auto" && (
-                <g>
-                  <circle
-                    cx="19"
-                    cy="5"
-                    r="5.5"
-                    fill="currentColor"
-                    stroke="none"
-                  />
-                  <text
-                    x="19"
-                    y="5"
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fill="var(--bg-primary, #1a1a2e)"
-                    fontSize="8"
-                    fontWeight="700"
-                    fontFamily="system-ui, sans-serif"
-                    stroke="none"
-                  >
-                    A
-                  </text>
-                </g>
-              )}
-            </svg>
+            <span className="text-sm">&#x23f1;</span>
           </button>
         )}
         {voiceButtonRef && onVoiceTranscript && onInterimTranscript && (
@@ -191,12 +146,12 @@ export function MessageInputToolbar({
           />
         )}
       </div>
-      <div className="message-input-actions">
+      <div className="flex items-center gap-2 shrink-0">
         {/* Pending approval indicator */}
         {pendingApproval && (
           <button
             type="button"
-            className={`pending-approval-indicator ${pendingApproval.type}`}
+            className={`flex items-center gap-1.5 px-2.5 py-1 bg-[var(--status-badge-input-bg)] border-none rounded-md text-[var(--status-badge-input-text)] text-[10px] cursor-pointer transition-all duration-150 hover:bg-[color-mix(in_srgb,var(--status-badge-input-bg)_80%,white_20%)] active:scale-[0.97] ${pendingApproval.type}`}
             onClick={pendingApproval.onExpand}
             title={
               pendingApproval.type === "tool-approval"
@@ -204,8 +159,8 @@ export function MessageInputToolbar({
                 : t("toolbarPendingQuestionExpand")
             }
           >
-            <span className="pending-approval-dot" />
-            <span className="pending-approval-text">
+            <span className="w-2 h-2 rounded-full bg-[var(--status-badge-input-text)] animate-[pulse-indicator_1.5s_ease-in-out_infinite]" />
+            <span className="font-medium">
               {pendingApproval.type === "tool-approval"
                 ? t("toolbarApproval")
                 : t("toolbarQuestion")}
@@ -218,28 +173,11 @@ export function MessageInputToolbar({
           <button
             type="button"
             onClick={onQueue}
-            className="queue-button"
+            className="w-8 h-8 flex items-center justify-center border border-[var(--border-color)] rounded-lg bg-transparent text-[var(--text-primary)] cursor-pointer transition-all duration-150 hover:bg-[var(--bg-hover)] shrink-0"
             title={t("toolbarQueueTitle")}
             aria-label={t("toolbarQueueLabel")}
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <line x1="8" y1="6" x2="21" y2="6" />
-              <line x1="8" y1="12" x2="21" y2="12" />
-              <line x1="8" y1="18" x2="21" y2="18" />
-              <line x1="3" y1="6" x2="3.01" y2="6" />
-              <line x1="3" y1="12" x2="3.01" y2="12" />
-              <line x1="3" y1="18" x2="3.01" y2="18" />
-            </svg>
+            <span className="text-sm">&#x2630;</span>
           </button>
         )}
         {/* Show stop button when thinking and nothing to send, otherwise show send */}
@@ -247,20 +185,20 @@ export function MessageInputToolbar({
           <button
             type="button"
             onClick={onStop}
-            className="stop-button"
+            className="w-8 h-8 flex items-center justify-center border-none rounded-lg bg-[var(--error-color)] text-white cursor-pointer transition-opacity duration-150 hover:opacity-85 shrink-0"
             aria-label={t("toolbarStop")}
           >
-            <span className="stop-icon" />
+            <span className="w-2.5 h-2.5 bg-white rounded-sm" />
           </button>
         ) : onSend ? (
           <button
             type="button"
             onClick={onSend}
             disabled={disabled || !canSend}
-            className="send-button"
+            className="w-8 h-8 flex items-center justify-center border border-[var(--border-color)] rounded-lg bg-transparent text-[var(--text-primary)] cursor-pointer transition-all duration-150 hover:bg-[var(--bg-hover)] shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
             aria-label={t("toolbarSend")}
           >
-            <span className="send-icon">↑</span>
+            <span className="text-base font-bold leading-none">↑</span>
           </button>
         ) : null}
       </div>

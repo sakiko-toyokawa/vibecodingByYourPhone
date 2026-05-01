@@ -4,22 +4,13 @@ interface Props {
 
 export function WelcomePage({ onNext }: Props) {
   return (
-    <div style={{ textAlign: "center", maxWidth: 420 }}>
-      <h1 style={{ fontSize: 28, fontWeight: 600, marginBottom: 12 }}>
-        Welcome to Yep Anywhere
-      </h1>
-      <p
-        style={{
-          color: "var(--text-secondary)",
-          fontSize: 15,
-          lineHeight: 1.6,
-          marginBottom: 32,
-        }}
-      >
-        Supervise your AI coding agents from anywhere. We'll get you set up in a
+    <div className="max-w-[420px] text-center">
+      <h1 className="mb-3 text-[28px] font-semibold">Welcome to Yep Anywhere</h1>
+      <p className="mb-8 text-[15px] leading-relaxed text-[var(--text-secondary)]">
+        Supervise your AI coding agents from anywhere. We&apos;ll get you set up in a
         few minutes.
       </p>
-      <button className="btn-primary" onClick={onNext} style={{ fontSize: 16, padding: "12px 32px" }}>
+      <button className="btn-primary px-8 py-3 text-base" onClick={onNext}>
         Get Started
       </button>
     </div>

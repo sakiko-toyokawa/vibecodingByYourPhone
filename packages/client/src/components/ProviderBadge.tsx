@@ -85,7 +85,7 @@ export function ProviderBadge({
   if (compact) {
     return (
       <span
-        className={`provider-badge-stripe ${className}`}
+        className={`inline-block w-1 rounded-full ${className}`}
         style={{ backgroundColor: color }}
         title={modelLabel ? `${label} (${modelLabel})` : label}
         aria-label={`Provider: ${label}${modelLabel ? ` (${modelLabel})` : ""}`}
@@ -94,21 +94,26 @@ export function ProviderBadge({
   }
 
   // When thinking, dot is always orange with pulse animation
-  const dotClass = isThinking
-    ? "provider-badge-dot-inline thinking"
-    : "provider-badge-dot-inline";
   const dotStyle = isThinking
     ? { backgroundColor: "var(--thinking-color)" }
     : { backgroundColor: color };
 
   return (
     <span
-      className={`provider-badge ${className}`}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium border rounded-[var(--radius-sm)] bg-transparent ${className}`}
       style={{ borderColor: color, color }}
     >
-      <span className={dotClass} style={dotStyle} />
-      <span className="provider-badge-label">{label}</span>
-      {modelLabel && <span className="provider-badge-model">{modelLabel}</span>}
+      <span
+        className={`w-1.5 h-1.5 rounded-full ${isThinking ? "animate-[thinking-pulse_1.5s_ease-in-out_infinite]" : ""}`}
+        style={dotStyle}
+      />
+      <span className="max-sm:hidden">{label}</span>
+      {modelLabel && (
+        <span className="ml-0.5 opacity-70 font-normal max-sm:ml-0 max-sm:opacity-100">
+          <span className="max-sm:hidden">·</span>
+          {modelLabel}
+        </span>
+      )}
     </span>
   );
 }

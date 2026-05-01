@@ -52,6 +52,30 @@ const MODE_ORDER: PermissionMode[] = [
   "bypassPermissions",
 ];
 
+const sectionTitleClasses =
+  "mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]";
+const optionCardBaseClasses =
+  "flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors duration-150";
+const optionCardSelectedClasses =
+  "border-[var(--text-primary)] bg-[var(--bg-hover)]";
+const optionCardUnselectedClasses =
+  "border-[var(--border-color)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)]";
+const mutedToolbarButtonClasses =
+  "flex items-center justify-center rounded-md p-2 text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50";
+const providerDotColors: Record<string, string> = {
+  claude: "var(--provider-claude)",
+  codex: "var(--provider-codex)",
+  gemini: "var(--provider-gemini)",
+  opencode: "var(--provider-opencode)",
+  local: "#8b5cf6",
+};
+const modeDotColors: Record<PermissionMode, string> = {
+  default: "var(--timeline-dot-default)",
+  acceptEdits: "var(--success-color)",
+  plan: "var(--warning-color)",
+  bypassPermissions: "var(--error-color)",
+};
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -158,6 +182,12 @@ export function NewSessionForm({
     plan: t("modePlanDescription"),
     bypassPermissions: t("modeBypassPermissionsDescription"),
   };
+  const sectionWrapperClasses = compact
+    ? "rounded-[var(--radius-lg)] border border-[var(--border-color)] bg-[var(--bg-surface)]/85 p-4 shadow-[0_4px_16px_rgba(0,0,0,0.04)] backdrop-blur-sm"
+    : "mx-auto flex w-full max-w-[42rem] flex-col gap-6";
+  const recordingIndicatorClasses = interimTranscript
+    ? "relative before:absolute before:inset-x-0 before:top-0 before:z-[1] before:h-0.5 before:animate-[voice-pulse_1s_ease-in-out_infinite] before:rounded-t-[inherit] before:bg-[rgb(239,68,68)]"
+    : "";
 
   // Get models and capabilities for the currently selected provider
   const selectedProviderInfo = providers.find(
@@ -597,10 +627,10 @@ export function NewSessionForm({
         placeholder={resolvedPlaceholder}
         disabled={isStarting}
         rows={rows}
-        className="new-session-form-textarea"
+        className="min-h-[9rem] w-full resize-y rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--bg-secondary)] px-5 py-4 text-[15px] leading-7 text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-dimmed)] focus:border-[var(--focus-border)] focus:ring-2 focus:ring-[rgba(153,70,42,0.12)] disabled:cursor-not-allowed disabled:opacity-60"
       />
-      <div className="new-session-form-toolbar">
-        <div className="new-session-form-toolbar-left">
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -610,7 +640,7 @@ export function NewSessionForm({
           />
           <button
             type="button"
-            className="flex items-center justify-center rounded-md p-2 text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+            className={mutedToolbarButtonClasses}
             onClick={() => fileInputRef.current?.click()}
             disabled={isStarting}
             aria-label={t("newSessionAttachFiles")}
@@ -623,12 +653,12 @@ export function NewSessionForm({
             onInterimTranscript={handleInterimTranscript}
             onListeningStart={() => textareaRef.current?.focus()}
             disabled={isStarting}
-            className="flex items-center justify-center rounded-md p-2 text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+            className={mutedToolbarButtonClasses}
           />
           {supportsThinkingToggle && (
             <button
               type="button"
-              className={`flex items-center justify-center rounded-md p-2 text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] border border-transparent ${thinkingMode !== "off" ? "border-[var(--app-yep-green)] text-[var(--app-yep-green)]" : ""}`}
+              className={`${mutedToolbarButtonClasses} border ${thinkingMode !== "off" ? "border-[var(--focus-border)] text-[var(--focus-border)]" : "border-transparent"}`}
               onClick={cycleThinkingMode}
               disabled={isStarting}
               title={
@@ -648,7 +678,7 @@ export function NewSessionForm({
           type="button"
           onClick={handleStartSession}
           disabled={isStarting || !hasContent}
-          className="flex items-center justify-center rounded-full bg-[var(--app-yep-green)] text-white w-10 h-10 transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--text-primary)] text-white shadow-[0_4px_12px_rgba(0,0,0,0.12)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           aria-label={t("newSessionStartAction")}
         >
           {isStarting ? (
@@ -659,23 +689,23 @@ export function NewSessionForm({
         </button>
       </div>
       {pendingFiles.length > 0 && (
-        <div className="flex flex-wrap gap-2 mt-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           {pendingFiles.map((pf) => {
             const progress = uploadProgress[pf.id];
             return (
               <div
                 key={pf.id}
-                className="flex items-center gap-2 rounded-md bg-[var(--bg-tertiary)] px-2 py-1"
+                className="flex max-w-[16rem] items-center gap-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2"
               >
                 {pf.previewUrl && (
                   <img
                     src={pf.previewUrl}
                     alt=""
-                    className="w-8 h-8 rounded object-cover"
+                    className="h-8 w-8 rounded-md object-cover"
                   />
                 )}
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium text-[var(--text-primary)]">
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-medium text-[var(--text-primary)]">
                     {pf.file.name}
                   </span>
                   <span className="text-[10px] text-[var(--text-dimmed)]">
@@ -687,7 +717,7 @@ export function NewSessionForm({
                 {!isStarting && (
                   <button
                     type="button"
-                    className="flex items-center justify-center w-5 h-5 rounded-full hover:bg-[var(--bg-hover)] text-[var(--text-dimmed)] transition-colors"
+                    className="flex h-5 w-5 items-center justify-center rounded-full text-[var(--text-dimmed)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--error-color)]"
                     onClick={() => handleRemoveFile(pf.id)}
                     aria-label={t("newSessionRemoveFile", {
                       name: pf.file.name,
@@ -707,9 +737,7 @@ export function NewSessionForm({
   // Compact mode: just the input area, no header or mode selector
   if (compact) {
     return (
-      <div
-        className={`new-session-form new-session-form-compact ${interimTranscript ? "voice-recording" : ""}`}
-      >
+      <div className={`${sectionWrapperClasses} ${recordingIndicatorClasses}`}>
         {inputArea}
       </div>
     );
@@ -717,29 +745,38 @@ export function NewSessionForm({
 
   // Full mode: form with header, input area, and mode selector
   return (
-    <div
-      className={`new-session-form new-session-container ${interimTranscript ? "voice-recording" : ""}`}
-    >
-      <div className="new-session-header">
-        <h1>{t("newSessionHeaderTitle")}</h1>
-        <p className="new-session-subtitle">{t("newSessionHeaderSubtitle")}</p>
+    <div className={`${sectionWrapperClasses} ${recordingIndicatorClasses}`}>
+      <div className="mb-2 text-center">
+        <h1
+          className="text-[2rem] leading-tight text-[var(--text-primary)] sm:text-[2.25rem]"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          {t("newSessionHeaderTitle")}
+        </h1>
+        <p className="mt-2 text-sm text-[var(--text-muted)] sm:text-base">
+          {t("newSessionHeaderSubtitle")}
+        </p>
       </div>
 
-      <div className="new-session-input-area">{inputArea}</div>
+      <div className="mb-2">{inputArea}</div>
 
       {/* Provider Selection */}
       {!providersLoading && availableProviders.length > 1 && (
-        <div className="new-session-provider-section">
-          <h3>{t("newSessionProviderTitle")}</h3>
+        <section>
+          <h3 className={sectionTitleClasses}>
+            {t("newSessionProviderTitle")}
+          </h3>
           <div className="flex flex-col gap-2">
             {providers.map((p) => {
               const isAvailable = p.installed && (p.authenticated || p.enabled);
               const isSelected = selectedProvider === p.name;
+              const dotColor =
+                providerDotColors[p.name] ?? "var(--text-dimmed)";
               return (
                 <button
                   key={p.name}
                   type="button"
-                  className={`flex items-center gap-3 p-3 rounded-md border border-[var(--border-color)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] ${isSelected ? "bg-[var(--bg-hover)] border-[var(--app-yep-green)]" : ""} ${!isAvailable ? "opacity-50 cursor-not-allowed" : ""}`}
+                  className={`${optionCardBaseClasses} ${isSelected ? optionCardSelectedClasses : optionCardUnselectedClasses} ${!isAvailable ? "cursor-not-allowed opacity-50" : ""}`}
                   onClick={() => isAvailable && handleProviderSelect(p.name)}
                   disabled={isStarting || !isAvailable}
                   title={
@@ -754,7 +791,8 @@ export function NewSessionForm({
                   }
                 >
                   <span
-                    className={`w-3 h-3 rounded-full shrink-0 provider-option-dot provider-${p.name}`}
+                    className="h-3 w-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: dotColor }}
                   />
                   <div className="flex flex-col flex-1">
                     <span className="text-sm font-medium text-[var(--text-primary)]">
@@ -772,13 +810,13 @@ export function NewSessionForm({
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Model Selection */}
       {selectedProvider && modelOptions.length > 0 && (
-        <div className="new-session-model-section">
-          <h3>{t("newSessionModelTitle")}</h3>
+        <section>
+          <h3 className={sectionTitleClasses}>{t("newSessionModelTitle")}</h3>
           <FilterDropdown
             label={t("newSessionModelTitle")}
             options={modelOptions}
@@ -787,22 +825,22 @@ export function NewSessionForm({
             multiSelect={false}
             placeholder={t("newSessionModelPlaceholder")}
           />
-        </div>
+        </section>
       )}
 
       {/* Executor Selection - only show if remote executors are configured */}
       {!executorsLoading && remoteExecutors.length > 0 && (
-        <div className="new-session-executor-section">
-          <h3>{t("newSessionRunOnTitle")}</h3>
+        <section>
+          <h3 className={sectionTitleClasses}>{t("newSessionRunOnTitle")}</h3>
           <div className="flex flex-col gap-2">
             <button
               key="local"
               type="button"
-              className={`flex items-center gap-3 p-3 rounded-md border border-[var(--border-color)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] ${selectedExecutor === null ? "bg-[var(--bg-hover)] border-[var(--app-yep-green)]" : ""}`}
+              className={`${optionCardBaseClasses} ${selectedExecutor === null ? optionCardSelectedClasses : optionCardUnselectedClasses}`}
               onClick={() => setSelectedExecutor(null)}
               disabled={isStarting}
             >
-              <span className="w-3 h-3 rounded-full shrink-0 bg-[var(--app-yep-green)]" />
+              <span className="w-3 h-3 rounded-full shrink-0 bg-[var(--text-primary)]" />
               <div className="flex flex-col flex-1">
                 <span className="text-sm font-medium text-[var(--text-primary)]">
                   {t("newSessionRunOnLocal")}
@@ -816,7 +854,7 @@ export function NewSessionForm({
               <button
                 key={host}
                 type="button"
-                className={`flex items-center gap-3 p-3 rounded-md border border-[var(--border-color)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] ${selectedExecutor === host ? "bg-[var(--bg-hover)] border-[var(--app-yep-green)]" : ""}`}
+                className={`${optionCardBaseClasses} ${selectedExecutor === host ? optionCardSelectedClasses : optionCardUnselectedClasses}`}
                 onClick={() => setSelectedExecutor(host)}
                 disabled={isStarting}
               >
@@ -832,24 +870,25 @@ export function NewSessionForm({
               </button>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Permission Mode Selection - only for providers that support it */}
       {supportsPermissionMode && (
-        <div className="new-session-mode-section">
-          <h3>{t("newSessionModeTitle")}</h3>
+        <section className="pb-4">
+          <h3 className={sectionTitleClasses}>{t("newSessionModeTitle")}</h3>
           <div className="flex flex-col gap-2">
             {MODE_ORDER.map((m) => (
               <button
                 key={m}
                 type="button"
-                className={`flex items-center gap-3 p-3 rounded-md border border-[var(--border-color)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] ${mode === m ? "bg-[var(--bg-hover)] border-[var(--app-yep-green)]" : ""}`}
+                className={`${optionCardBaseClasses} ${mode === m ? optionCardSelectedClasses : optionCardUnselectedClasses}`}
                 onClick={() => handleModeSelect(m)}
                 disabled={isStarting}
               >
                 <span
-                  className={`w-3 h-3 rounded-full shrink-0 mode-option-dot mode-${m}`}
+                  className="h-3 w-3 shrink-0 rounded-full sm:h-3 sm:w-3"
+                  style={{ backgroundColor: modeDotColors[m] }}
                 />
                 <div className="flex flex-col flex-1">
                   <span className="text-sm font-medium text-[var(--text-primary)]">
@@ -863,13 +902,13 @@ export function NewSessionForm({
             ))}
           </div>
 
-          <div className="new-session-defaults-bar">
-            <p className="new-session-defaults-copy">
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="m-0 text-sm text-[var(--text-muted)]">
               {t("newSessionDefaultsDescription")}
             </p>
             <button
               type="button"
-              className="new-session-defaults-button"
+              className="whitespace-nowrap rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               onClick={handleSaveDefaults}
               disabled={
                 isStarting ||
@@ -884,7 +923,7 @@ export function NewSessionForm({
                 : t("newSessionDefaultsAction")}
             </button>
           </div>
-        </div>
+        </section>
       )}
     </div>
   );

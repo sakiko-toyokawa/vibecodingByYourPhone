@@ -134,22 +134,28 @@ export function ProjectSelector({
 
   // Don't show selector if only one project
   if (!loading && projects.length <= 1) {
-    return <span className="session-title">{displayName}</span>;
+    return (
+      <span className="max-w-[calc(100vw-150px)] overflow-hidden text-ellipsis whitespace-nowrap font-medium text-[var(--text-primary)]">
+        {displayName}
+      </span>
+    );
   }
 
   const optionsContent = (
-    <div className="project-selector-options">
+    <div className="max-h-[320px] overflow-y-auto">
       {projects.map((project) => {
         const isSelected = project.id === currentProjectId;
         return (
           <button
             key={project.id}
             type="button"
-            className={`project-selector-option ${isSelected ? "selected" : ""}`}
+            className={`flex w-full flex-col items-start bg-transparent px-3 py-2 text-left transition-colors duration-150 hover:bg-[var(--bg-hover)] ${isSelected ? "bg-[var(--bg-active)]" : ""}`}
             onClick={() => handleProjectSelect(project)}
           >
-            <span className="project-selector-name">{project.name}</span>
-            <span className="project-selector-meta">
+            <span className="text-sm font-medium text-[var(--text-primary)]">
+              {project.name}
+            </span>
+            <span className="text-[10px] text-[var(--text-muted)]">
               {t("projectSelectorSessionsCount", {
                 count: project.sessionCount,
               })}
@@ -165,22 +171,43 @@ export function ProjectSelector({
       ? createPortal(
           // biome-ignore lint/a11y/useKeyWithClickEvents: Escape key handled globally
           <div
-            className="project-selector-overlay"
+            className="fixed inset-0 z-[1000] flex items-end justify-center bg-black/50"
             onClick={handleOverlayClick}
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div
               ref={sheetRef}
-              className="project-selector-sheet"
+              className="flex w-full max-h-[70vh] flex-col overflow-hidden rounded-t-lg bg-[var(--bg-surface)] animate-[slideUp_0.2s_ease-out]"
               tabIndex={-1}
               aria-label={t("projectSelectorSelectProject")}
             >
-              <div className="project-selector-header">
-                <span className="project-selector-title">
+              <div className="px-4 py-3 border-b border-[var(--border-color)]">
+                <span className="text-[13px] font-semibold text-[var(--text-primary)]">
                   {t("projectSelectorSelectProject")}
                 </span>
               </div>
-              {optionsContent}
+              <div className="flex-1 overflow-y-auto py-2">
+                {projects.map((project) => {
+                  const isSelected = project.id === currentProjectId;
+                  return (
+                    <button
+                      key={project.id}
+                      type="button"
+                      className={`flex w-full flex-col items-start bg-transparent px-4 py-3 text-left transition-colors duration-150 hover:bg-[var(--bg-hover)] ${isSelected ? "bg-[var(--bg-active)]" : ""}`}
+                      onClick={() => handleProjectSelect(project)}
+                    >
+                      <span className="text-sm font-medium text-[var(--text-primary)]">
+                        {project.name}
+                      </span>
+                      <span className="text-[10px] text-[var(--text-muted)]">
+                        {t("projectSelectorSessionsCount", {
+                          count: project.sessionCount,
+                        })}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>,
           document.body,
@@ -191,7 +218,7 @@ export function ProjectSelector({
     isOpen && isDesktop ? (
       <div
         ref={sheetRef}
-        className="project-selector-dropdown"
+        className="absolute left-0 top-[calc(100%+4px)] z-[100] min-w-[480px] max-w-[800px] overflow-hidden rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-lg"
         tabIndex={-1}
         aria-label={t("projectSelectorSelectProject")}
       >
@@ -200,31 +227,24 @@ export function ProjectSelector({
     ) : null;
 
   return (
-    <div className="project-selector-container">
+    <div className="relative inline-flex min-w-0 shrink-0">
       <button
         ref={buttonRef}
         type="button"
-        className="project-selector-button"
+        className="inline-flex items-center gap-1 rounded-md bg-transparent px-2 py-1 -mx-2 -my-1 font-medium text-[var(--text-primary)] transition-colors duration-150 hover:bg-[var(--bg-hover)]"
         onClick={handleButtonClick}
         title={t("projectSelectorChangeProject")}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        <span className="project-selector-text">{displayName}</span>
-        <svg
-          className="project-selector-chevron"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
+        <span className="whitespace-nowrap max-w-[calc(100vw-150px)] overflow-hidden text-ellipsis">
+          {displayName}
+        </span>
+        <span
+          className={`shrink-0 text-sm transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
         >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
+          ▼
+        </span>
       </button>
       {desktopDropdown}
       {mobileSheet}

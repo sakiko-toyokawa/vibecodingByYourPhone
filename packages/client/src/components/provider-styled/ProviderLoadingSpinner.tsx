@@ -14,24 +14,17 @@ export function ProviderLoadingSpinner({
   if (activeProvider === "gemini") {
     return (
       <div
-        style={{
-          display: "flex",
-          gap: "4px",
-          alignItems: "center",
-          justifyContent: "center",
-          height: size,
-        }}
+        className="flex items-center justify-center gap-1"
+        style={{ height: size }}
       >
         {["#4285f4", "#ea4335", "#fbbc04", "#34a853"].map((color) => (
           <span
             key={color}
-            className="thinking-dot"
+            className="thinking-dot inline-block rounded-full"
             style={{
               width: size * 0.25,
               height: size * 0.25,
-              borderRadius: "50%",
               backgroundColor: color,
-              display: "inline-block",
             }}
           />
         ))}
@@ -42,21 +35,12 @@ export function ProviderLoadingSpinner({
   if (activeProvider === "opencode") {
     return (
       <div
-        style={{
-          width: size * 1.5,
-          height: 3,
-          backgroundColor: "var(--border-subtle)",
-          borderRadius: "2px",
-          overflow: "hidden",
-        }}
+        className="bg-[var(--border-subtle)] rounded-sm overflow-hidden"
+        style={{ width: size * 1.5, height: 3 }}
       >
         <div
-          style={{
-            width: "40%",
-            height: "100%",
-            backgroundColor: dotColor,
-            animation: "opencodeProgress 1s linear infinite",
-          }}
+          className="h-full bg-[var(--accent-primary)] animate-[opencodeProgress_1s_linear_infinite]"
+          style={{ width: "40%" }}
         />
       </div>
     );
@@ -64,24 +48,17 @@ export function ProviderLoadingSpinner({
 
   return (
     <div
-      style={{
-        display: "flex",
-        gap: "4px",
-        alignItems: "center",
-        justifyContent: "center",
-        height: size,
-      }}
+      className="flex items-center justify-center gap-1"
+      style={{ height: size }}
     >
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          className="thinking-dot"
+          className="thinking-dot inline-block rounded-full"
           style={{
             width: size * 0.25,
             height: size * 0.25,
-            borderRadius: "50%",
             backgroundColor: dotColor,
-            display: "inline-block",
             animationDelay: `${i * 0.15}s`,
           }}
         />

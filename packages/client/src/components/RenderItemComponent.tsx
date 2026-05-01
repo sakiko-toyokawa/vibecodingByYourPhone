@@ -129,13 +129,11 @@ export const RenderItemComponent = memo(function RenderItemComponent({
 }: Props) {
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
-      // Don't interfere with text selection (important for mobile long-press)
       const selection = window.getSelection();
       if (selection && selection.toString().length > 0) {
         return;
       }
 
-      // Shift+click to debug (not Cmd/Ctrl+click, which opens links in new tabs)
       if (e.shiftKey && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         e.stopPropagation();
@@ -192,21 +190,22 @@ export const RenderItemComponent = memo(function RenderItemComponent({
         return <SessionSetupBlock title={item.title} prompts={item.prompts} />;
 
       case "system": {
-        // Different styling for compacting vs completed compaction
         const isCompacting =
           item.subtype === "status" && item.status === "compacting";
         const isError = item.subtype === "error";
-        const icon = isError ? "!" : "⟳";
+        const icon = isError ? "!" : "↻";
         return (
           <div
-            className={`system-message ${isCompacting ? "system-message-compacting" : ""} ${isError ? "system-message-error" : ""}`}
+            className={`my-2 flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs ${
+              isError
+                ? "border-red-200 bg-red-50 text-red-600"
+                : "border-[var(--border-subtle)] bg-[var(--bg-secondary)] text-[var(--text-muted)]"
+            } ${isCompacting ? "animate-pulse" : ""}`}
           >
-            <span
-              className={`system-message-icon ${isCompacting ? "spinning" : ""}`}
-            >
+            <span className={`font-bold ${isCompacting ? "animate-spin" : ""}`}>
               {icon}
             </span>
-            <span className="system-message-text">{item.content}</span>
+            <span className="flex-1">{item.content}</span>
           </div>
         );
       }
@@ -219,7 +218,11 @@ export const RenderItemComponent = memo(function RenderItemComponent({
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: debug feature, shift+click only
     <div
-      className={item.isSubagent ? "subagent-item" : undefined}
+      className={
+        item.isSubagent
+          ? "my-1 rounded-2xl bg-gray-50/60 p-2 backdrop-blur-sm"
+          : undefined
+      }
       data-render-type={item.type}
       data-render-id={item.id}
       onClick={handleClick}

@@ -81,27 +81,37 @@ export function LoginPage() {
 
   if (isLoading) {
     return (
-      <div className="login-page">
-        <div className="login-container">
-          <div className="login-loading">{t("loginLoading")}</div>
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-surface)] p-4">
+        <div className="w-full max-w-[360px] p-4">
+          <div className="text-[var(--text-muted)] text-center">
+            {t("loginLoading")}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="login-page">
-      <div className="login-container">
-        <div className="login-logo">
-          <YepAnywhereLogo />
+    <div className="min-h-screen flex items-center justify-center bg-[var(--bg-surface)] p-4">
+      <div className="w-full max-w-[360px] p-4">
+        <div className="mb-6 flex justify-center">
+          <YepAnywhereLogo size="lg" />
         </div>
-        <p className="login-subtitle">
+        <h1
+          className="mb-2 text-center text-[1.75rem] text-[var(--text-primary)]"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
           {isSetupMode ? t("loginSetupSubtitle") : t("loginSubtitle")}
-        </p>
+        </h1>
 
-        <form onSubmit={handleSubmit} className="login-form">
-          <div className="login-field">
-            <label htmlFor="password">{t("loginPasswordLabel")}</label>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="password"
+              className="text-sm text-[var(--text-muted)]"
+            >
+              {t("loginPasswordLabel")}
+            </label>
             <input
               id="password"
               type="password"
@@ -113,12 +123,16 @@ export function LoginPage() {
                   : t("loginPasswordPlaceholder")
               }
               disabled={isSubmitting}
+              className="px-3 py-2 border border-[var(--border-input)] rounded-[var(--radius-md)] bg-[var(--bg-input)] text-[var(--text-primary)] text-base focus:outline-none focus:border-[var(--focus-border)]"
             />
           </div>
 
           {isSetupMode && (
-            <div className="login-field">
-              <label htmlFor="confirmPassword">
+            <div className="flex flex-col gap-1">
+              <label
+                htmlFor="confirmPassword"
+                className="text-sm text-[var(--text-muted)]"
+              >
                 {t("loginConfirmPasswordLabel")}
               </label>
               <input
@@ -128,15 +142,20 @@ export function LoginPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder={t("loginConfirmPasswordPlaceholder")}
                 disabled={isSubmitting}
+                className="px-3 py-2 border border-[var(--border-input)] rounded-[var(--radius-md)] bg-[var(--bg-input)] text-[var(--text-primary)] text-base focus:outline-none focus:border-[var(--focus-border)]"
               />
             </div>
           )}
 
-          {error && <div className="login-error">{error}</div>}
+          {error && (
+            <div className="text-[var(--error-color)] text-sm text-center p-2 bg-[rgba(199,78,57,0.1)] rounded-[var(--radius-md)]">
+              {error}
+            </div>
+          )}
 
           <button
             type="submit"
-            className="login-button"
+            className="cursor-pointer rounded-[var(--radius-md)] border-none bg-[var(--accent-rust)] px-4 py-2 text-base font-medium text-white transition-colors duration-150 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isSubmitting}
           >
             {isSubmitting
@@ -147,10 +166,16 @@ export function LoginPage() {
           </button>
         </form>
 
-        {isSetupMode && <p className="login-hint">{t("loginSetupHint")}</p>}
+        {isSetupMode && (
+          <p className="text-xs text-[var(--text-dimmed)] text-center mt-3">
+            {t("loginSetupHint")}
+          </p>
+        )}
 
         {!isSetupMode && (
-          <p className="login-recovery-hint">{t("loginRecoveryHint")}</p>
+          <p className="text-xs text-[var(--text-dimmed)] text-center mt-3">
+            {t("loginRecoveryHint")}
+          </p>
         )}
       </div>
     </div>

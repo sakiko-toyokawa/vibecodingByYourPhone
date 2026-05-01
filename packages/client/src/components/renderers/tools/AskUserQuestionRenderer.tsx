@@ -25,20 +25,26 @@ function QuestionDisplay({
     !question.options.some((opt) => opt.label === selectedAnswer);
 
   return (
-    <div className="question-item">
-      <div className="question-header">
-        <span className="badge">{question.header}</span>
-        <span className="question-text">{question.question}</span>
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-block rounded bg-[var(--bg-secondary)] px-2 py-0.5 text-sm font-medium text-[var(--link-color)]">
+          {question.header}
+        </span>
+        <span className="text-[var(--text-secondary,var(--text-muted))]">
+          {question.question}
+        </span>
       </div>
-      <ul className="question-options">
+      <ul className="m-0 flex list-none flex-col gap-1 p-0">
         {question.options.map((option) => {
           const isSelected = selectedAnswer === option.label;
           return (
             <li
               key={option.label}
-              className={`question-option ${isSelected ? "question-option-selected" : ""}`}
+              className={`flex items-start gap-2 rounded border border-[var(--border-color)] bg-[var(--bg-code)] p-2 hover:bg-[var(--bg-tertiary)] ${isSelected ? "border-[#4a4] bg-[rgba(68,170,68,0.1)]" : ""}`}
             >
-              <span className="question-option-indicator">
+              <span
+                className={`shrink-0 font-[monospace] ${isSelected ? "text-[var(--success-color)]" : "text-[var(--text-muted)]"}`}
+              >
                 {question.multiSelect
                   ? isSelected
                     ? "☑"
@@ -47,10 +53,12 @@ function QuestionDisplay({
                     ? "●"
                     : "○"}
               </span>
-              <div className="question-option-content">
-                <span className="question-option-label">{option.label}</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="font-medium text-[var(--text-secondary,var(--text-muted))]">
+                  {option.label}
+                </span>
                 {option.description && (
-                  <span className="question-option-desc">
+                  <span className="text-base text-[var(--text-muted)]">
                     {option.description}
                   </span>
                 )}
@@ -59,11 +67,17 @@ function QuestionDisplay({
           );
         })}
         {isCustomAnswer && (
-          <li className="question-option question-option-selected">
-            <span className="question-option-indicator">●</span>
-            <div className="question-option-content">
-              <span className="question-option-label">Other</span>
-              <span className="question-option-desc">{selectedAnswer}</span>
+          <li className="flex items-start gap-2 rounded border border-[#4a4] bg-[rgba(68,170,68,0.1)] p-2 hover:bg-[var(--bg-tertiary)]">
+            <span className="shrink-0 font-[monospace] text-[var(--success-color)]">
+              ●
+            </span>
+            <div className="flex flex-col gap-0.5">
+              <span className="font-medium text-[var(--text-secondary,var(--text-muted))]">
+                Other
+              </span>
+              <span className="text-base text-[var(--text-muted)]">
+                {selectedAnswer}
+              </span>
             </div>
           </li>
         )}
@@ -77,7 +91,7 @@ function QuestionDisplay({
  */
 function AskUserQuestionToolUse({ input }: { input: AskUserQuestionInput }) {
   return (
-    <div className="question-tool-use">
+    <div className="flex flex-col gap-4">
       {input.questions.map((q, i) => (
         <QuestionDisplay key={`${q.header}-${i}`} question={q} />
       ))}
@@ -119,7 +133,7 @@ function AskUserQuestionToolResult({
   if (isError) {
     const errorResult = result as unknown as { content?: unknown } | undefined;
     return (
-      <div className="question-error">
+      <div className="rounded bg-[var(--bg-error,rgba(207,34,46,0.1))] p-2 text-[var(--error-color)]">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="AskUserQuestion" errors={validationErrors} />
         )}
@@ -132,7 +146,7 @@ function AskUserQuestionToolResult({
 
   if (!result || !result.questions) {
     return (
-      <div className="question-empty">
+      <div className="text-lg italic text-[var(--text-muted)]">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="AskUserQuestion" errors={validationErrors} />
         )}
@@ -142,7 +156,7 @@ function AskUserQuestionToolResult({
   }
 
   return (
-    <div className="question-result">
+    <div className="flex flex-col gap-4">
       {showValidationWarning && validationErrors && (
         <SchemaWarning toolName="AskUserQuestion" errors={validationErrors} />
       )}

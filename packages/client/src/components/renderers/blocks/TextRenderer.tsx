@@ -15,7 +15,7 @@ function TextRendererComponent({ block }: { block: TextBlock }) {
   if (block._renderedHtml) {
     return (
       <div
-        className="text-block"
+        className="my-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-5 py-4 text-[13px] leading-6 text-[var(--text-primary)] shadow-[0_1px_0_rgba(20,20,19,0.03)]"
         // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered markdown
         dangerouslySetInnerHTML={{ __html: block._renderedHtml }}
       />
@@ -24,8 +24,8 @@ function TextRendererComponent({ block }: { block: TextBlock }) {
 
   // Fallback to plain text when server-rendered HTML is not available
   return (
-    <div className="text-block">
-      <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
+    <div className="my-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-5 py-4 shadow-[0_1px_0_rgba(20,20,19,0.03)]">
+      <pre className="m-0 whitespace-pre-wrap font-inherit text-[13px] leading-6 text-[var(--text-primary)]">
         {block.text}
       </pre>
     </div>

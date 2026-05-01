@@ -75,13 +75,17 @@ export const FilePathLink = memo(function FilePathLink({
     <>
       <button
         type="button"
-        className="file-path-link"
+        className="inline-flex items-center gap-1 bg-transparent border-0 p-0 font-mono text-inherit text-[var(--vscode-textLink-foreground,#3794ff)] cursor-pointer underline decoration-transparent hover:decoration-current transition-colors duration-150"
         onClick={handleClick}
         onAuxClick={handleOpenInNewTab}
         title={`${filePath}${suffix}\nClick to view, middle-click to open in new tab`}
       >
-        <span className="file-path-link-name">{text}</span>
-        {suffix && <span className="file-path-link-line">{suffix}</span>}
+        <span className="break-all">{text}</span>
+        {suffix && (
+          <span className="text-[var(--text-muted)] no-underline">
+            {suffix}
+          </span>
+        )}
       </button>
       {showModal &&
         createPortal(
@@ -141,13 +145,13 @@ function FileViewerModal({
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: Escape key handled in useEffect, click is for overlay dismiss
     <div
-      className="modal-overlay"
+      className="fixed inset-0 bg-[var(--bg-overlay)] flex items-center justify-center z-[9999]"
       onClick={handleOverlayClick}
       onMouseDown={(e) => e.stopPropagation()}
     >
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: click only stops propagation, keyboard handled globally */}
       <dialog
-        className="modal file-viewer-modal"
+        className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded w-[90vw] max-w-[1200px] max-h-[85vh] flex flex-col shadow-[0_8px_32px_rgba(0,0,0,0.3)] max-sm:w-screen max-sm:max-w-[100vw] max-sm:max-h-[100dvh] max-sm:h-[100dvh] max-sm:rounded-none max-sm:border-none"
         open
         onClick={(e) => e.stopPropagation()}
       >

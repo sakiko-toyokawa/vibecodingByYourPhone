@@ -81,19 +81,25 @@ export function ConnectedAppContent({ children }: { children: ReactNode }) {
           title="Server Update Required"
           onClose={() => setDismissedRelayResumeWarning(true)}
         >
-          <div className="host-offline-modal-content">
-            <p className="host-offline-message">
-              The server on <strong>{currentRelayUsername}</strong> needs to be
-              updated for improved session resume security. Until then, you'll
-              need to log in again after refreshing or reconnecting.
+          <div className="flex flex-col gap-[var(--space-4)]">
+            <p className="m-0 text-base leading-relaxed text-[var(--text-primary)]">
+              The server on{" "}
+              <strong className="text-[var(--text-primary)]">
+                {currentRelayUsername}
+              </strong>{" "}
+              needs to be updated for improved session resume security. Until
+              then, you'll need to log in again after refreshing or
+              reconnecting.
             </p>
-            <p className="host-offline-detail">
-              <code>npm update -g yepanywhere</code>
+            <p className="m-0 break-words rounded-[var(--radius-sm)] bg-[var(--bg-code)] px-[var(--space-3)] py-[var(--space-2)] text-sm text-[var(--text-secondary)]">
+              <code className="select-all font-mono text-[var(--text-primary)]">
+                npm update -g yepanywhere
+              </code>
             </p>
-            <p className="host-offline-hint">
+            <p className="m-0 text-sm text-[var(--text-muted)]">
               Then restart the server and reconnect.
             </p>
-            <div className="host-offline-actions">
+            <div className="flex justify-end gap-[var(--space-2)] border-t border-[var(--border-subtle)] pt-[var(--space-2)]">
               <button
                 type="button"
                 className="btn-primary"

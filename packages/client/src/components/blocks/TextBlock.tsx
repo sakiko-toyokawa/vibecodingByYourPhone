@@ -6,9 +6,11 @@ import { LocalMediaModal, useLocalMediaClick } from "../LocalMediaModal";
 interface Props {
   text: string;
   isStreaming?: boolean;
-  /** Pre-rendered HTML from server (for completed messages) */
   augmentHtml?: string;
 }
+
+const markdownContentClasses =
+  "text-[13px] leading-6 text-[var(--text-primary)] [&_p]:mb-3 [&_p:last-child]:mb-0 [&_code]:break-words [&_code]:rounded-[var(--radius-sm)] [&_code]:bg-[var(--bg-code)] [&_code]:px-1 [&_code]:py-0.5 [&_code]:[font-family:var(--font-mono)] [&_code]:text-[0.9em] [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-[var(--radius-md)] [&_pre]:border [&_pre]:border-[var(--border-color)] [&_pre]:bg-[var(--bg-code)] [&_pre]:p-3 [&_pre]:[font-family:var(--font-mono)] [&_pre]:[font-size:var(--font-size-sm)] [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_a]:text-[var(--link-color)] [&_a]:underline-offset-2 hover:[&_a]:underline [&_blockquote]:my-3 [&_blockquote]:border-l-[3px] [&_blockquote]:border-[var(--border-color)] [&_blockquote]:pl-4 [&_blockquote]:text-[var(--text-muted)] [&_h1]:my-4 [&_h1]:[font-family:var(--font-display)] [&_h1]:text-[1.7rem] [&_h1]:leading-tight [&_h2]:my-4 [&_h2]:[font-family:var(--font-display)] [&_h2]:text-[1.45rem] [&_h2]:leading-tight [&_h3]:my-3 [&_h3]:[font-family:var(--font-display)] [&_h3]:text-[1.2rem] [&_h3]:leading-tight [&_h4]:my-3 [&_h4]:font-semibold [&_h5]:my-3 [&_h5]:font-semibold [&_h6]:my-3 [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-[var(--border-color)] [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_table]:[font-size:var(--font-size-sm)] [&_th]:border [&_th]:border-[var(--border-color)] [&_th]:bg-[var(--bg-secondary)] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_td]:border [&_td]:border-[var(--border-color)] [&_td]:px-3 [&_td]:py-2";
 
 export const TextBlock = memo(function TextBlock({
   text,
@@ -16,19 +18,12 @@ export const TextBlock = memo(function TextBlock({
   augmentHtml,
 }: Props) {
   const [copied, setCopied] = useState(false);
-
-  // Streaming markdown hook for server-rendered content
   const streamingMarkdown = useStreamingMarkdown();
   const streamingContext = useStreamingMarkdownContext();
-
-  // Track whether we're actively using streaming markdown (received at least one augment)
   const [useStreamingContent, setUseStreamingContent] = useState(false);
 
-  // Register with context when streaming and context is available
   useEffect(() => {
     if (!isStreaming || !streamingContext) {
-      // Reset streaming state when not streaming
-      // (HTML is captured to markdownAugments before component remounts)
       if (!isStreaming) {
         setUseStreamingContent(false);
         streamingMarkdown.reset();
@@ -36,10 +31,8 @@ export const TextBlock = memo(function TextBlock({
       return;
     }
 
-    // Register handlers with the context
     const unregister = streamingContext.registerStreamingHandler({
       onAugment: (augment) => {
-        // Mark that we're using streaming content on first augment
         setUseStreamingContent(true);
         streamingMarkdown.onAugment(augment);
       },
@@ -62,22 +55,18 @@ export const TextBlock = memo(function TextBlock({
   }, [text]);
 
   const { modal, handleClick, closeModal } = useLocalMediaClick();
-
   const showStreamingContent = isStreaming && useStreamingContent;
-
-  // Always render streaming container when isStreaming so refs are attached
-  // before first augment arrives. Hidden until useStreamingContent becomes true.
   const renderStreamingContainer = isStreaming;
 
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: click handler intercepts local media links only
     <div
-      className={`text-block timeline-item${isStreaming ? " streaming" : ""}`}
+      className="group relative my-2 rounded-lg border border-[var(--border-subtle)] bg-white/85 px-5 py-4 pr-12 shadow-[0_1px_0_rgba(20,20,19,0.03)] backdrop-blur-sm"
       onClick={handleClick}
     >
       <button
         type="button"
-        className={`text-block-copy ${copied ? "copied" : ""}`}
+        className={`absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-muted)] opacity-0 transition-all duration-150 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-border)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] ${copied ? "opacity-100 text-[var(--success-color)]" : ""}`}
         onClick={handleCopy}
         title={copied ? "Copied!" : "Copy markdown"}
         aria-label={copied ? "Copied!" : "Copy markdown"}
@@ -85,28 +74,33 @@ export const TextBlock = memo(function TextBlock({
         {copied ? <CheckIcon /> : <CopyIcon />}
       </button>
 
-      {/* Always render streaming elements when streaming so refs are ready for augments */}
       {renderStreamingContainer && (
         <div style={showStreamingContent ? undefined : { display: "none" }}>
           <div
             ref={streamingMarkdown.containerRef}
-            className="streaming-blocks"
+            className={markdownContentClasses}
           />
           <span
             ref={streamingMarkdown.pendingRef}
-            className="streaming-pending"
+            className={`${markdownContentClasses} opacity-70`}
           />
+          {showStreamingContent && (
+            <span className="ml-0.5 inline-block h-4 w-px align-middle animate-[blink_0.8s_ease-in-out_infinite] bg-[var(--text-primary)]" />
+          )}
         </div>
       )}
 
-      {/* Show fallback content when not actively streaming */}
       {!showStreamingContent &&
         (augmentHtml ? (
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
-          <div dangerouslySetInnerHTML={{ __html: augmentHtml }} />
+          <div
+            className={markdownContentClasses}
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
+            dangerouslySetInnerHTML={{ __html: augmentHtml }}
+          />
         ) : (
-          // Plain text fallback (no server augment available)
-          <p>{text}</p>
+          <div className={markdownContentClasses}>
+            <p>{text}</p>
+          </div>
         ))}
       {modal && (
         <LocalMediaModal

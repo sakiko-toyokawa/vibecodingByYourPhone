@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useI18n } from "../i18n";
 import { truncateText } from "../lib/text";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface PageHeaderProps {
   title: string;
@@ -18,40 +19,9 @@ interface PageHeaderProps {
   showBack?: boolean;
   /** Callback when back button is clicked */
   onBack?: () => void;
+  /** Optional content to render on the right side of the header */
+  rightContent?: ReactNode;
 }
-
-const SidebarToggleIcon = () => (
-  <svg
-    width="20"
-    height="20"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <rect x="3" y="3" width="18" height="18" rx="2" />
-    <line x1="9" y1="3" x2="9" y2="21" />
-  </svg>
-);
-
-const BackIcon = () => (
-  <svg
-    width="20"
-    height="20"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <polyline points="15 18 9 12 15 6" />
-  </svg>
-);
 
 export function PageHeader({
   title,
@@ -62,6 +32,7 @@ export function PageHeader({
   isSidebarCollapsed = false,
   showBack = false,
   onBack,
+  rightContent,
 }: PageHeaderProps) {
   const { t } = useI18n();
   // On desktop: toggle sidebar collapse. On mobile: open sidebar overlay
@@ -76,40 +47,45 @@ export function PageHeader({
     : t("actionOpenSidebar");
 
   return (
-    <header className="session-header">
-      <div className="session-header-inner">
-        <div className="session-header-left">
+    <header className="relative z-10 shrink-0 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)]">
+      <div className="flex min-h-[64px] items-center justify-between px-6 py-4 pl-1">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           {showBack && onBack ? (
             <button
               type="button"
-              className="sidebar-toggle"
+              className="flex shrink-0 items-center justify-center rounded-sm bg-transparent p-1 text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
               onClick={onBack}
               title={t("actionBack")}
               aria-label={t("actionBack")}
             >
-              <BackIcon />
+              <span className="text-sm font-medium">←</span>
             </button>
           ) : (
             handleToggle && (
               <button
                 type="button"
-                className="sidebar-toggle"
+                className="flex shrink-0 items-center justify-center rounded-sm bg-transparent p-1 text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                 onClick={handleToggle}
                 title={toggleTitle}
                 aria-label={toggleTitle}
               >
-                <SidebarToggleIcon />
+                <span className="text-sm font-medium">☰</span>
               </button>
             )
           )}
           {titleElement ?? (
-            <span
-              className="session-title"
+            <h1
+              className="max-w-[calc(100vw-150px)] cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap font-medium text-[var(--text-primary)] hover:text-[var(--text-secondary)] text-xl md:text-2xl"
+              style={{ fontFamily: "var(--font-display)" }}
               title={title.length > 60 ? title : undefined}
             >
               {truncateText(title)}
-            </span>
+            </h1>
           )}
+        </div>
+        <div className="flex shrink-0 items-center gap-3 ml-4">
+          <ThemeToggle />
+          {rightContent}
         </div>
       </div>
     </header>

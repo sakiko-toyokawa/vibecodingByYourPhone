@@ -6,6 +6,8 @@ interface AgentsNavItemProps {
   onClick?: () => void;
   /** Base path prefix for relay mode (e.g., "/remote/my-server") */
   basePath?: string;
+  /** Whether the sidebar is collapsed to icon-only mode */
+  collapsed?: boolean;
 }
 
 /**
@@ -13,7 +15,11 @@ interface AgentsNavItemProps {
  * Use this component instead of manually wiring up SidebarNavItem for agents
  * to ensure consistent behavior across all sidebars.
  */
-export function AgentsNavItem({ onClick, basePath }: AgentsNavItemProps) {
+export function AgentsNavItem({
+  onClick,
+  basePath,
+  collapsed = false,
+}: AgentsNavItemProps) {
   const activeAgentsCount = useGlobalActiveAgents();
 
   return (
@@ -24,6 +30,7 @@ export function AgentsNavItem({ onClick, basePath }: AgentsNavItemProps) {
       onClick={onClick}
       hasActivityIndicator={activeAgentsCount > 0}
       basePath={basePath}
+      collapsed={collapsed}
     />
   );
 }

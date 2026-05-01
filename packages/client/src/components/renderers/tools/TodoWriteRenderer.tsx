@@ -34,9 +34,13 @@ function TodoItem({ todo }: { todo: Todo }) {
   const isCompleted = todo.status === "completed";
 
   return (
-    <div className={`todo-item ${statusClass}`}>
-      <span className="todo-checkbox">{getStatusIcon(todo.status)}</span>
-      <span className={`todo-content ${isCompleted ? "todo-completed" : ""}`}>
+    <div className={`flex items-start gap-2 py-0.5 ${statusClass}`}>
+      <span className="shrink-0 text-base leading-[1.4] text-[var(--text-muted)]">
+        {getStatusIcon(todo.status)}
+      </span>
+      <span
+        className={`break-words leading-[1.4] ${isCompleted ? "line-through text-[var(--text-muted)]" : ""}`}
+      >
         {todo.content}
       </span>
     </div>
@@ -48,7 +52,11 @@ function TodoItem({ todo }: { todo: Todo }) {
  */
 function TodoWriteToolUse({ input }: { input: TodoWriteInput }) {
   if (!input?.todos || input.todos.length === 0) {
-    return <div className="todo-empty">No todos specified</div>;
+    return (
+      <div className="text-lg italic text-[var(--text-muted)]">
+        No todos specified
+      </div>
+    );
   }
 
   const inProgress = input.todos.filter((t) => t.status === "in_progress");
@@ -56,8 +64,8 @@ function TodoWriteToolUse({ input }: { input: TodoWriteInput }) {
   const completed = input.todos.filter((t) => t.status === "completed");
 
   return (
-    <div className="todo-tool-use">
-      <span className="todo-summary">
+    <div className="flex items-center gap-2">
+      <span className="text-lg text-[var(--text-muted)]">
         {inProgress.length > 0 && `${inProgress.length} in progress`}
         {inProgress.length > 0 &&
           (pending.length > 0 || completed.length > 0) &&
@@ -104,7 +112,7 @@ function TodoWriteToolResult({
   if (isError) {
     const errorResult = result as unknown as { content?: unknown } | undefined;
     return (
-      <div className="todo-error">
+      <div className="rounded bg-[var(--bg-error,rgba(207,34,46,0.1))] p-2 text-[var(--error-color)]">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="TodoWrite" errors={validationErrors} />
         )}
@@ -117,7 +125,7 @@ function TodoWriteToolResult({
 
   if (!result?.newTodos || result.newTodos.length === 0) {
     return (
-      <div className="todo-empty">
+      <div className="text-lg italic text-[var(--text-muted)]">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="TodoWrite" errors={validationErrors} />
         )}
@@ -127,11 +135,11 @@ function TodoWriteToolResult({
   }
 
   return (
-    <div className="todo-result">
+    <div className="flex flex-col gap-1">
       {showValidationWarning && validationErrors && (
         <SchemaWarning toolName="TodoWrite" errors={validationErrors} />
       )}
-      <div className="todo-list">
+      <div className="flex flex-col gap-1">
         {result.newTodos.map((todo, index) => (
           <TodoItem key={`${todo.content}-${index}`} todo={todo} />
         ))}

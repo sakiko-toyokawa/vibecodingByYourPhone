@@ -110,55 +110,37 @@ export function InstallPage({ agents, onNext }: Props) {
   const statusColor = (status: TaskStatus["status"]) => {
     switch (status) {
       case "pending":
-        return "var(--text-secondary)";
+        return "text-[var(--text-secondary)]";
       case "installing":
-        return "var(--accent)";
+        return "text-[var(--accent)]";
       case "done":
-        return "var(--success)";
+        return "text-[var(--success)]";
       case "error":
-        return "var(--error)";
+        return "text-[var(--error)]";
     }
   };
 
   return (
-    <div style={{ width: "100%", maxWidth: 400 }}>
-      <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>
+    <div className="w-full max-w-[400px]">
+      <h2 className="mb-2 text-[22px] font-semibold">
         Setting things up
       </h2>
-      <p
-        style={{
-          color: "var(--text-secondary)",
-          fontSize: 14,
-          marginBottom: 24,
-        }}
-      >
+      <p className="mb-6 text-sm text-[var(--text-secondary)]">
         Installing your selected agents. This may take a minute.
       </p>
 
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-          marginBottom: 32,
-        }}
-      >
+      <div className="mb-8 flex flex-col gap-4">
         {tasks.map((task) => (
-          <div key={task.id} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div key={task.id} className="flex items-center gap-3">
             <span
-              style={{
-                color: statusColor(task.status),
-                fontSize: 18,
-                width: 24,
-                textAlign: "center",
-              }}
+              className={`w-6 text-center text-lg ${statusColor(task.status)}`}
             >
               {statusIcon(task.status)}
             </span>
             <div>
-              <div style={{ fontWeight: 500 }}>{task.label}</div>
+              <div className="font-medium">{task.label}</div>
               {task.message && (
-                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                <div className="text-xs text-[var(--text-secondary)]">
                   {task.message}
                 </div>
               )}
@@ -168,26 +150,15 @@ export function InstallPage({ agents, onNext }: Props) {
       </div>
 
       {error && (
-        <div
-          style={{
-            padding: 12,
-            background: "rgba(239, 68, 68, 0.1)",
-            border: "1px solid var(--error)",
-            borderRadius: 8,
-            fontSize: 13,
-            color: "var(--error)",
-            marginBottom: 16,
-          }}
-        >
+        <div className="mb-4 rounded-lg border border-[var(--error)] bg-[rgba(239,68,68,0.1)] p-3 text-[13px] text-[var(--error)]">
           {error}
         </div>
       )}
 
       <button
-        className="btn-primary"
+        className="btn-primary w-full"
         onClick={onNext}
         disabled={!allDone}
-        style={{ width: "100%" }}
       >
         {allDone ? "Continue" : "Installing..."}
       </button>

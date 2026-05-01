@@ -116,20 +116,20 @@ function truncateByLines(
  */
 const DiffLines = memo(function DiffLines({ lines }: { lines: string[] }) {
   return (
-    <div className="diff-hunk">
-      <pre className="diff-content">
+    <div className="my-2 first:mt-0 rounded overflow-hidden border border-[var(--border-color)]">
+      <pre className="m-0 p-0 bg-[var(--bg-code)] overflow-x-auto tab-[var(--tab-size)]">
         {lines.map((line, i) => {
           const prefix = line[0];
-          const className =
+          const lineClass =
             prefix === "-"
-              ? "diff-removed"
+              ? "bg-[var(--bg-diff-removed,rgba(207,34,46,0.15))] text-[var(--text-diff-removed,var(--error-color))]"
               : prefix === "+"
-                ? "diff-added"
-                : "diff-context";
+                ? "bg-[var(--bg-diff-added,rgba(26,127,55,0.15))] text-[var(--text-diff-added,var(--success-color))]"
+                : "text-[var(--text-muted)]";
           // Use line content hash for stable keys
           const key = `${i}-${line.slice(0, 50)}`;
           return (
-            <div key={key} className={className}>
+            <div key={key} className={`px-2 leading-relaxed ${lineClass}`}>
               {line}
             </div>
           );
@@ -178,7 +178,7 @@ const HighlightedDiff = memo(function HighlightedDiff({
 
   return (
     <div
-      className="highlighted-diff"
+      className="font-mono [font-size:var(--font-size-base)] leading-relaxed tab-[var(--tab-size)]"
       // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki output is safe
       dangerouslySetInnerHTML={{ __html: htmlToRender }}
     />
@@ -191,18 +191,21 @@ const HighlightedDiff = memo(function HighlightedDiff({
  */
 const DiffHunk = memo(function DiffHunk({ hunk }: { hunk: PatchHunk }) {
   return (
-    <div className="diff-hunk">
-      <pre className="diff-content">
+    <div className="my-2 first:mt-0 rounded overflow-hidden border border-[var(--border-color)]">
+      <pre className="m-0 p-0 bg-[var(--bg-code)] overflow-x-auto tab-[var(--tab-size)]">
         {hunk.lines.map((line, i) => {
           const prefix = line[0];
-          const className =
+          const lineClass =
             prefix === "-"
-              ? "diff-removed"
+              ? "bg-[var(--bg-diff-removed,rgba(207,34,46,0.15))] text-[var(--text-diff-removed,var(--error-color))]"
               : prefix === "+"
-                ? "diff-added"
-                : "diff-context";
+                ? "bg-[var(--bg-diff-added,rgba(26,127,55,0.15))] text-[var(--text-diff-added,var(--success-color))]"
+                : "text-[var(--text-muted)]";
           return (
-            <div key={`${hunk.oldStart}-${i}`} className={className}>
+            <div
+              key={`${hunk.oldStart}-${i}`}
+              className={`px-2 leading-relaxed ${lineClass}`}
+            >
               {line}
             </div>
           );
@@ -228,22 +231,24 @@ function RawPatchPreview({
 
   return (
     <div
-      className={`diff-view-container ${preview.truncated ? "truncated" : ""}`}
+      className={`relative ${preview.truncated ? "max-h-[18rem] overflow-hidden" : ""}`}
     >
-      <div className="diff-view">
-        <pre className="code-block">
+      <div className="font-mono [font-size:var(--font-size-base)]">
+        <pre className="bg-[var(--bg-code)] border border-[var(--border-color)] rounded-md p-3 overflow-x-auto font-mono [font-size:var(--font-size-base)] leading-normal my-2 whitespace-pre-wrap break-words tab-[var(--tab-size)]">
           <code>{preview.text}</code>
         </pre>
       </div>
-      {preview.truncated && <div className="diff-fade-overlay" />}
+      {preview.truncated && (
+        <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-b from-transparent to-[var(--bg-surface)] pointer-events-none" />
+      )}
     </div>
   );
 }
 
 function RawPatchModalContent({ rawPatch }: { rawPatch: string }) {
   return (
-    <div className="diff-modal-content">
-      <pre className="code-block">
+    <div className="bg-[var(--bg-code)] rounded overflow-auto">
+      <pre className="bg-[var(--bg-code)] border border-[var(--border-color)] rounded-md p-3 overflow-x-auto font-mono [font-size:var(--font-size-base)] leading-normal my-2 whitespace-pre-wrap break-words tab-[var(--tab-size)]">
         <code>{rawPatch}</code>
       </pre>
     </div>
@@ -259,14 +264,16 @@ function EditToolUse({ input }: { input: EditInputWithAugment }) {
   if (!input._structuredPatch || input._structuredPatch.length === 0) {
     if (input._rawPatch) {
       return (
-        <div className="edit-result">
+        <div className="flex flex-col gap-2">
           <RawPatchPreview rawPatch={input._rawPatch} />
         </div>
       );
     }
     return (
-      <div className="edit-result">
-        <div className="edit-loading">Computing diff...</div>
+      <div className="flex flex-col gap-2">
+        <div className="text-[var(--text-muted)] italic [font-size:var(--font-size-lg)]">
+          Computing diff...
+        </div>
       </div>
     );
   }
@@ -276,12 +283,16 @@ function EditToolUse({ input }: { input: EditInputWithAugment }) {
   const isTruncated = diffLines.length > MAX_VISIBLE_LINES;
 
   return (
-    <div className="edit-result">
+    <div className="flex flex-col gap-2">
       {changeSummary && (
-        <div className="edit-change-summary">{changeSummary}</div>
+        <div className="text-[var(--text-muted,#888)] [font-size:var(--font-size-base)]">
+          {changeSummary}
+        </div>
       )}
-      <div className={`diff-view-container ${isTruncated ? "truncated" : ""}`}>
-        <div className="diff-view">
+      <div
+        className={`relative ${isTruncated ? "max-h-[18rem] overflow-hidden" : ""}`}
+      >
+        <div className="font-mono [font-size:var(--font-size-base)]">
           {input._diffHtml ? (
             <HighlightedDiff
               diffHtml={input._diffHtml}
@@ -291,7 +302,9 @@ function EditToolUse({ input }: { input: EditInputWithAugment }) {
             <DiffLines lines={diffLines} />
           )}
         </div>
-        {isTruncated && <div className="diff-fade-overlay" />}
+        {isTruncated && (
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-b from-transparent to-[var(--bg-surface)] pointer-events-none" />
+        )}
       </div>
     </div>
   );
@@ -382,13 +395,15 @@ function DiffModalContent({
   const displayPath = getRelativePath(filePath, projectPath);
 
   return (
-    <div className="diff-modal-content" ref={contentRef}>
-      <div className="diff-context-controls">
-        <span className="diff-context-path">{displayPath}</span>
+    <div className="bg-[var(--bg-code)] rounded overflow-auto" ref={contentRef}>
+      <div className="flex gap-2 items-center mb-3 p-2 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] sticky top-0 z-[1]">
+        <span className="flex-1 font-mono [font-size:var(--font-size-sm)] text-[var(--text-secondary)] overflow-hidden text-ellipsis whitespace-nowrap">
+          {displayPath}
+        </span>
         {canExpandContext && (
           <button
             type="button"
-            className="diff-context-toggle"
+            className="px-3 py-1 [font-size:var(--font-size-base)] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded cursor-pointer text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:opacity-60 disabled:cursor-wait"
             onClick={handleToggle}
             disabled={loading}
           >
@@ -399,7 +414,11 @@ function DiffModalContent({
                 : "Show full context"}
           </button>
         )}
-        {error && <span className="diff-context-error">{error}</span>}
+        {error && (
+          <span className="text-[var(--text-error)] [font-size:var(--font-size-sm)]">
+            {error}
+          </span>
+        )}
       </div>
 
       {displayHtml ? (
@@ -512,29 +531,33 @@ function EditCollapsedPreview({
 
     return (
       <>
-        <div className={`edit-collapsed-preview edit-collapsed-${classSuffix}`}>
+        <div
+          className={`flex flex-col gap-2 ${classSuffix === "error" ? "p-2" : classSuffix === "warning" ? "p-2" : classSuffix === "muted" ? "p-2" : ""}`}
+        >
           {showValidationWarning && validationErrors && (
             <SchemaWarning toolName="Edit" errors={validationErrors} />
           )}
-          <span className={`badge badge-${classSuffix}`}>
+          <span
+            className={`inline-block px-2 py-0.5 rounded [font-size:var(--font-size-sm)] font-medium align-middle ${classSuffix === "warning" ? "bg-[var(--bg-warning,rgba(154,103,0,0.15))] text-[var(--warning-color)]" : classSuffix === "error" ? "bg-[var(--bg-error,rgba(207,34,46,0.15))] text-[var(--error-color)]" : "bg-[var(--bg-secondary)] text-[var(--text-muted)]"}`}
+          >
             {isRejection
               ? classification.label
               : `Edit ${classification.label.toLowerCase()}`}
           </span>
           {classification.userReason ? (
-            <span className="edit-error-message">
+            <span className="text-[var(--text-secondary)] mt-2 [font-size:var(--font-size-lg)]">
               {classification.userReason}
             </span>
           ) : classification.cleanedMessage && !isRejection ? (
-            <span className="edit-error-message">
+            <span className="text-[var(--text-secondary)] mt-2 [font-size:var(--font-size-lg)]">
               {classification.cleanedMessage}
             </span>
           ) : null}
           {hasProposedDiff && (
             <div
-              className={`diff-view-container ${proposedDiffTruncated ? "truncated" : ""}`}
+              className={`relative ${proposedDiffTruncated ? "max-h-[18rem] overflow-hidden" : ""}`}
             >
-              <div className="diff-view">
+              <div className="font-mono [font-size:var(--font-size-base)]">
                 {input._diffHtml ? (
                   <HighlightedDiff
                     diffHtml={input._diffHtml}
@@ -546,13 +569,15 @@ function EditCollapsedPreview({
                   <DiffLines lines={proposedDiffLines} />
                 )}
               </div>
-              {proposedDiffTruncated && <div className="diff-fade-overlay" />}
+              {proposedDiffTruncated && (
+                <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-b from-transparent to-[var(--bg-surface)] pointer-events-none" />
+              )}
             </div>
           )}
           {hasProposedDiff && proposedDiffTruncated && (
             <button
               type="button"
-              className="diff-expand-button"
+              className="absolute bottom-2 right-2 px-3 py-1 bg-[var(--primary-color)] text-white border-none rounded [font-size:var(--font-size-sm)] cursor-pointer opacity-0 transition-opacity duration-150 z-10 pointer-events-auto hover:bg-[var(--link-color)]"
               onClick={(e) => {
                 e.stopPropagation();
                 setIsModalOpen(true);
@@ -564,7 +589,11 @@ function EditCollapsedPreview({
         </div>
         {isModalOpen && hasProposedDiff && (
           <Modal
-            title={<span className="file-path">{fileName}</span>}
+            title={
+              <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
+                {fileName}
+              </span>
+            }
             onClose={handleClose}
           >
             <DiffModalContent
@@ -585,8 +614,10 @@ function EditCollapsedPreview({
   if (structuredPatch.length === 0) {
     if (result === undefined) {
       return (
-        <div className="edit-collapsed-preview">
-          <div className="edit-loading">Computing diff...</div>
+        <div className="flex flex-col gap-2">
+          <div className="text-[var(--text-muted)] italic [font-size:var(--font-size-lg)]">
+            Computing diff...
+          </div>
         </div>
       );
     }
@@ -595,7 +626,7 @@ function EditCollapsedPreview({
       const rawPatchPreview = truncateByLines(rawPatch, MAX_VISIBLE_LINES);
       return (
         <>
-          <div className="edit-collapsed-preview">
+          <div className="flex flex-col gap-2">
             {showValidationWarning && validationErrors && (
               <SchemaWarning toolName="Edit" errors={validationErrors} />
             )}
@@ -606,7 +637,7 @@ function EditCollapsedPreview({
             {rawPatchPreview.truncated && (
               <button
                 type="button"
-                className="diff-expand-button"
+                className="absolute bottom-2 right-2 px-3 py-1 bg-[var(--primary-color)] text-white border-none rounded [font-size:var(--font-size-sm)] cursor-pointer opacity-0 transition-opacity duration-150 z-10 pointer-events-auto hover:bg-[var(--link-color)]"
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsModalOpen(true);
@@ -618,7 +649,11 @@ function EditCollapsedPreview({
           </div>
           {isModalOpen && (
             <Modal
-              title={<span className="file-path">{fileName}</span>}
+              title={
+                <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
+                  {fileName}
+                </span>
+              }
               onClose={handleClose}
             >
               <RawPatchModalContent rawPatch={rawPatch} />
@@ -629,7 +664,7 @@ function EditCollapsedPreview({
     }
 
     return (
-      <div className="edit-collapsed-preview">
+      <div className="flex flex-col gap-2">
         <span>Patch preview unavailable</span>
       </div>
     );
@@ -640,17 +675,19 @@ function EditCollapsedPreview({
 
   return (
     <>
-      <div className="edit-collapsed-preview">
+      <div className="flex flex-col gap-2">
         {result?.userModified && (
-          <span className="badge badge-info">User modified</span>
+          <span className="inline-block px-2 py-0.5 rounded [font-size:var(--font-size-sm)] font-medium align-middle bg-[var(--bg-secondary)] text-[var(--link-color)]">
+            User modified
+          </span>
         )}
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="Edit" errors={validationErrors} />
         )}
         <div
-          className={`diff-view-container ${isTruncated ? "truncated" : ""}`}
+          className={`relative ${isTruncated ? "max-h-[18rem] overflow-hidden" : ""}`}
         >
-          <div className="diff-view">
+          <div className="font-mono [font-size:var(--font-size-base)]">
             {diffHtml ? (
               <HighlightedDiff
                 diffHtml={diffHtml}
@@ -660,12 +697,14 @@ function EditCollapsedPreview({
               <DiffLines lines={diffLines} />
             )}
           </div>
-          {isTruncated && <div className="diff-fade-overlay" />}
+          {isTruncated && (
+            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-b from-transparent to-[var(--bg-surface)] pointer-events-none" />
+          )}
         </div>
         {isTruncated && (
           <button
             type="button"
-            className="diff-expand-button"
+            className="absolute bottom-2 right-2 px-3 py-1 bg-[var(--primary-color)] text-white border-none rounded [font-size:var(--font-size-sm)] cursor-pointer opacity-0 transition-opacity duration-150 z-10 pointer-events-auto hover:bg-[var(--link-color)]"
             onClick={handleClick}
           >
             Show full diff
@@ -674,7 +713,11 @@ function EditCollapsedPreview({
       </div>
       {isModalOpen && (
         <Modal
-          title={<span className="file-path">{fileName}</span>}
+          title={
+            <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
+              {fileName}
+            </span>
+          }
           onClose={handleClose}
         >
           <DiffModalContent
@@ -759,7 +802,7 @@ function EditInteractiveSummary({
     <>
       <button
         type="button"
-        className="file-link-inline"
+        className="inline-flex items-center gap-2 bg-transparent border-none p-0 font-mono text-inherit text-[var(--link-color)] cursor-pointer underline underline-transparent hover:underline-current"
         onClick={(e) => {
           e.stopPropagation();
           setShowModal(true);
@@ -767,7 +810,9 @@ function EditInteractiveSummary({
       >
         {fileName}
         {changeSummary && (
-          <span className="file-line-count-inline">{changeSummary}</span>
+          <span className="text-[var(--text-muted)] text-[0.85em] no-underline">
+            {changeSummary}
+          </span>
         )}
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="Edit" errors={validationErrors} />
@@ -775,7 +820,11 @@ function EditInteractiveSummary({
       </button>
       {showModal && (
         <Modal
-          title={<span className="file-path">{fileName}</span>}
+          title={
+            <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
+              {fileName}
+            </span>
+          }
           onClose={() => setShowModal(false)}
         >
           <DiffModalContent
@@ -899,29 +948,33 @@ function EditToolResult({
 
     return (
       <>
-        <div className={`edit-result edit-result-${classSuffix}`}>
+        <div
+          className={`flex flex-col gap-2 ${classSuffix === "error" ? "p-2" : classSuffix === "warning" ? "p-2" : classSuffix === "muted" ? "p-2" : ""}`}
+        >
           {showValidationWarning && validationErrors && (
             <SchemaWarning toolName="Edit" errors={validationErrors} />
           )}
-          <span className={`badge badge-${classSuffix}`}>
+          <span
+            className={`inline-block px-2 py-0.5 rounded [font-size:var(--font-size-sm)] font-medium align-middle ${classSuffix === "warning" ? "bg-[var(--bg-warning,rgba(154,103,0,0.15))] text-[var(--warning-color)]" : classSuffix === "error" ? "bg-[var(--bg-error,rgba(207,34,46,0.15))] text-[var(--error-color)]" : "bg-[var(--bg-secondary)] text-[var(--text-muted)]"}`}
+          >
             {isRejection
               ? classification.label
               : `Edit ${classification.label.toLowerCase()}`}
           </span>
           {classification.userReason ? (
-            <div className="edit-error-message">
+            <div className="text-[var(--text-secondary)] mt-2 [font-size:var(--font-size-lg)]">
               {classification.userReason}
             </div>
           ) : classification.cleanedMessage && !isRejection ? (
-            <div className="edit-error-message">
+            <div className="text-[var(--text-secondary)] mt-2 [font-size:var(--font-size-lg)]">
               {classification.cleanedMessage}
             </div>
           ) : null}
           {hasProposedDiff && (
             <div
-              className={`diff-view-container ${proposedDiffTruncated ? "truncated" : ""}`}
+              className={`relative ${proposedDiffTruncated ? "max-h-[18rem] overflow-hidden" : ""}`}
             >
-              <div className="diff-view">
+              <div className="font-mono [font-size:var(--font-size-base)]">
                 {inputWithAugment?._diffHtml ? (
                   <HighlightedDiff
                     diffHtml={inputWithAugment._diffHtml}
@@ -935,10 +988,10 @@ function EditToolResult({
               </div>
               {proposedDiffTruncated && (
                 <>
-                  <div className="diff-fade-overlay" />
+                  <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-b from-transparent to-[var(--bg-surface)] pointer-events-none" />
                   <button
                     type="button"
-                    className="diff-expand-button"
+                    className="absolute bottom-2 right-2 px-3 py-1 bg-[var(--primary-color)] text-white border-none rounded [font-size:var(--font-size-sm)] cursor-pointer opacity-0 transition-opacity duration-150 z-10 pointer-events-auto hover:bg-[var(--link-color)]"
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowModal(true);
@@ -953,7 +1006,11 @@ function EditToolResult({
         </div>
         {showModal && hasProposedDiff && inputWithAugment && (
           <Modal
-            title={<span className="file-path">{fileName}</span>}
+            title={
+              <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
+                {fileName}
+              </span>
+            }
             onClose={() => setShowModal(false)}
           >
             <DiffModalContent
@@ -979,29 +1036,39 @@ function EditToolResult({
     const isPlan = filePath ? isPlanFile(filePath) : false;
 
     return (
-      <div className="edit-result">
-        <div className="edit-header">
-          <span className="file-path">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
             {filePath ? getFileName(filePath) : "File"}
           </span>
-          {isPlan && <span className="badge badge-muted">Plan</span>}
+          {isPlan && (
+            <span className="inline-block px-2 py-0.5 rounded [font-size:var(--font-size-sm)] font-medium align-middle bg-[var(--bg-secondary)] text-[var(--text-muted)]">
+              Plan
+            </span>
+          )}
           {result?.userModified && (
-            <span className="badge badge-info">User modified</span>
+            <span className="inline-block px-2 py-0.5 rounded [font-size:var(--font-size-sm)] font-medium align-middle bg-[var(--bg-secondary)] text-[var(--link-color)]">
+              User modified
+            </span>
           )}
           {showValidationWarning && validationErrors && (
             <SchemaWarning toolName="Edit" errors={validationErrors} />
           )}
         </div>
-        <div className="edit-simple">
-          <div className="edit-old">
-            <div className="edit-label">Removed:</div>
-            <pre className="code-block">
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
+            <div className="text-[var(--text-muted)] [font-size:var(--font-size-sm)] mb-1">
+              Removed:
+            </div>
+            <pre className="bg-[var(--bg-code)] border border-[var(--border-color)] rounded-md p-3 overflow-x-auto font-mono [font-size:var(--font-size-base)] leading-normal my-2 whitespace-pre-wrap break-words tab-[var(--tab-size)]">
               <code>{oldString || "(empty)"}</code>
             </pre>
           </div>
-          <div className="edit-new">
-            <div className="edit-label">Added:</div>
-            <pre className="code-block">
+          <div className="flex flex-col gap-2">
+            <div className="text-[var(--text-muted)] [font-size:var(--font-size-sm)] mb-1">
+              Added:
+            </div>
+            <pre className="bg-[var(--bg-code)] border border-[var(--border-color)] rounded-md p-3 overflow-x-auto font-mono [font-size:var(--font-size-base)] leading-normal my-2 whitespace-pre-wrap break-words tab-[var(--tab-size)]">
               <code>{newString || "(empty)"}</code>
             </pre>
           </div>
@@ -1012,30 +1079,34 @@ function EditToolResult({
 
   return (
     <>
-      <div className="edit-result">
+      <div className="flex flex-col gap-2">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="Edit" errors={validationErrors} />
         )}
         {changeSummary && (
-          <div className="edit-change-summary">{changeSummary}</div>
+          <div className="text-[var(--text-muted,#888)] [font-size:var(--font-size-base)]">
+            {changeSummary}
+          </div>
         )}
         {result.userModified && (
-          <span className="badge badge-info">User modified</span>
+          <span className="inline-block px-2 py-0.5 rounded [font-size:var(--font-size-sm)] font-medium align-middle bg-[var(--bg-secondary)] text-[var(--link-color)]">
+            User modified
+          </span>
         )}
         <div
-          className={`diff-view-container ${isTruncated ? "truncated" : ""}`}
+          className={`relative ${isTruncated ? "max-h-[18rem] overflow-hidden" : ""}`}
         >
-          <div className="diff-view">
+          <div className="font-mono [font-size:var(--font-size-base)]">
             {result.structuredPatch.map((hunk, i) => (
               <DiffHunk key={`hunk-${hunk.oldStart}-${i}`} hunk={hunk} />
             ))}
           </div>
           {isTruncated && (
             <>
-              <div className="diff-fade-overlay" />
+              <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-b from-transparent to-[var(--bg-surface)] pointer-events-none" />
               <button
                 type="button"
-                className="diff-expand-button"
+                className="absolute bottom-2 right-2 px-3 py-1 bg-[var(--primary-color)] text-white border-none rounded [font-size:var(--font-size-sm)] cursor-pointer opacity-0 transition-opacity duration-150 z-10 pointer-events-auto hover:bg-[var(--link-color)]"
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowModal(true);
@@ -1050,7 +1121,9 @@ function EditToolResult({
       {showModal && (
         <Modal
           title={
-            <span className="file-path">{getFileName(result.filePath)}</span>
+            <span className="font-mono [font-size:var(--font-size-base)] text-[var(--link-color)] break-all">
+              {getFileName(result.filePath)}
+            </span>
           }
           onClose={() => setShowModal(false)}
         >

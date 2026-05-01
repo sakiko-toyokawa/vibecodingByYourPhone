@@ -72,44 +72,46 @@ function getStatusDisplay(
   enabled: boolean,
   hasCredentials: boolean,
   t: (key: never) => string,
-): { text: string; className: string } {
+): { text: string; dotColor: string } {
   if (!enabled) {
     return {
       text: t("remoteSetupStatusDisabled" as never),
-      className: "status-disabled",
+      dotColor: "bg-[var(--text-muted)]",
     };
   }
   if (!hasCredentials) {
     return {
       text: t("remoteSetupStatusNotConfigured" as never),
-      className: "status-warning",
+      dotColor: "bg-[var(--warning-color)]",
     };
   }
   switch (status) {
     case "waiting":
       return {
         text: t("remoteSetupStatusConnected" as never),
-        className: "status-success",
+        dotColor: "bg-[var(--success-color)]",
       };
     case "connecting":
       return {
         text: t("remoteSetupStatusConnecting" as never),
-        className: "status-pending",
+        dotColor:
+          "bg-[var(--text-muted)] animate-[pulse_1.5s_ease-in-out_infinite]",
       };
     case "registering":
       return {
         text: t("remoteSetupStatusRegistering" as never),
-        className: "status-pending",
+        dotColor:
+          "bg-[var(--text-muted)] animate-[pulse_1.5s_ease-in-out_infinite]",
       };
     case "rejected":
       return {
         text: t("remoteSetupStatusUsernameTaken" as never),
-        className: "status-error",
+        dotColor: "bg-[var(--error-color)]",
       };
     default:
       return {
         text: t("remoteSetupStatusDisconnected" as never),
-        className: "status-warning",
+        dotColor: "bg-[var(--warning-color)]",
       };
   }
 }
@@ -485,7 +487,8 @@ export function RemoteAccessSetup({
           <span className="text-xs font-medium text-[var(--text-muted)]">
             {t("remoteSetupStatus" as never)}
           </span>
-          <span className={`status-indicator ${status.className}`}>
+          <span className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${status.dotColor}`} />
             {status.text}
           </span>
           {relayStatus?.error && (

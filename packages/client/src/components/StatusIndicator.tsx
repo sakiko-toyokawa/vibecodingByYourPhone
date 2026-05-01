@@ -37,16 +37,29 @@ export function StatusIndicator({
 
   const statusText = getStatusText();
 
+  const dotColorClass = (() => {
+    if (!connected) {
+      return "bg-[var(--error-color)] animate-[thinking-pulse_1s_ease-in-out_infinite]";
+    }
+    if (status.owner === "external") {
+      return "bg-[var(--warning-color)]";
+    }
+    if (processState === "waiting-input") {
+      return "bg-[var(--warning-color)]";
+    }
+    if (processState === "in-turn") {
+      return "bg-[var(--thinking-color)] animate-[thinking-pulse_1.5s_ease-in-out_infinite]";
+    }
+    return "bg-[var(--success-color)]";
+  })();
+
   return (
     <div
-      className="status-indicator"
+      className="flex items-center gap-2"
       title={statusText}
       aria-label={statusText}
     >
-      <span
-        className={`status-dot status-${status.owner} process-${processState}${!connected ? " disconnected" : ""}`}
-        role="status"
-      />
+      <span className={`w-2 h-2 rounded-full ${dotColorClass}`} role="status" />
     </div>
   );
 }

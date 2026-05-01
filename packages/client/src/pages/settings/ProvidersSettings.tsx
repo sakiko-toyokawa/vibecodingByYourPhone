@@ -35,31 +35,30 @@ function OllamaUrlInput() {
   }, [url, updateSetting]);
 
   return (
-    <div style={{ marginTop: "var(--space-2)", width: "100%" }}>
-      <div
-        style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}
-      >
+    <div className="mt-[var(--space-2)] w-full">
+      <div className="flex items-center gap-[var(--space-2)]">
         <input
           type="text"
-          className="settings-input"
+          className="flex-1 px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
           value={url}
           onChange={(e) => {
             setUrl(e.target.value);
             setHasChanges(e.target.value !== serverValue);
           }}
           placeholder="http://localhost:11434"
-          style={{ flex: 1 }}
         />
         <button
           type="button"
-          className="settings-button"
+          className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
           disabled={!hasChanges || isSaving}
           onClick={handleSave}
         >
           {isSaving ? t("providersSaving") : t("providersSave")}
         </button>
       </div>
-      <span className="settings-hint">{t("providersOllamaUrlHint")}</span>
+      <span className="text-sm text-[var(--text-muted)]">
+        {t("providersOllamaUrlHint")}
+      </span>
     </div>
   );
 }
@@ -70,15 +69,7 @@ function OllamaUseFullSystemPrompt() {
   const enabled = settings?.ollamaUseFullSystemPrompt ?? false;
 
   return (
-    <label
-      style={{
-        display: "flex",
-        gap: "var(--space-2)",
-        alignItems: "center",
-        marginTop: "var(--space-2)",
-        cursor: "pointer",
-      }}
-    >
+    <label className="flex items-center gap-[var(--space-2)] mt-[var(--space-2)] cursor-pointer">
       <input
         type="checkbox"
         checked={enabled}
@@ -87,7 +78,7 @@ function OllamaUseFullSystemPrompt() {
         }
       />
       <span>{t("providersUseFullPrompt")}</span>
-      <span className="settings-hint" style={{ marginLeft: "auto" }}>
+      <span className="text-sm text-[var(--text-muted)] ml-auto">
         {t("providersUseFullPromptHint")}
       </span>
     </label>
@@ -122,9 +113,9 @@ function OllamaSystemPromptInput() {
   }, [prompt, updateSetting]);
 
   return (
-    <div style={{ marginTop: "var(--space-2)", width: "100%" }}>
+    <div className="mt-[var(--space-2)] w-full">
       <textarea
-        className="settings-textarea"
+        className="w-full px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)] resize-y"
         value={prompt}
         onChange={(e) => {
           setPrompt(e.target.value);
@@ -133,18 +124,13 @@ function OllamaSystemPromptInput() {
         placeholder={DEFAULT_OLLAMA_SYSTEM_PROMPT}
         rows={4}
       />
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginTop: "var(--space-2)",
-        }}
-      >
-        <span className="settings-hint">{t("providersOllamaPromptHint")}</span>
+      <div className="flex items-center justify-between mt-[var(--space-2)]">
+        <span className="text-sm text-[var(--text-muted)]">
+          {t("providersOllamaPromptHint")}
+        </span>
         <button
           type="button"
-          className="settings-button"
+          className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
           disabled={!hasChanges || isSaving}
           onClick={handleSave}
         >
@@ -187,32 +173,45 @@ export function ProvidersSettings() {
   });
 
   return (
-    <section className="settings-section">
-      <h2>{t("providersSectionTitle")}</h2>
-      <p className="settings-section-description">
+    <section className="flex flex-col gap-8 mb-12">
+      <h2
+        style={{ fontFamily: "var(--font-display)" }}
+        className="text-[2rem] text-[var(--text-primary)] mb-2"
+      >
+        {t("providersSectionTitle")}
+      </h2>
+      <p className="mb-[var(--space-3)] text-sm text-[var(--text-muted)]">
         {t("providersSectionDescription")}
       </p>
-      <div className="settings-group">
+      <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
         {providerDisplayList.map((provider) => (
-          <div key={provider.id} className="settings-item">
-            <div className="settings-item-info">
-              <div className="settings-item-header">
-                <strong>{provider.displayName}</strong>
+          <div
+            key={provider.id}
+            className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]"
+          >
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-[var(--space-2)] mb-[var(--space-1)]">
+                <strong className="mb-0">{provider.displayName}</strong>
                 {provider.installed ? (
-                  <span className="settings-status-badge settings-status-detected">
+                  <span className="px-[var(--space-1)] py-[var(--space-2)] rounded-[var(--radius-sm)] text-sm font-medium bg-[var(--bg-hover)] text-[var(--text-secondary)]">
                     {t("providersDetected")}
                   </span>
                 ) : (
-                  <span className="settings-status-badge settings-status-not-detected">
+                  <span className="px-[var(--space-1)] py-[var(--space-2)] rounded-[var(--radius-sm)] text-sm font-medium bg-[var(--bg-hover)] text-[var(--text-muted)]">
                     {t("providersNotDetected")}
                   </span>
                 )}
               </div>
               <p>{provider.metadata.description}</p>
               {provider.metadata.limitations.length > 0 && (
-                <ul className="settings-limitations">
+                <ul className="mt-[var(--space-2)] pl-[var(--space-4)] text-sm text-[var(--text-muted)]">
                   {provider.metadata.limitations.map((limitation) => (
-                    <li key={limitation}>{limitation}</li>
+                    <li
+                      key={limitation}
+                      className="mb-[var(--space-1)] last:mb-0"
+                    >
+                      {limitation}
+                    </li>
                   ))}
                 </ul>
               )}
@@ -223,7 +222,7 @@ export function ProvidersSettings() {
                 href={provider.metadata.website}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="settings-link"
+                className="text-[var(--link-color)] no-underline hover:underline"
               >
                 {t("providersWebsite")}
               </a>

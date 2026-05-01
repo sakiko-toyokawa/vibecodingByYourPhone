@@ -9,7 +9,9 @@ import { GlobalSessionsPage } from "./pages/GlobalSessionsPage";
 import { InboxPage } from "./pages/InboxPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NewSessionPage } from "./pages/NewSessionPage";
+import { OlderSessionsPage } from "./pages/OlderSessionsPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
+import { RecentSessionsPage } from "./pages/RecentSessionsPage";
 import { SessionPage } from "./pages/SessionPage";
 import { SettingsLayout } from "./pages/settings";
 
@@ -26,6 +28,8 @@ export function AppRoutes() {
       <Route element={<NavigationLayout />}>
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/sessions" element={<GlobalSessionsPage />} />
+        <Route path="/recent" element={<RecentSessionsPage />} />
+        <Route path="/older" element={<OlderSessionsPage />} />
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/settings" element={<SettingsLayout />} />

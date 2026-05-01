@@ -99,13 +99,15 @@ export const ProcessingIndicator = memo(function ProcessingIndicator({
   }
 
   return (
-    <div className="processing-indicator">
-      <div className="processing-dot-container">
+    <div className="relative pt-0.5 pl-6 my-1">
+      <div className="absolute left-3 top-0 w-2 h-2">
         <ThinkingIndicator />
       </div>
-      <span className="processing-text">
+      <span className="[font-size:var(--font-size-sm)] text-[var(--text-muted)] italic">
         {displayedText}
-        <span className="processing-cursor">|</span>
+        <span className="animate-[blink_0.7s_step-start_infinite] ml-px">
+          |
+        </span>
       </span>
     </div>
   );

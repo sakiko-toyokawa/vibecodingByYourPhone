@@ -29,11 +29,11 @@ function OpenedFilesMetadata({ files }: { files: string[] }) {
   if (files.length === 0) return null;
 
   return (
-    <div className="user-prompt-metadata">
+    <div className="mt-1 mb-3 flex flex-wrap gap-2 pl-2 text-[10px] text-[var(--text-dimmed)]">
       {files.map((filePath) => (
         <span
           key={filePath}
-          className="opened-file"
+          className="cursor-default"
           title={`file was opened in editor: ${filePath}`}
         >
           {getFilename(filePath)}
@@ -231,7 +231,7 @@ function UploadedFileItem({ file }: { file: UploadedFileInfo }) {
       <>
         <button
           type="button"
-          className="uploaded-file uploaded-file-clickable"
+          className="cursor-pointer bg-transparent p-0 font-inherit text-[var(--link-color)] hover:underline"
           title={`${file.mimeType}, ${file.size}`}
           onClick={() => setShowModal(true)}
         >
@@ -239,14 +239,24 @@ function UploadedFileItem({ file }: { file: UploadedFileInfo }) {
         </button>
         {showModal && (
           <Modal title={file.originalName} onClose={() => setShowModal(false)}>
-            <div className="uploaded-image-modal">
+            <div className="flex items-center justify-center p-2">
               {apiPath && loading && (
-                <div className="image-loading">Loading...</div>
+                <div className="text-sm text-[var(--text-dimmed)]">
+                  Loading...
+                </div>
               )}
               {apiPath && error && (
-                <div className="image-error">Failed to load image</div>
+                <div className="text-sm text-[var(--error-color)]">
+                  Failed to load image
+                </div>
               )}
-              {imageUrl && <img src={imageUrl} alt={file.originalName} />}
+              {imageUrl && (
+                <img
+                  src={imageUrl}
+                  alt={file.originalName}
+                  className="max-h-[70vh] max-w-full rounded-md object-contain"
+                />
+              )}
             </div>
           </Modal>
         )}
@@ -255,7 +265,10 @@ function UploadedFileItem({ file }: { file: UploadedFileInfo }) {
   }
 
   return (
-    <span className="uploaded-file" title={`${file.mimeType}, ${file.size}`}>
+    <span
+      className="cursor-default text-[var(--text-secondary)]"
+      title={`${file.mimeType}, ${file.size}`}
+    >
       📎 {file.originalName}
     </span>
   );
@@ -268,7 +281,7 @@ function UploadedFilesMetadata({ files }: { files: UploadedFileInfo[] }) {
   if (files.length === 0) return null;
 
   return (
-    <div className="user-prompt-metadata">
+    <div className="mt-1 mb-3 flex flex-wrap gap-2 pl-2 text-[10px] text-[var(--text-dimmed)]">
       {files.map((file) => (
         <UploadedFileItem key={file.path} file={file} />
       ))}
@@ -288,12 +301,12 @@ function CollapsibleText({ text }: { text: string }) {
 
   if (!needsTruncation || isExpanded) {
     return (
-      <div className="text-block">
+      <div className="whitespace-pre-wrap break-words">
         {text}
         {isExpanded && needsTruncation && (
           <button
             type="button"
-            className="show-more-btn"
+            className="ml-auto mt-1 block cursor-pointer rounded border border-[var(--border-color)] bg-transparent px-2 py-0.5 text-xs text-[var(--text-dimmed)] transition-colors duration-150 hover:border-[var(--text-dimmed)] hover:text-[var(--text-primary)]"
             onClick={() => setIsExpanded(false)}
           >
             Show less
@@ -312,14 +325,14 @@ function CollapsibleText({ text }: { text: string }) {
   }
 
   return (
-    <div className="text-block collapsible-text">
-      <div className="truncated-content">
+    <div className="relative">
+      <div className="relative whitespace-pre-wrap break-words">
         {truncatedText}
-        <div className="fade-overlay" />
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[2.5em] bg-gradient-to-b from-transparent to-[var(--bg-user-message)]" />
       </div>
       <button
         type="button"
-        className="show-more-btn"
+        className="ml-auto mt-1 block cursor-pointer rounded border border-[var(--border-color)] bg-transparent px-2 py-0.5 text-xs text-[var(--text-dimmed)] transition-colors duration-150 hover:border-[var(--text-dimmed)] hover:text-[var(--text-primary)]"
         onClick={() => setIsExpanded(true)}
       >
         Show more
@@ -346,9 +359,9 @@ export const UserPromptBlock = memo(function UserPromptBlock({
     }
 
     return (
-      <div className="user-prompt-container">
-        <div className="message message-user-prompt">
-          <div className="message-content">
+      <div className="mb-4">
+        <div className="w-fit max-w-[80%] rounded-md bg-[var(--bg-user-message)] px-2 py-1 text-[13px]">
+          <div className="whitespace-pre-wrap break-words">
             <CollapsibleText text={text} />
             <UploadedFilesMetadata files={uploadedFiles} />
           </div>
@@ -381,18 +394,20 @@ export const UserPromptBlock = memo(function UserPromptBlock({
         <OpenedFilesMetadata files={openedFiles} />
       </>
     ) : (
-      <div className="message message-user-prompt">
-        <div className="message-content">
-          <div className="text-block">[Complex content]</div>
+      <div className="w-fit max-w-[80%] rounded-md bg-[var(--bg-user-message)] px-2 py-1 text-[13px]">
+        <div className="whitespace-pre-wrap break-words">
+          <div className="whitespace-pre-wrap break-words">
+            [Complex content]
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="user-prompt-container">
-      <div className="message message-user-prompt">
-        <div className="message-content">
+    <div className="mb-4">
+      <div className="w-fit max-w-[80%] rounded-md bg-[var(--bg-user-message)] px-2 py-1 text-[13px]">
+        <div className="whitespace-pre-wrap break-words">
           <CollapsibleText text={text} />
           <UploadedFilesMetadata files={allUploadedFiles} />
         </div>

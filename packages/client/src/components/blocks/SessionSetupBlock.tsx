@@ -30,18 +30,18 @@ export const SessionSetupBlock = memo(function SessionSetupBlock({
   const promptKeyCounts = new Map<string, number>();
 
   return (
-    <details className="session-setup-block collapsible">
-      <summary className="collapsible__summary">
-        <span className="collapsible__icon">▸</span>
+    <details className="mb-3">
+      <summary className="inline-flex cursor-pointer items-center gap-1 rounded-sm border border-[var(--border-color)] bg-[var(--bg-code)] px-2 py-1 text-xs">
+        <span>▸</span>
         <span>{title}</span>
       </summary>
-      <div className="collapsible__content">
+      <div className="mt-2">
         {prompts.map((prompt) => {
           const baseKey = getPromptKey(prompt);
           const count = (promptKeyCounts.get(baseKey) ?? 0) + 1;
           promptKeyCounts.set(baseKey, count);
           return (
-            <div className="session-setup-entry" key={`${baseKey}:${count}`}>
+            <div key={`${baseKey}:${count}`}>
               <UserPromptBlock content={prompt} />
             </div>
           );

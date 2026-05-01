@@ -10,8 +10,10 @@ import type { ToolRenderer, WebSearchInput, WebSearchResult } from "./types";
  */
 function WebSearchToolUse({ input }: { input: WebSearchInput }) {
   return (
-    <div className="websearch-tool-use">
-      <span className="websearch-query">{input.query}</span>
+    <div className="flex items-center gap-2">
+      <span className="[font-family:var(--font-mono)] text-lg text-[var(--link-color)]">
+        {input.query}
+      </span>
     </div>
   );
 }
@@ -50,7 +52,7 @@ function WebSearchToolResult({
   if (isError) {
     const errorResult = result as unknown as { content?: unknown } | undefined;
     return (
-      <div className="websearch-error">
+      <div className="rounded bg-[var(--bg-error,rgba(207,34,46,0.1))] p-2 text-[var(--error-color)]">
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="WebSearch" errors={validationErrors} />
         )}
@@ -62,7 +64,9 @@ function WebSearchToolResult({
   }
 
   if (!result) {
-    return <div className="websearch-empty">No results</div>;
+    return (
+      <div className="text-lg italic text-[var(--text-muted)]">No results</div>
+    );
   }
 
   // Flatten results from potentially nested structure
@@ -70,34 +74,45 @@ function WebSearchToolResult({
     result.results?.flatMap((r) => r.content || []).filter(Boolean) || [];
 
   return (
-    <div className="websearch-result">
-      <div className="websearch-header">
-        <span className="websearch-query-display">"{result.query}"</span>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-3">
+        <span className="italic text-[var(--text-secondary,var(--text-muted))]">
+          "{result.query}"
+        </span>
         {result.durationSeconds !== undefined && (
-          <span className="badge">{result.durationSeconds.toFixed(2)}s</span>
+          <span className="inline-block rounded bg-[var(--bg-secondary)] px-2 py-0.5 text-sm font-medium text-[var(--text-muted)]">
+            {result.durationSeconds.toFixed(2)}s
+          </span>
         )}
         {showValidationWarning && validationErrors && (
           <SchemaWarning toolName="WebSearch" errors={validationErrors} />
         )}
       </div>
       {allResults.length > 0 ? (
-        <ul className="websearch-links">
+        <ul className="m-0 flex list-none flex-col p-0">
           {allResults.map((item, i) => (
-            <li key={`${item.url}-${i}`} className="websearch-link-item">
+            <li
+              key={`${item.url}-${i}`}
+              className="flex cursor-pointer flex-col gap-0.5 rounded bg-[var(--bg-code)] p-2 hover:bg-[var(--bg-tertiary)]"
+            >
               <a
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="websearch-link"
+                className="font-medium text-[var(--link-color)] no-underline hover:underline"
               >
                 {item.title}
               </a>
-              <span className="websearch-url">{item.url}</span>
+              <span className="break-all text-sm text-[var(--text-muted)]">
+                {item.url}
+              </span>
             </li>
           ))}
         </ul>
       ) : (
-        <div className="websearch-empty">No results found</div>
+        <div className="text-lg italic text-[var(--text-muted)]">
+          No results found
+        </div>
       )}
     </div>
   );

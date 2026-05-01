@@ -6,18 +6,29 @@ import {
 } from "../lib/activityBus";
 import { UI_KEYS } from "../lib/storageKeys";
 
+function hasTauriInternals(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    (
+      window as Window & {
+        __TAURI_INTERNALS__?: unknown;
+      }
+    ).__TAURI_INTERNALS__ !== undefined
+  );
+}
+
 /**
  * Send a debug log line to Rust so it appears in logcat (release build
  * WebView console.log is invisible).
  */
 function logToRust(msg: string): void {
-  try {
-    void import("@tauri-apps/api/core").then(({ invoke }) => {
-      void invoke("notify_debug_log", { msg });
+  if (!hasTauriInternals()) return;
+
+  void import("@tauri-apps/api/core")
+    .then(({ invoke }) => invoke("notify_debug_log", { msg }))
+    .catch(() => {
+      // Ignore if Tauri bridge is unavailable in the current runtime.
     });
-  } catch {
-    // ignore — if Tauri is not available, nothing to log to
-  }
 }
 
 /**
@@ -30,8 +41,7 @@ function isMobileTauriApp(): boolean {
     __TAURI_INTERNALS__?: unknown;
     __DESKTOP_TOKEN__?: string;
   };
-  const result =
-    w.__TAURI_INTERNALS__ !== undefined && w.__DESKTOP_TOKEN__ === undefined;
+  const result = hasTauriInternals() && w.__DESKTOP_TOKEN__ === undefined;
   logToRust(`isMobileTauriApp: ${result}`);
   return result;
 }
@@ -61,7 +71,9 @@ async function ensureNotificationChannel(): Promise<void> {
   try {
     // Use type assertion because dynamic import type inference is incomplete
     // for this plugin, but these APIs exist at runtime.
-    const mod = (await import("@tauri-apps/plugin-notification")) as unknown as {
+    const mod = (await import(
+      "@tauri-apps/plugin-notification"
+    )) as unknown as {
       createChannel: (channel: {
         id: string;
         name: string;
@@ -123,7 +135,11 @@ async function sendNativeNotification(
 
     logToRust("Calling sendNotification...");
     // Cast options to include channelId since dynamic import type inference is incomplete
-    sendNotification({ title, body, channelId: "default" } as Parameters<typeof sendNotification>[0]);
+    sendNotification({
+      title,
+      body,
+      channelId: "default",
+    } as Parameters<typeof sendNotification>[0]);
     logToRust("sendNotification returned");
   } catch (err) {
     logToRust(`sendNativeNotification ERROR: ${err}`);
@@ -200,7 +216,9 @@ export function useMobileNativeNotifications(): void {
   }, []);
 
   const handleSessionUpdated = useCallback((event: SessionUpdatedEvent) => {
-    logToRust(`session-updated: ${event.sessionId.slice(0, 8)} title=${event.title}`);
+    logToRust(
+      `session-updated: ${event.sessionId.slice(0, 8)} title=${event.title}`,
+    );
     if (event.title !== undefined && event.title !== null) {
       sessionTitles.current.set(event.sessionId, event.title);
     }
@@ -229,22 +247,23 @@ export function useMobileNativeNotifications(): void {
     logToRust(`activityBus.connected = ${activityBus.connected}`);
 
     // Expose a manual test function for debugging
-    (window as Window & { __testMobileNotify?: () => void }).__testMobileNotify =
-      async () => {
-        logToRust("Manual test triggered (JS API)");
-        await sendNativeNotification(
-          "JS 测试通知",
-          "如果你看到这个，说明 JS → Bridge → Rust → Android 全链路工作正常",
-        );
-        logToRust("Calling Rust test_notification command...");
-        try {
-          const { invoke } = await import("@tauri-apps/api/core");
-          await invoke("test_notification");
-          logToRust("Rust command invoked");
-        } catch (err) {
-          logToRust(`Rust invoke failed: ${err}`);
-        }
-      };
+    (
+      window as Window & { __testMobileNotify?: () => void }
+    ).__testMobileNotify = async () => {
+      logToRust("Manual test triggered (JS API)");
+      await sendNativeNotification(
+        "JS 测试通知",
+        "如果你看到这个，说明 JS → Bridge → Rust → Android 全链路工作正常",
+      );
+      logToRust("Calling Rust test_notification command...");
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("test_notification");
+        logToRust("Rust command invoked");
+      } catch (err) {
+        logToRust(`Rust invoke failed: ${err}`);
+      }
+    };
 
     return () => {
       logToRust("Cleanup: unsubscribing");

@@ -42,43 +42,25 @@ export function ReadyPage({
   };
 
   return (
-    <div style={{ textAlign: "center", maxWidth: 400 }}>
-      <h2 style={{ fontSize: 28, fontWeight: 600, marginBottom: 12 }}>
+    <div className="max-w-[400px] text-center">
+      <h2 className="mb-3 text-[28px] font-semibold">
         You're all set!
       </h2>
-      <p
-        style={{
-          color: "var(--text-secondary)",
-          fontSize: 15,
-          lineHeight: 1.6,
-          marginBottom: 32,
-        }}
-      >
+      <p className="mb-8 text-[15px] leading-relaxed text-[var(--text-secondary)]">
         Yep Anywhere is ready to go. Click below to start the server and open
         your dashboard.
       </p>
 
       {error && (
-        <div
-          style={{
-            padding: 12,
-            background: "rgba(239, 68, 68, 0.1)",
-            border: "1px solid var(--error)",
-            borderRadius: 8,
-            fontSize: 13,
-            color: "var(--error)",
-            marginBottom: 16,
-          }}
-        >
+        <div className="mb-4 rounded-lg border border-[var(--error)] bg-[rgba(239,68,68,0.1)] p-3 text-[13px] text-[var(--error)]">
           {error}
         </div>
       )}
 
       <button
-        className="btn-primary"
+        className="btn-primary px-8 py-3 text-base"
         onClick={launch}
         disabled={launching}
-        style={{ fontSize: 16, padding: "12px 32px" }}
       >
         {launching ? "Starting..." : "Launch Yep Anywhere"}
       </button>

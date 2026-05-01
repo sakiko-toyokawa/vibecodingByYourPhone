@@ -29,11 +29,11 @@ function getTypeIcon(type: FileChangeEvent["changeType"]): string {
 function getTypeColor(type: FileChangeEvent["changeType"]): string {
   switch (type) {
     case "create":
-      return "#4f4";
+      return "var(--success-color)";
     case "modify":
-      return "#ff4";
+      return "var(--warning-color)";
     case "delete":
-      return "#f44";
+      return "var(--error-color)";
   }
 }
 
@@ -151,38 +151,32 @@ export function ActivityPage() {
 
   return (
     <div
-      className="page"
-      style={{
-        maxWidth: "1000px",
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}
+      className="mx-auto flex h-[100dvh] flex-col overflow-hidden px-6 py-8 md:px-10 md:py-10"
+      style={{ maxWidth: "1200px" }}
     >
-      <nav className="breadcrumb">
-        <Link to="/projects">{t("pageTitleProjects")}</Link> /{" "}
+      <nav className="mb-4 text-sm text-[var(--text-muted)]">
+        <Link to="/projects">{t("pageTitleProjects")}</Link>
+        {" / "}
         {t("activityBreadcrumb" as never)}
       </nav>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <h1>{t("activityTitle" as never)}</h1>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+      <div className="flex items-center justify-between">
+        <h1
+          className="text-[2rem] text-[var(--text-primary)]"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          {t("activityTitle" as never)}
+        </h1>
+        <div className="flex items-center gap-2">
           <span
+            className="h-2.5 w-2.5 rounded-full"
             style={{
-              width: 10,
-              height: 10,
-              borderRadius: "50%",
-              background: connected ? "#4f4" : "#f44",
+              background: connected
+                ? "var(--success-color)"
+                : "var(--error-color)",
             }}
           />
-          <span style={{ fontSize: "0.875rem", color: "#888" }}>
+          <span className="text-sm text-[var(--text-muted)]">
             {connected
               ? t("activityConnected" as never)
               : t("activityDisconnected" as never)}
@@ -191,35 +185,21 @@ export function ActivityPage() {
       </div>
 
       {/* Controls */}
-      <div
-        style={{
-          display: "flex",
-          gap: "1rem",
-          marginBottom: "1rem",
-          flexWrap: "wrap",
-        }}
-      >
+      <div className="my-4 flex flex-wrap gap-3">
         <input
           type="text"
           value={pathFilter}
           onChange={(e) => setPathFilter(e.target.value)}
           placeholder={t("activityPathPlaceholder" as never)}
-          style={{
-            flex: 1,
-            minWidth: "200px",
-            padding: "0.75rem",
-            background: "#2a2a2a",
-            border: "1px solid #444",
-            borderRadius: "8px",
-            color: "inherit",
-            fontSize: "1rem",
-          }}
+          className="min-w-[200px] flex-1 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
         />
         <button
           type="button"
           onClick={togglePause}
+          className="cursor-pointer rounded-md border border-[var(--border-color)] bg-transparent px-3 py-2 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
           style={{
-            background: paused ? "#a44" : "#444",
+            borderColor: paused ? "var(--error-color)" : "var(--border-color)",
+            color: paused ? "var(--error-color)" : "var(--text-primary)",
           }}
         >
           {paused ? t("activityResume" as never) : t("activityPause" as never)}
@@ -227,34 +207,24 @@ export function ActivityPage() {
         <button
           type="button"
           onClick={clearEvents}
-          style={{ background: "#444" }}
+          className="cursor-pointer rounded-md border border-[var(--border-color)] bg-transparent px-3 py-2 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
         >
           {t("activityClear" as never)}
         </button>
       </div>
 
       {/* Type filters */}
-      <div
-        style={{
-          display: "flex",
-          gap: "0.5rem",
-          marginBottom: "1rem",
-          flexWrap: "wrap",
-        }}
-      >
+      <div className="mb-4 flex flex-wrap gap-2">
         {FILE_TYPE_OPTIONS.map((type) => (
           <button
             type="button"
             key={type}
             onClick={() => toggleTypeFilter(type)}
-            style={{
-              padding: "0.5rem 0.75rem",
-              fontSize: "0.875rem",
-              background: typeFilters.has(type) ? "#4a4aff" : "#333",
-              border: typeFilters.has(type)
-                ? "1px solid #5a5aff"
-                : "1px solid #444",
-            }}
+            className={`cursor-pointer rounded-md px-3 py-1.5 text-sm transition-colors ${
+              typeFilters.has(type)
+                ? "border border-[var(--accent-rust)] bg-[var(--accent-rust)] text-white"
+                : "border border-[var(--border-color)] bg-transparent text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+            }`}
           >
             {getFileTypeLabel(type, t)}
           </button>
@@ -263,11 +233,7 @@ export function ActivityPage() {
           <button
             type="button"
             onClick={() => setTypeFilters(new Set())}
-            style={{
-              padding: "0.5rem 0.75rem",
-              fontSize: "0.875rem",
-              background: "#444",
-            }}
+            className="cursor-pointer rounded-md border border-[var(--border-color)] bg-transparent px-3 py-1.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
           >
             {t("activityClearFilters" as never)}
           </button>
@@ -275,15 +241,7 @@ export function ActivityPage() {
       </div>
 
       {/* Stats */}
-      <div
-        style={{
-          display: "flex",
-          gap: "2rem",
-          marginBottom: "1rem",
-          fontSize: "0.875rem",
-          color: "#888",
-        }}
-      >
+      <div className="mb-4 flex gap-6 text-sm text-[var(--text-muted)]">
         <span>{t("activityTotal" as never, { count: events.length })}</span>
         <span>
           {t("activityShowing" as never, { count: displayedEvents.length })}
@@ -294,86 +252,44 @@ export function ActivityPage() {
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        style={{
-          flex: 1,
-          overflow: "auto",
-          minHeight: 0,
-          background: "#1a1a1a",
-          borderRadius: "8px",
-          padding: "1rem",
-        }}
+        className="min-h-0 flex-1 overflow-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-4"
       >
         {Object.entries(eventsByDate).length === 0 ? (
-          <div style={{ textAlign: "center", padding: "3rem", color: "#888" }}>
+          <div className="p-12 text-center text-[var(--text-muted)]">
             {events.length === 0
               ? t("activityWaiting" as never)
               : t("activityNoMatches" as never)}
           </div>
         ) : (
           Object.entries(eventsByDate).map(([date, dateEvents]) => (
-            <div key={date} style={{ marginBottom: "1.5rem" }}>
-              <h3
-                style={{
-                  color: "#888",
-                  fontSize: "0.875rem",
-                  marginBottom: "0.5rem",
-                }}
-              >
-                {date}
-              </h3>
-              <div
-                style={{
-                  background: "#2a2a2a",
-                  borderRadius: "8px",
-                  overflow: "hidden",
-                }}
-              >
+            <div key={date} className="mb-6">
+              <h3 className="mb-2 text-sm text-[var(--text-muted)]">{date}</h3>
+              <div className="overflow-hidden rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
                 {dateEvents.map((event, i) => (
                   <div
                     key={`${event.timestamp}-${event.path}-${i}`}
+                    className="grid items-center gap-3 border-b border-[var(--border-subtle)] px-4 py-3 font-mono text-sm last:border-b-0"
                     style={{
-                      padding: "0.75rem 1rem",
-                      borderBottom:
-                        i < dateEvents.length - 1 ? "1px solid #333" : "none",
-                      display: "grid",
                       gridTemplateColumns: "80px 24px 100px 1fr",
-                      gap: "0.75rem",
-                      alignItems: "center",
-                      fontFamily: "monospace",
-                      fontSize: "0.875rem",
                     }}
                   >
-                    <span style={{ color: "#666" }}>
+                    <span className="text-[var(--text-muted)]">
                       {formatTime(event.timestamp)}
                     </span>
                     <span
+                      className="text-center font-bold"
                       style={{
                         color: getTypeColor(event.changeType),
-                        fontWeight: "bold",
-                        textAlign: "center",
                       }}
                       title={getTypeLabel(event.changeType, t)}
                     >
                       {getTypeIcon(event.changeType)}
                     </span>
-                    <span
-                      style={{
-                        color: "#888",
-                        fontSize: "0.75rem",
-                        background: "#333",
-                        padding: "0.25rem 0.5rem",
-                        borderRadius: "4px",
-                        textAlign: "center",
-                      }}
-                    >
+                    <span className="rounded bg-[var(--bg-hover)] px-2 py-0.5 text-center text-xs text-[var(--text-muted)]">
                       {getFileTypeLabel(event.fileType, t)}
                     </span>
                     <span
-                      style={{
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
+                      className="overflow-hidden text-ellipsis whitespace-nowrap text-[var(--text-primary)]"
                       title={event.path}
                     >
                       {event.relativePath}

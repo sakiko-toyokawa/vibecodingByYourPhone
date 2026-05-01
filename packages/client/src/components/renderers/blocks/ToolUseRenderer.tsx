@@ -19,12 +19,14 @@ function ToolUseRendererComponent({
   context: RenderContext;
 }) {
   return (
-    <div className="tool-block tool-use">
-      <div className="tool-header">
-        <span className="tool-icon">{">"}</span>
-        <span className="tool-name">{block.name}</span>
+    <div className="my-2 rounded-lg border border-[var(--border-color)] overflow-hidden bg-[var(--bg-surface)]">
+      <div className="flex items-center gap-2 px-3 py-2 bg-[var(--bg-secondary)] border-b border-[var(--border-subtle)] text-xs text-[var(--text-muted)]">
+        <span className="font-mono text-[var(--text-dimmed)]">{">"}</span>
+        <span className="font-medium uppercase tracking-wide">
+          {block.name}
+        </span>
       </div>
-      <div className="tool-content">
+      <div className="p-3">
         {toolRegistry.renderToolUse(block.name, block.input, context)}
       </div>
     </div>

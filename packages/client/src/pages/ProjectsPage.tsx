@@ -81,10 +81,15 @@ export function ProjectsPage() {
     }
   };
 
-  if (loading) return <div className="loading">{t("projectsLoading")}</div>;
+  if (loading)
+    return (
+      <div className="text-[var(--text-muted)] italic">
+        {t("projectsLoading")}
+      </div>
+    );
   if (error) {
     return (
-      <div className="error">
+      <div className="text-[var(--error-color)] p-2 bg-[var(--bg-error,rgba(207,34,46,0.1))] rounded">
         {t("projectsErrorPrefix")} {error.message}
       </div>
     );
@@ -94,13 +99,17 @@ export function ProjectsPage() {
 
   return (
     <div
-      className={isWideScreen ? "main-content-wrapper" : "main-content-mobile"}
+      className={
+        isWideScreen
+          ? "flex justify-center min-w-0 h-[100dvh] overflow-hidden"
+          : "flex-1 flex flex-col min-h-0"
+      }
     >
       <div
         className={
           isWideScreen
-            ? "main-content-constrained"
-            : "main-content-mobile-inner"
+            ? "w-full flex flex-col h-[100dvh]"
+            : "flex-1 flex flex-col min-h-0"
         }
       >
         <PageHeader
@@ -111,45 +120,37 @@ export function ProjectsPage() {
           isSidebarCollapsed={isSidebarCollapsed}
         />
 
-        <main className="page-scroll-container">
-          <div className="page-content-inner">
+        <main className="flex-1 overflow-y-auto min-h-0">
+          <div className="px-6 py-8 md:px-10 md:py-10 max-w-[1200px] mx-auto">
             {/* Toolbar with Add Project button */}
-            <div className="inbox-toolbar">
+            <div className="flex justify-end gap-2 mb-6">
               {!showAddForm ? (
                 <button
                   type="button"
-                  className="inbox-refresh-button"
+                  className="flex items-center gap-2 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[var(--radius-md)] text-[var(--text-muted)] text-sm cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] hover:border-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={() => setShowAddForm(true)}
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
+                  <span aria-hidden="true">+</span>
                   {t("projectsAdd")}
                 </button>
               ) : (
-                <form onSubmit={handleAddProject} className="add-project-form">
+                <form
+                  onSubmit={handleAddProject}
+                  className="flex-1 flex flex-col gap-2"
+                >
                   <input
                     type="text"
                     value={newProjectPath}
                     onChange={(e) => setNewProjectPath(e.target.value)}
                     placeholder={t("projectsAddPlaceholder")}
                     disabled={adding}
+                    className="px-3 py-2 border border-[var(--border-input)] rounded-[var(--radius-md)] bg-[var(--bg-input)] text-[var(--text-primary)] text-base focus:outline-none focus:border-[var(--focus-border)]"
                   />
-                  <div className="add-project-actions">
+                  <div className="flex gap-2">
                     <button
                       type="submit"
                       disabled={adding || !newProjectPath.trim()}
+                      className="px-3 py-2 border border-[var(--border-color)] rounded-[var(--radius-md)] bg-[var(--bg-secondary)] text-[var(--text-primary)] text-sm cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {adding ? t("projectsAdding") : t("projectsAddConfirm")}
                     </button>
@@ -161,37 +162,41 @@ export function ProjectsPage() {
                         setAddError(null);
                       }}
                       disabled={adding}
+                      className="px-3 py-2 border border-[var(--border-color)] rounded-[var(--radius-md)] bg-[var(--bg-secondary)] text-[var(--text-primary)] text-sm cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {t("projectsCancel")}
                     </button>
                   </div>
                   {addError && (
-                    <div className="add-project-error">{addError}</div>
+                    <div className="text-[var(--error-color)] text-sm p-2 bg-[var(--bg-error,rgba(207,34,46,0.1))] rounded">
+                      {addError}
+                    </div>
                   )}
                 </form>
               )}
             </div>
 
             {isEmpty ? (
-              <div className="inbox-empty">
-                <svg
-                  width="48"
-                  height="48"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              <div className="flex flex-col items-center justify-center px-4 py-24 text-center text-[var(--text-muted)]">
+                <span
+                  className="text-5xl mb-6"
                   aria-hidden="true"
+                  style={{ color: "var(--text-muted)" }}
                 >
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                </svg>
-                <h3>{t("projectsEmptyTitle")}</h3>
-                <p>{t("projectsEmptyDescription")}</p>
+                  &#128193;
+                </span>
+                <h3
+                  className="text-2xl text-[var(--text-primary)] mb-3"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  {t("projectsEmptyTitle")}
+                </h3>
+                <p className="m-0 text-base leading-relaxed">
+                  {t("projectsEmptyDescription")}
+                </p>
               </div>
             ) : (
-              <ul className="project-list-cards">
+              <ul className="list-none m-0 p-0 flex flex-col gap-4">
                 {sortedProjects.map((project) => (
                   <ProjectCard
                     key={project.id}

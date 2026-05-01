@@ -150,9 +150,13 @@ function InfoRow({
 }) {
   if (value === undefined || value === null) return null;
   return (
-    <div className="process-info-row">
-      <span className="process-info-label">{label}</span>
-      <span className={`process-info-value ${mono ? "mono" : ""}`}>
+    <div className="flex justify-between items-baseline gap-4 py-1 max-sm:flex-col max-sm:gap-0.5 max-sm:items-start">
+      <span className="[font-size:var(--font-size-sm)] text-[var(--text-secondary)] shrink-0">
+        {label}
+      </span>
+      <span
+        className={`[font-size:var(--font-size-sm)] text-[var(--text-primary)] text-right break-all max-sm:text-left ${mono ? "font-mono [font-size:var(--font-size-xs)]" : ""}`}
+      >
         {value}
       </span>
     </div>
@@ -167,8 +171,10 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="process-info-section">
-      <h3 className="process-info-section-title">{title}</h3>
+    <div className="flex flex-col gap-1">
+      <h3 className="[font-size:var(--font-size-sm)] font-semibold text-[var(--text-muted)] uppercase tracking-wider m-0 mb-1 pb-1 border-b border-[var(--border-subtle)]">
+        {title}
+      </h3>
       {children}
     </div>
   );
@@ -245,7 +251,7 @@ export function ProcessInfoModal({
 
   return (
     <Modal title={t("processInfoTitle")} onClose={onClose}>
-      <div className="process-info-content">
+      <div className="flex flex-col gap-4 p-2 max-w-[500px] max-sm:max-w-full">
         {/* Session Info - always available */}
         <Section title={t("processInfoSectionSession")}>
           <InfoRow
@@ -377,11 +383,15 @@ export function ProcessInfoModal({
           {status.owner === "self" ? (
             <>
               {loading && (
-                <div className="process-info-loading">
+                <div className="[font-size:var(--font-size-sm)] text-[var(--text-muted)] py-2">
                   {t("newSessionLoading")}
                 </div>
               )}
-              {error && <div className="process-info-error">{error}</div>}
+              {error && (
+                <div className="[font-size:var(--font-size-sm)] text-[var(--color-error)] py-2">
+                  {error}
+                </div>
+              )}
               {processInfo && (
                 <>
                   <InfoRow
@@ -424,17 +434,17 @@ export function ProcessInfoModal({
                 </>
               )}
               {!loading && !processInfo && !error && (
-                <div className="process-info-loading">
+                <div className="[font-size:var(--font-size-sm)] text-[var(--text-muted)] py-2">
                   {t("processInfoNoProcessData")}
                 </div>
               )}
             </>
           ) : status.owner === "external" ? (
-            <div className="process-info-muted">
+            <div className="[font-size:var(--font-size-sm)] text-[var(--text-muted)] py-2">
               {t("processInfoExternalProcess")}
             </div>
           ) : (
-            <div className="process-info-muted">
+            <div className="[font-size:var(--font-size-sm)] text-[var(--text-muted)] py-2">
               {t("processInfoNoActiveProcess")}
             </div>
           )}

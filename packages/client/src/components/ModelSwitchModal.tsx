@@ -54,16 +54,24 @@ export function ModelSwitchModal({
 
   return (
     <Modal title={t("modelSwitchTitle")} onClose={onClose}>
-      <div className="model-switch-content">
+      <div className="p-2 max-w-[400px]">
         {loading && (
-          <div className="model-switch-loading">{t("modelSwitchLoading")}</div>
+          <div className="[font-size:var(--font-size-sm)] text-[var(--text-muted)] p-4 text-center">
+            {t("modelSwitchLoading")}
+          </div>
         )}
-        {error && <div className="model-switch-error">{error}</div>}
+        {error && (
+          <div className="[font-size:var(--font-size-sm)] text-[var(--color-error)] p-4 text-center">
+            {error}
+          </div>
+        )}
         {!loading && !error && models.length === 0 && (
-          <div className="model-switch-loading">{t("modelSwitchEmpty")}</div>
+          <div className="[font-size:var(--font-size-sm)] text-[var(--text-muted)] p-4 text-center">
+            {t("modelSwitchEmpty")}
+          </div>
         )}
         {!loading && models.length > 0 && (
-          <div className="model-switch-list">
+          <div className="flex flex-col gap-0.5">
             {models.map((model) => {
               const isCurrent = currentModel
                 ? currentModel.includes(model.id) ||
@@ -73,18 +81,18 @@ export function ModelSwitchModal({
                 <button
                   key={model.id}
                   type="button"
-                  className={`model-switch-item ${isCurrent ? "current" : ""}`}
+                  className={`flex items-center gap-3 px-4 py-3 bg-transparent border-none rounded-md cursor-pointer text-left w-full text-[var(--text-primary)] [font-size:var(--font-size-sm)] hover:bg-[var(--bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed ${isCurrent ? "bg-[var(--bg-hover)]" : ""}`}
                   onClick={() => handleSelect(model.id)}
                   disabled={switching}
                 >
-                  <span className="model-switch-name">{model.name}</span>
+                  <span className="font-medium">{model.name}</span>
                   {model.description && (
-                    <span className="model-switch-description">
+                    <span className="text-[var(--text-secondary)] [font-size:var(--font-size-xs)] flex-1">
                       {model.description}
                     </span>
                   )}
                   {isCurrent && (
-                    <span className="model-switch-badge">
+                    <span className="[font-size:var(--font-size-xs)] text-[var(--accent-color)] font-semibold shrink-0">
                       {t("modelSwitchCurrent")}
                     </span>
                   )}

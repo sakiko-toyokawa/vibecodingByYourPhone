@@ -17,6 +17,14 @@ const MODE_LABELS: Record<PermissionMode, string> = {
   bypassPermissions: "Bypass permissions",
 };
 
+const MODE_COLORS: Record<PermissionMode | "hold", string> = {
+  default: "bg-[var(--timeline-dot-default)]",
+  acceptEdits: "bg-[var(--success-color)]",
+  plan: "bg-[var(--warning-color)]",
+  bypassPermissions: "bg-[var(--error-color)]",
+  hold: "bg-[var(--primary-color)]",
+};
+
 // Breakpoint for desktop behavior (should match CSS)
 const DESKTOP_BREAKPOINT = 769;
 
@@ -148,7 +156,7 @@ export function ModeSelector({
 
   // Display text: show "Hold" when held, otherwise show mode label
   const displayLabel = isHeld ? t("modeHold" as never) : MODE_LABELS[mode];
-  const displayDotClass = isHeld ? "mode-hold" : `mode-${mode}`;
+  const displayDotColor = isHeld ? MODE_COLORS.hold : MODE_COLORS[mode];
 
   // Shared options content used by both mobile sheet and desktop dropdown
   const optionsContent = (
@@ -157,68 +165,56 @@ export function ModeSelector({
       {onHoldChange && (
         <button
           type="button"
-          className={`mode-selector-option ${isHeld ? "selected" : ""}`}
+          className={`flex items-center gap-3 px-4 py-3 bg-transparent border-none cursor-pointer text-left w-full transition-colors duration-150 hover:bg-[var(--bg-hover)] ${isHeld ? "bg-[rgba(217,119,87,0.08)]" : ""}`}
           onClick={handleHoldToggle}
           aria-pressed={isHeld}
         >
-          <span className="mode-dot mode-hold" />
-          <span className="mode-selector-label">
+          <span
+            className={`w-2 h-2 rounded-full shrink-0 ${MODE_COLORS.hold}`}
+          />
+          <span className="flex-1 [font-size:var(--font-size-base)] text-[var(--text-primary)]">
             {isHeld ? t("modeResume" as never) : t("modeHold" as never)}
           </span>
-          <span className="mode-selector-description">
+          <span className="[font-size:var(--font-size-xs)] text-[var(--text-muted)] ml-auto mr-2">
             {isHeld
               ? t("modeContinueExecution" as never)
               : t("modePauseExecution" as never)}
           </span>
           {isHeld && (
-            <span className="mode-selector-check" aria-hidden="true">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
+            <span
+              className="flex items-center text-[var(--accent-rust)]"
+              aria-hidden="true"
+            >
+              &#x2713;
             </span>
           )}
         </button>
       )}
 
       {/* Divider between hold and permission modes */}
-      {onHoldChange && <div className="mode-selector-divider" />}
+      {onHoldChange && (
+        <div className="h-px bg-[var(--border-subtle)] my-2 mx-4" />
+      )}
 
       {/* Permission mode options */}
       {MODE_ORDER.map((m) => (
         <button
           key={m}
           type="button"
-          className={`mode-selector-option ${!isHeld && mode === m ? "selected" : ""}`}
+          className={`flex items-center gap-3 px-4 py-3 bg-transparent border-none cursor-pointer text-left w-full transition-colors duration-150 hover:bg-[var(--bg-hover)] ${!isHeld && mode === m ? "bg-[rgba(217,119,87,0.08)]" : ""}`}
           onClick={() => handleModeSelect(m)}
           aria-pressed={!isHeld && mode === m}
         >
-          <span className={`mode-dot mode-${m}`} />
-          <span className="mode-selector-label">{MODE_LABELS[m]}</span>
+          <span className={`w-2 h-2 rounded-full shrink-0 ${MODE_COLORS[m]}`} />
+          <span className="flex-1 [font-size:var(--font-size-base)] text-[var(--text-primary)]">
+            {MODE_LABELS[m]}
+          </span>
           {!isHeld && mode === m && (
-            <span className="mode-selector-check" aria-hidden="true">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
+            <span
+              className="flex items-center text-[var(--accent-rust)]"
+              aria-hidden="true"
+            >
+              &#x2713;
             </span>
           )}
         </button>
@@ -232,22 +228,22 @@ export function ModeSelector({
       ? createPortal(
           // biome-ignore lint/a11y/useKeyWithClickEvents: Escape key handled globally
           <div
-            className="mode-selector-overlay"
+            className="fixed inset-0 bg-black/50 z-[10001] flex items-end justify-center md:hidden"
             onClick={handleOverlayClick}
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div
               ref={sheetRef}
-              className="mode-selector-sheet"
+              className="bg-[var(--bg-surface)] rounded-t-[var(--radius-lg)] w-full max-w-[500px] max-h-[80vh] overflow-y-auto animate-[slideUp_0.2s_ease-out] shadow-[0_-2px_8px_rgba(0,0,0,0.08)] pb-[env(safe-area-inset-bottom,0)]"
               tabIndex={-1}
               aria-label={t("modeSelectLabel" as never)}
             >
-              <div className="mode-selector-header">
-                <span className="mode-selector-title">
+              <div className="flex items-center justify-center px-4 py-3 border-b border-[var(--border-subtle)]">
+                <span className="[font-size:var(--font-size-base)] font-semibold text-[var(--text-primary)]">
                   {t("modeSessionTitle" as never)}
                 </span>
               </div>
-              <div className="mode-selector-options">{optionsContent}</div>
+              <div className="flex flex-col py-2">{optionsContent}</div>
             </div>
           </div>,
           document.body,
@@ -259,27 +255,27 @@ export function ModeSelector({
     isOpen && isDesktop ? (
       <div
         ref={sheetRef}
-        className="mode-selector-dropdown"
+        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-lg)] min-w-[220px] shadow-[0_2px_6px_rgba(0,0,0,0.08)] z-[10001] animate-[dropdownFadeIn_0.15s_ease-out]"
         tabIndex={-1}
         aria-label={t("modeSelectLabel" as never)}
       >
-        <div className="mode-selector-options">{optionsContent}</div>
+        <div className="flex flex-col py-1">{optionsContent}</div>
       </div>
     ) : null;
 
   return (
-    <div className="mode-selector-container">
+    <div className="relative inline-block">
       <button
         ref={buttonRef}
         type="button"
-        className={`mode-button ${isHeld ? "mode-button-held" : ""}`}
+        className={`flex items-center gap-2 px-3 py-1 bg-transparent border border-[var(--border-color)] rounded-[var(--radius-md)] text-[var(--text-muted)] [font-size:var(--font-size-sm)] cursor-pointer hover:bg-[var(--bg-hover)] hover:border-[var(--border-input)] disabled:opacity-50 disabled:cursor-not-allowed ${isHeld ? "border-[var(--primary-color)]" : ""}`}
         onClick={handleButtonClick}
         disabled={disabled}
         title={t("modeClickToSelect" as never)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        <span className={`mode-dot ${displayDotClass}`} />
+        <span className={`w-2 h-2 rounded-full shrink-0 ${displayDotColor}`} />
         {displayLabel}
       </button>
       {desktopDropdown}

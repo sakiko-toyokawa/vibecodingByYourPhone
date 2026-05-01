@@ -38,9 +38,14 @@ export function AgentContextSettings() {
 
   if (isLoading) {
     return (
-      <section className="settings-section">
-        <h2>{t("agentContextTitle")}</h2>
-        <p className="settings-section-description">
+      <section className="flex flex-col gap-8 mb-12">
+        <h2
+          style={{ fontFamily: "var(--font-display)" }}
+          className="text-[2rem] text-[var(--text-primary)] mb-2"
+        >
+          {t("agentContextTitle")}
+        </h2>
+        <p className="mb-[var(--space-3)] text-sm text-[var(--text-muted)]">
           {t("agentContextLoading")}
         </p>
       </section>
@@ -50,23 +55,28 @@ export function AgentContextSettings() {
   const serverValue = settings?.globalInstructions ?? "";
 
   return (
-    <section className="settings-section">
-      <h2>{t("agentContextTitle")}</h2>
-      <p className="settings-section-description">
+    <section className="flex flex-col gap-8 mb-12">
+      <h2
+        style={{ fontFamily: "var(--font-display)" }}
+        className="text-[2rem] text-[var(--text-primary)] mb-2"
+      >
+        {t("agentContextTitle")}
+      </h2>
+      <p className="mb-[var(--space-3)] text-sm text-[var(--text-muted)]">
         {t("agentContextDescription")}
       </p>
 
-      <div className="settings-group">
+      <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
         <div
-          className="settings-item"
+          className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]"
           style={{ flexDirection: "column", alignItems: "stretch" }}
         >
-          <div className="settings-item-info">
+          <div className="flex flex-col gap-1">
             <strong>{t("agentContextGlobalInstructions")}</strong>
             <p>{t("agentContextGlobalInstructionsDescription")}</p>
           </div>
           <textarea
-            className="settings-textarea"
+            className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)] resize-y"
             value={instructions}
             onChange={(e) => {
               const value = e.target.value.slice(0, MAX_LENGTH);
@@ -85,7 +95,7 @@ export function AgentContextSettings() {
               marginTop: "var(--space-2)",
             }}
           >
-            <span className="settings-hint">
+            <span className="text-sm text-[var(--text-muted)]">
               {t("agentContextCharacters", {
                 current: instructions.length.toLocaleString(),
                 max: MAX_LENGTH.toLocaleString(),
@@ -93,7 +103,7 @@ export function AgentContextSettings() {
             </span>
             <button
               type="button"
-              className="settings-button"
+              className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
               disabled={!hasChanges || isSaving}
               onClick={handleSave}
             >
@@ -101,7 +111,9 @@ export function AgentContextSettings() {
             </button>
           </div>
           {(saveError || error) && (
-            <p className="settings-warning">{saveError || error}</p>
+            <p className="text-xs text-[var(--warning-color)] mt-1">
+              {saveError || error}
+            </p>
           )}
         </div>
       </div>

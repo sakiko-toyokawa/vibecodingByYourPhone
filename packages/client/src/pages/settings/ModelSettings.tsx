@@ -10,20 +10,25 @@ export function ModelSettings() {
   const { model, setModel, effortLevel, setEffortLevel } = useModelSettings();
 
   return (
-    <section className="settings-section">
-      <h2>{t("modelSettingsTitle")}</h2>
-      <div className="settings-group">
-        <div className="settings-item">
-          <div className="settings-item-info">
+    <section className="flex flex-col gap-8 mb-12">
+      <h2
+        style={{ fontFamily: "var(--font-display)" }}
+        className="text-[2rem] text-[var(--text-primary)] mb-2"
+      >
+        {t("modelSettingsTitle")}
+      </h2>
+      <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
+        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-1">
             <strong>{t("modelSettingsModelTitle")}</strong>
             <p>{t("modelSettingsModelDescription")}</p>
           </div>
-          <div className="font-size-selector">
+          <div className="flex gap-[2px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-[2px]">
             {MODEL_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 type="button"
-                className={`font-size-option ${model === opt.value ? "active" : ""}`}
+                className={`px-[var(--space-2)] py-[var(--space-1)] bg-transparent border-none rounded-[var(--radius-sm)] text-[var(--text-muted)] [font-size:var(--font-size-sm)] cursor-pointer transition-[background,color] duration-150 whitespace-nowrap hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] ${model === opt.value ? "bg-[var(--text-primary)] text-white" : ""}`}
                 onClick={() => setModel(opt.value)}
               >
                 {opt.label}
@@ -31,17 +36,17 @@ export function ModelSettings() {
             ))}
           </div>
         </div>
-        <div className="settings-item">
-          <div className="settings-item-info">
+        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-1">
             <strong>{t("modelSettingsEffortTitle")}</strong>
             <p>{t("modelSettingsEffortDescription")}</p>
           </div>
-          <div className="font-size-selector">
+          <div className="flex gap-[2px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-[2px]">
             {EFFORT_LEVEL_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 type="button"
-                className={`font-size-option ${effortLevel === opt.value ? "active" : ""}`}
+                className={`px-[var(--space-2)] py-[var(--space-1)] bg-transparent border-none rounded-[var(--radius-sm)] text-[var(--text-muted)] [font-size:var(--font-size-sm)] cursor-pointer transition-[background,color] duration-150 whitespace-nowrap hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] ${effortLevel === opt.value ? "bg-[var(--text-primary)] text-white" : ""}`}
                 onClick={() => setEffortLevel(opt.value)}
                 title={opt.description}
               >

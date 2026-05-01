@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { Outlet, useOutletContext, useParams } from "react-router-dom";
 import { Sidebar } from "../components/Sidebar";
 import { useSidebarPreference } from "../hooks/useSidebarPreference";
-import { useSidebarWidth } from "../hooks/useSidebarWidth";
+import {
+  SIDEBAR_COLLAPSED_WIDTH,
+  useSidebarWidth,
+} from "../hooks/useSidebarWidth";
 import { useViewportWidth } from "../hooks/useViewportWidth";
 
 export interface NavigationLayoutContext {
@@ -66,21 +69,25 @@ export function NavigationLayout() {
     toggleSidebar: handleToggleExpanded,
   };
 
-  // CSS variable for sidebar width
-  const containerStyle = isWideScreen
-    ? ({ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties)
-    : undefined;
-
   return (
     <div
-      className={`session-page ${isWideScreen ? "desktop-layout" : ""} ${isResizing ? "resizing" : ""}`}
-      style={containerStyle}
+      className={`flex min-h-[100dvh] bg-[var(--bg-surface)] text-[var(--text-primary)] ${
+        isWideScreen ? "overflow-hidden" : "flex-col"
+      } ${isResizing ? "cursor-col-resize select-none" : ""}`}
     >
       {/* Desktop sidebar - always visible on wide screens */}
       {isWideScreen && (
         <aside
-          className={`sidebar-desktop ${effectivelyCollapsed ? "sidebar-collapsed" : ""} ${isResizing ? "resizing" : ""}`}
-          style={{ width: effectivelyCollapsed ? undefined : sidebarWidth }}
+          className={`relative shrink-0 border-r border-[var(--border-color)]/80 bg-[var(--bg-secondary)] ${
+            isResizing
+              ? "transition-none"
+              : "transition-[width] duration-200 ease-out"
+          }`}
+          style={{
+            width: effectivelyCollapsed
+              ? SIDEBAR_COLLAPSED_WIDTH
+              : sidebarWidth,
+          }}
         >
           <Sidebar
             isOpen={true}
@@ -109,7 +116,9 @@ export function NavigationLayout() {
       )}
 
       {/* Child route content */}
-      <Outlet context={context} />
+      <div className="min-w-0 flex-1">
+        <Outlet context={context} />
+      </div>
     </div>
   );
 }
