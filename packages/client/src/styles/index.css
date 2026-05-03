@@ -190,73 +190,73 @@
 }
 
 /* ============================================================================
-   Codex Theme — Dark exchange-style palette
+   Codex Theme — Obsidian & Veridian dark palette
    ============================================================================ */
 
 [data-theme="codex"] {
   color-scheme: dark;
 
-  /* Backgrounds (Design.md surface system) */
-  --bg-surface: #10131a;
-  --bg-secondary: #191c22;
-  --bg-tertiary: #1d2026;
-  --bg-hover: #272a31;
-  --bg-code: #0b0e14;
-  --bg-input: #191c22;
+  /* Backgrounds */
+  --bg-surface: #1a1b26;
+  --bg-secondary: #20212e;
+  --bg-tertiary: #262736;
+  --bg-hover: #2e2f3f;
+  --bg-code: #13141d;
+  --bg-input: #20212e;
   --bg-overlay: rgba(0, 0, 0, 0.6);
-  --bg-user-message: #1d2026;
+  --bg-user-message: #262736;
 
   /* Text Colors */
-  --text-primary: #e1e2eb;
-  --text-secondary: #b9cbbd;
-  --text-muted: #849588;
-  --text-dimmed: #5a6b5e;
+  --text-primary: #f1efff;
+  --text-secondary: #c4c2d6;
+  --text-muted: #9492a8;
+  --text-dimmed: #6e6c82;
 
   /* Border Colors */
   --border-color: rgba(255, 255, 255, 0.06);
-  --border-subtle: #272a31;
-  --border-input: #3a4a3f;
+  --border-subtle: #2e2f3f;
+  --border-input: #3e3d52;
 
-  /* Semantic Colors — Neon Green accent */
-  --link-color: #00e290;
+  /* Semantic Colors */
+  --link-color: #98d4ac;
   --error-color: #ffb4ab;
-  --success-color: #00ffa3;
+  --success-color: #98d4ac;
   --warning-color: #fbbc04;
   --warning-badge-bg: #c2410c;
-  --attention-color: #00e290;
-  --focus-border: #00e290;
-  --primary-color: #00e290;
+  --attention-color: #98d4ac;
+  --focus-border: #98d4ac;
+  --primary-color: #98d4ac;
 
   /* Accent overrides */
-  --accent-rust: #00e290;
-  --accent-rust-dark: #007146;
-  --app-claude-orange: #00e290;
+  --accent-rust: #98d4ac;
+  --accent-rust-dark: #004225;
+  --app-claude-orange: #98d4ac;
 
   /* Thinking & Spinner */
-  --thinking-color: #00e290;
-  --app-spinner-foreground: #00e290;
+  --thinking-color: #98d4ac;
+  --app-spinner-foreground: #98d4ac;
 
   /* Timeline */
-  --timeline-dot-default: #849588;
-  --timeline-dot-tool: #00ffa3;
+  --timeline-dot-default: #9492a8;
+  --timeline-dot-tool: #98d4ac;
   --timeline-dot-error: #ffb4ab;
   --timeline-dot-warning: #fbbc04;
-  --timeline-dot-working: #00e290;
-  --timeline-line-color: #3a4a3f;
+  --timeline-dot-working: #98d4ac;
+  --timeline-line-color: #3e3d52;
 
-  /* Status Colors (tinted style for dark bg) */
-  --status-badge-idle-bg: #272a31;
-  --status-badge-idle-text: #b9cbbd;
-  --status-badge-owned-bg: rgba(0, 255, 163, 0.12);
-  --status-badge-owned-text: #00ffa3;
+  /* Status Colors */
+  --status-badge-idle-bg: #2e2f3f;
+  --status-badge-idle-text: #c4c2d6;
+  --status-badge-owned-bg: rgba(152, 212, 172, 0.12);
+  --status-badge-owned-text: #98d4ac;
   --status-badge-external-bg: rgba(251, 188, 4, 0.12);
   --status-badge-external-text: #fbbc04;
-  --status-badge-running-bg: rgba(0, 226, 144, 0.12);
-  --status-badge-running-text: #00e290;
-  --status-badge-input-bg: rgba(0, 226, 144, 0.12);
-  --status-badge-input-text: #00e290;
+  --status-badge-running-bg: rgba(152, 212, 172, 0.12);
+  --status-badge-running-text: #98d4ac;
+  --status-badge-input-bg: rgba(152, 212, 172, 0.12);
+  --status-badge-input-text: #98d4ac;
 
-  /* Shiki Syntax Highlighting (GitHub Dark inspired) */
+  /* Shiki Syntax Highlighting */
   --shiki-foreground: #c9d1d9;
   --shiki-background: transparent;
   --shiki-token-constant: #79c0ff;
@@ -265,9 +265,9 @@
   --shiki-token-keyword: #ff7b72;
   --shiki-token-parameter: #ffa657;
   --shiki-token-function: #d2a8ff;
-  --shiki-token-string-expression: #7ee787;
+  --shiki-token-string-expression: #98d4ac;
   --shiki-token-punctuation: #c9d1d9;
-  --shiki-token-link: #58a6ff;
+  --shiki-token-link: #98d4ac;
   --shiki-token-deleted: #ffdcd7;
   --shiki-token-inserted: #aff5b4;
 
@@ -290,8 +290,8 @@
 
 /* Button overrides for codex theme */
 [data-theme="codex"] .btn-primary {
-  background: #00e290;
-  color: #10131a;
+  background: #98d4ac;
+  color: #1a1b26;
 }
 
 [data-theme="codex"] .btn-primary:hover:not(:disabled) {

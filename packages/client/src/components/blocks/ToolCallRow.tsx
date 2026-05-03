@@ -1,8 +1,10 @@
 import { memo, useMemo, useState } from "react";
+import { useResolvedTheme } from "../../hooks/useTheme";
 import {
   getDisplayBashCommandFromInput,
   isCodexLikeBashInput,
 } from "../../lib/bashCommand";
+import { getProviderStyle } from "../../lib/providerStyle";
 import type { ToolResultData } from "../../types/renderItems";
 import { toolRegistry } from "../renderers/tools";
 import type { RenderContext } from "../renderers/types";
@@ -114,6 +116,9 @@ export const ToolCallRow = memo(function ToolCallRow({
     }
   };
 
+  const theme = useResolvedTheme();
+  const providerStyle = getProviderStyle(theme);
+
   if (hasInlineRenderer) {
     return (
       <div className="my-2 overflow-hidden rounded-lg">
@@ -129,13 +134,9 @@ export const ToolCallRow = memo(function ToolCallRow({
     );
   }
 
-  const statusBorderColor = "border-l-[var(--border-subtle)]";
-
-  const statusBgColor = "bg-[var(--bg-secondary)]";
-
   return (
     <div
-      className={`my-2 overflow-hidden rounded-lg border border-black/5 border-l-[3px] ${statusBorderColor} ${statusBgColor} shadow-[0_1px_0_rgba(20,20,19,0.03)] transition-all duration-150 ${isNonExpandable ? "" : "hover:border-black/10"}`}
+      className={`my-2 overflow-hidden rounded-lg border border-black/5 border-l-[3px] ${providerStyle.accent} ${providerStyle.bg} ${providerStyle.shadow} transition-all duration-150 ${isNonExpandable ? "" : "hover:border-black/10"}`}
     >
       <div
         className={`flex items-center gap-2 px-4 py-3 text-sm ${isNonExpandable ? "" : "cursor-pointer hover:bg-black/[0.02]"}`}
@@ -162,7 +163,9 @@ export const ToolCallRow = memo(function ToolCallRow({
           </span>
         )}
 
-        <span className="shrink-0 text-[11px] font-medium uppercase tracking-[0.18em] text-gray-600">
+        <span
+          className={`shrink-0 text-[11px] font-medium uppercase tracking-[0.18em] ${providerStyle.label}`}
+        >
           {toolRegistry.getDisplayName(toolName)}
         </span>
 
@@ -296,7 +299,7 @@ function ToolResultExpanded({
 function Spinner() {
   return (
     <svg
-      className="animate-spin text-amber-400"
+      className="animate-spin text-[var(--primary-color)]"
       viewBox="0 0 16 16"
       width="12"
       height="12"

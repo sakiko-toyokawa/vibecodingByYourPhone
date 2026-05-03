@@ -8,10 +8,10 @@ import type { BashOutputInput, BashOutputResult, ToolRenderer } from "./types";
 const MAX_LINES_COLLAPSED = 20;
 
 const terminalFrameClasses =
-  "rounded-lg border border-[var(--border-subtle)] bg-[#171717] px-4 py-3 [font-family:var(--font-mono)] text-[13px] leading-6 text-[#e8e3d8] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]";
+  "rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-code)] px-4 py-3 [font-family:var(--font-mono)] text-[13px] leading-6 text-[var(--text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]";
 
 const subtleButtonClasses =
-  "min-h-[40px] rounded-full border border-black/10 bg-white/85 px-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7c6f63] transition-colors hover:bg-[#f7f2e8] hover:text-[#2f2923]";
+  "min-h-[40px] rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] px-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]";
 
 function formatTimestamp(timestamp: string): string {
   try {
@@ -72,7 +72,7 @@ function CodePanel({
 }) {
   return (
     <pre
-      className={`${terminalFrameClasses} overflow-x-auto whitespace-pre-wrap break-words ${tone === "error" ? "border-[#6d342b] text-[#f3b3a1]" : ""}`}
+      className={`${terminalFrameClasses} overflow-x-auto whitespace-pre-wrap break-words ${tone === "error" ? "border-[var(--error-color)] text-[var(--error-color)]" : ""}`}
     >
       <code>{children}</code>
     </pre>
@@ -81,15 +81,15 @@ function CodePanel({
 
 function BashOutputToolUse({ input }: { input: BashOutputInput }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 text-sm text-[#7c6f63]">
-      <span className="font-medium text-[#5f564d]">
+    <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--text-muted)]">
+      <span className="font-medium text-[var(--text-secondary)]">
         Polling background shell
       </span>
-      <code className="rounded-full border border-black/10 bg-[#f7f2e8] px-2.5 py-1 [font-family:var(--font-mono)] text-[12px] text-[#4a433c]">
+      <code className="rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] px-2.5 py-1 [font-family:var(--font-mono)] text-[12px] text-[var(--text-primary)]">
         {input.bash_id}
       </code>
       {input.block !== undefined && (
-        <span className="rounded-full border border-black/10 bg-white/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7c6f63]">
+        <span className="rounded-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
           {input.block ? "blocking" : "non-blocking"}
         </span>
       )}
@@ -141,7 +141,9 @@ function BashOutputToolResult({
   }
 
   if (!result) {
-    return <div className="text-sm italic text-[#8f8578]">No output</div>;
+    return (
+      <div className="text-sm italic text-[var(--text-muted)]">No output</div>
+    );
   }
 
   const stdoutLines = result.stdout?.split("\n") || [];
@@ -156,10 +158,10 @@ function BashOutputToolResult({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2 text-sm text-[#7c6f63]">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--text-muted)]">
         <StatusIndicator status={result.status} />
         {result.command && (
-          <code className="[font-family:var(--font-mono)] text-[12px] text-[#6d645b]">
+          <code className="[font-family:var(--font-mono)] text-[12px] text-[var(--text-secondary)]">
             {result.command}
           </code>
         )}
@@ -169,7 +171,7 @@ function BashOutputToolResult({
           </span>
         )}
         {result.timestamp && (
-          <span className="text-[11px] uppercase tracking-[0.18em] text-[#9a9083]">
+          <span className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-dimmed)]">
             {formatTimestamp(result.timestamp)}
           </span>
         )}

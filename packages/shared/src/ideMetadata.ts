@@ -8,6 +8,14 @@
 /** Pattern for all IDE metadata tags */
 const IDE_TAG_PATTERN = /<ide_(opened_file|selection)>[\s\S]*?<\/ide_\1>/g;
 
+/** Pattern for command metadata tags injected by SDK into JSONL */
+const COMMAND_TAG_PATTERN =
+  /<(command-(?:name|message|args)|local-command-(?:caveat|stdout))>[\s\S]*?<\/\1>/g;
+
+/** Pattern for task notification blocks injected by SDK into JSONL */
+const TASK_NOTIFICATION_PATTERN =
+  /<task-notification>[\s\S]*?<\/task-notification>\s*Read the output file to retrieve the result: [^\n]*/g;
+
 /** Pattern specifically for ide_opened_file tags */
 const OPENED_FILE_TAG_PATTERN =
   /<ide_opened_file>([\s\S]*?)<\/ide_opened_file>/g;
@@ -25,11 +33,41 @@ export function isIdeMetadata(text: string): boolean {
 }
 
 /**
+ * Check if text block is purely command metadata (for skipping in title extraction).
+ * Returns true if the trimmed text starts with a command metadata tag.
+ */
+export function isCommandMetadata(text: string): boolean {
+  const trimmed = text.trim();
+  return (
+    trimmed.startsWith("<command-name>") ||
+    trimmed.startsWith("<command-message>") ||
+    trimmed.startsWith("<command-args>") ||
+    trimmed.startsWith("<local-command-caveat>") ||
+    trimmed.startsWith("<local-command-stdout>") ||
+    trimmed.startsWith("<task-notification>") ||
+    trimmed.startsWith("Read the output file to retrieve the result:")
+  );
+}
+
+/**
  * Strip all IDE metadata tags from text.
  * Returns the text with all <ide_opened_file> and <ide_selection> tags removed.
  */
 export function stripIdeMetadata(text: string): string {
   return text.replace(IDE_TAG_PATTERN, "").trim();
+}
+
+/**
+ * Strip command metadata tags injected by SDK into JSONL.
+ * Handles <command-name>, <command-message>, <command-args>,
+ * <local-command-caveat>, <local-command-stdout>, and
+ * <task-notification> blocks.
+ */
+export function stripCommandMetadata(text: string): string {
+  return text
+    .replace(COMMAND_TAG_PATTERN, "")
+    .replace(TASK_NOTIFICATION_PATTERN, "")
+    .trim();
 }
 
 /**

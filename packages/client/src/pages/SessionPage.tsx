@@ -1,6 +1,12 @@
 import type { ProviderName, UploadedFile } from "@yep-anywhere/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { api } from "../api/client";
 import { MessageInput, type UploadProgress } from "../components/MessageInput";
 import { MessageInputToolbar } from "../components/MessageInputToolbar";
@@ -12,6 +18,8 @@ import { QuestionAnswerPanel } from "../components/QuestionAnswerPanel";
 import { RecentSessionsDropdown } from "../components/RecentSessionsDropdown";
 import { RollbackPanel } from "../components/RollbackPanel";
 import { SessionMenu } from "../components/SessionMenu";
+import { SplitSessionView } from "../components/SplitSessionView";
+import { SplitViewButton } from "../components/SplitViewButton";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { ToolApprovalPanel } from "../components/ToolApprovalPanel";
 import { AgentContentProvider } from "../contexts/AgentContentContext";
@@ -48,10 +56,23 @@ export function SessionPage() {
     projectId: string;
     sessionId: string;
   }>();
+  const [searchParams] = useSearchParams();
+  const splitSessionId = searchParams.get("splitSession");
+  const splitProjectId = searchParams.get("splitProject");
 
   // Guard against missing params - this shouldn't happen with proper routing
   if (!projectId || !sessionId) {
     return <SessionPageInvalidRoute />;
+  }
+
+  // If split view is requested, render two sessions side by side
+  if (splitSessionId && splitProjectId) {
+    return (
+      <SplitSessionView
+        left={{ projectId, sessionId }}
+        right={{ projectId: splitProjectId, sessionId: splitSessionId }}
+      />
+    );
   }
 
   // Key ensures component remounts on session change, resetting all state
@@ -76,12 +97,14 @@ function SessionPageInvalidRoute() {
   );
 }
 
-function SessionPageContent({
+export function SessionPageContent({
   projectId,
   sessionId,
+  isSecondaryPane = false,
 }: {
   projectId: string;
   sessionId: string;
+  isSecondaryPane?: boolean;
 }) {
   const { t } = useI18n();
   const { openSidebar, isWideScreen, toggleSidebar, isSidebarCollapsed } =
@@ -157,6 +180,7 @@ function SessionPageContent({
     loadingOlder,
     loadOlderMessages,
     reconnectStream,
+    setMessages,
   } = useSession(
     projectId,
     sessionId,
@@ -206,9 +230,9 @@ function SessionPageContent({
   // Inject custom client-side commands alongside SDK-discovered ones
   const allSlashCommands = useMemo(() => {
     if (status.owner === "self") {
-      return slashCommands.includes("model")
-        ? slashCommands
-        : ["model", ...slashCommands];
+      const custom = ["clear", "model"];
+      const combined = custom.filter((c) => !slashCommands.includes(c));
+      return [...combined, ...slashCommands];
     }
     return slashCommands;
   }, [slashCommands, status.owner]);
@@ -269,7 +293,9 @@ function SessionPageContent({
 
   // Navigate to new session ID when temp ID is replaced with real SDK session ID
   // This ensures the URL stays in sync with the actual session
+  // Skip for secondary pane to avoid URL conflicts in split view
   useEffect(() => {
+    if (isSecondaryPane) return;
     if (actualSessionId && actualSessionId !== sessionId) {
       // Use replace to avoid creating a history entry for the temp ID
       navigate(
@@ -287,6 +313,7 @@ function SessionPageContent({
     navigate,
     location.state,
     basePath,
+    isSecondaryPane,
   ]);
 
   // File attachment state
@@ -583,13 +610,22 @@ function SessionPageContent({
     [setSessionModel, showToast, t],
   );
 
-  const handleCustomCommand = useCallback((command: string) => {
-    if (command === "model") {
-      setShowModelSwitchModal(true);
-      return true;
-    }
-    return false;
-  }, []);
+  const handleCustomCommand = useCallback(
+    (command: string) => {
+      if (command === "model") {
+        setShowModelSwitchModal(true);
+        return true;
+      }
+      if (command === "clear") {
+        setMessages([]);
+        setAgentContent({});
+        showToast(t("sessionCleared"), "success");
+        return true;
+      }
+      return false;
+    },
+    [setAgentContent, showToast, t, setMessages],
+  );
 
   const handleApprove = useCallback(async () => {
     if (pendingInputRequest) {
@@ -787,8 +823,10 @@ function SessionPageContent({
   const isArchived = localIsArchived ?? session?.isArchived ?? false;
   const isStarred = localIsStarred ?? session?.isStarred ?? false;
 
-  // Update browser tab title
-  useDocumentTitle(project?.name, displayTitle);
+  // Update browser tab title (skip for secondary pane in split view)
+  if (!isSecondaryPane) {
+    useDocumentTitle(project?.name, displayTitle);
+  }
 
   const handleStartEditingTitle = () => {
     setRenameValue(displayTitle);
@@ -1057,6 +1095,10 @@ function SessionPageContent({
                     onToggleRead={handleToggleRead}
                     onRename={handleStartEditingTitle}
                     onClone={(newSessionId) => {
+                      if (isSecondaryPane) {
+                        showToast(t("sessionCloneInSplitNotSupported"), "info");
+                        return;
+                      }
                       navigate(
                         `${basePath}/projects/${projectId}/sessions/${newSessionId}`,
                       );
@@ -1071,6 +1113,9 @@ function SessionPageContent({
               </div>
             </div>
             <div className="ml-0.5 flex shrink-0 items-center gap-2">
+              {!isSecondaryPane && (
+                <SplitViewButton currentSessionId={sessionId} />
+              )}
               <ThemeToggle />
               {!loading && effectiveProvider && (
                 <button

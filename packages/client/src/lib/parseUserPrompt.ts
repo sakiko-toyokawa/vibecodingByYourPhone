@@ -1,6 +1,7 @@
 import {
   parseOpenedFiles,
   getFilename as sharedGetFilename,
+  stripCommandMetadata,
   stripIdeMetadata,
 } from "@yep-anywhere/shared";
 
@@ -85,7 +86,7 @@ export function parseUserPrompt(content: string): ParsedUserPrompt {
 
   // Then process IDE metadata on the remaining text
   return {
-    text: stripIdeMetadata(textWithoutUploads),
+    text: stripCommandMetadata(stripIdeMetadata(textWithoutUploads)),
     openedFiles: parseOpenedFiles(textWithoutUploads),
     uploadedFiles,
   };

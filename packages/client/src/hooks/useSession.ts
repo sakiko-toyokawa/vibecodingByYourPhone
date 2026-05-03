@@ -1058,6 +1058,7 @@ export function useSession(
     setAgentContent, // Setter for merging lazy-loaded agent content
     toolUseToAgent, // Mapping from Task tool_use_id → agentId (for rendering during streaming)
     markdownAugments, // Pre-rendered markdown HTML from REST response (keyed by blockId)
+    setMessages, // Direct messages setter (for /clear command)
     status,
     processState,
     isCompacting, // True when context is being compressed

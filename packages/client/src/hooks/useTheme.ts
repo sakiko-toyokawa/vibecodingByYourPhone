@@ -46,12 +46,37 @@ function loadTheme(): Theme {
   return "claude";
 }
 
+// Module-level subscription so all useTheme instances stay in sync.
+// When one component calls setTheme, all others re-render.
+const listeners = new Set<() => void>();
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function notifyListeners() {
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
 /**
  * Hook to manage theme preference.
  * Supports "claude" (light warm), "codex" (dark exchange), and "gemini" (light futuristic) modes.
  */
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(loadTheme);
+
+  // Sync with other useTheme instances
+  useEffect(() => {
+    const unsubscribe = subscribe(() => {
+      setThemeState(loadTheme());
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     applyTheme(theme);
@@ -60,6 +85,8 @@ export function useTheme() {
   const setTheme = useCallback((newTheme: Theme) => {
     localStorage.setItem(UI_KEYS.theme, newTheme);
     setThemeState(newTheme);
+    // Notify other useTheme instances so ToolCallRow, DiffLines, etc. re-render
+    notifyListeners();
   }, []);
 
   return { theme, setTheme };

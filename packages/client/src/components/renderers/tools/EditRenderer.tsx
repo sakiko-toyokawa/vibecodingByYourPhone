@@ -3,11 +3,13 @@ import type { ZodError } from "zod";
 import { useSchemaValidationContext } from "../../../contexts/SchemaValidationContext";
 import { useSessionMetadata } from "../../../contexts/SessionMetadataContext";
 import { useExpandedDiff } from "../../../hooks/useExpandedDiff";
+import { useResolvedTheme } from "../../../hooks/useTheme";
 import {
   classifyToolError,
   getErrorClassSuffix,
   isUserRejection,
 } from "../../../lib/classifyToolError";
+import { getProviderStyle } from "../../../lib/providerStyle";
 import { validateToolResult } from "../../../lib/validateToolResult";
 import { SchemaWarning } from "../../SchemaWarning";
 import { Modal } from "../../ui/Modal";
@@ -114,7 +116,13 @@ function truncateByLines(
  * Render diff lines (shared between pending preview and result fallback)
  * Memoized to prevent scroll reset when parent re-renders.
  */
-const DiffLines = memo(function DiffLines({ lines }: { lines: string[] }) {
+const DiffLines = memo(function DiffLines({
+  lines,
+}: {
+  lines: string[];
+}) {
+  const theme = useResolvedTheme();
+  const style = getProviderStyle(theme);
   return (
     <div className="my-2 first:mt-0 rounded overflow-hidden border border-[var(--border-color)]">
       <pre className="m-0 p-0 bg-[var(--bg-code)] overflow-x-auto tab-[var(--tab-size)]">
@@ -122,11 +130,10 @@ const DiffLines = memo(function DiffLines({ lines }: { lines: string[] }) {
           const prefix = line[0];
           const lineClass =
             prefix === "-"
-              ? "bg-[var(--bg-diff-removed,rgba(207,34,46,0.15))] text-[var(--text-diff-removed,var(--error-color))]"
+              ? `${style.diffRemoved}`
               : prefix === "+"
-                ? "bg-[var(--bg-diff-added,rgba(26,127,55,0.15))] text-[var(--text-diff-added,var(--success-color))]"
+                ? `${style.diffAdded}`
                 : "text-[var(--text-muted)]";
-          // Use line content hash for stable keys
           const key = `${i}-${line.slice(0, 50)}`;
           return (
             <div key={key} className={`px-2 leading-relaxed ${lineClass}`}>
@@ -189,7 +196,13 @@ const HighlightedDiff = memo(function HighlightedDiff({
  * Render a single diff hunk (without @@ header for cleaner display)
  * Memoized to prevent scroll reset when parent re-renders.
  */
-const DiffHunk = memo(function DiffHunk({ hunk }: { hunk: PatchHunk }) {
+const DiffHunk = memo(function DiffHunk({
+  hunk,
+}: {
+  hunk: PatchHunk;
+}) {
+  const theme = useResolvedTheme();
+  const style = getProviderStyle(theme);
   return (
     <div className="my-2 first:mt-0 rounded overflow-hidden border border-[var(--border-color)]">
       <pre className="m-0 p-0 bg-[var(--bg-code)] overflow-x-auto tab-[var(--tab-size)]">
@@ -197,9 +210,9 @@ const DiffHunk = memo(function DiffHunk({ hunk }: { hunk: PatchHunk }) {
           const prefix = line[0];
           const lineClass =
             prefix === "-"
-              ? "bg-[var(--bg-diff-removed,rgba(207,34,46,0.15))] text-[var(--text-diff-removed,var(--error-color))]"
+              ? `${style.diffRemoved}`
               : prefix === "+"
-                ? "bg-[var(--bg-diff-added,rgba(26,127,55,0.15))] text-[var(--text-diff-added,var(--success-color))]"
+                ? `${style.diffAdded}`
                 : "text-[var(--text-muted)]";
           return (
             <div
@@ -259,7 +272,13 @@ function RawPatchModalContent({ rawPatch }: { rawPatch: string }) {
  * Edit tool use - shows file path and diff preview
  * Reads augment data directly from input._structuredPatch and input._diffHtml.
  */
-function EditToolUse({ input }: { input: EditInputWithAugment }) {
+function EditToolUse({
+  input,
+  provider,
+}: {
+  input: EditInputWithAugment;
+  provider?: string;
+}) {
   // Show loading state if augment data not yet available
   if (!input._structuredPatch || input._structuredPatch.length === 0) {
     if (input._rawPatch) {
@@ -334,6 +353,7 @@ function DiffModalContent({
   newString,
   originalFile,
   replaceAll,
+  provider,
 }: {
   diffHtml?: string;
   structuredPatch: PatchHunk[];
@@ -343,6 +363,7 @@ function DiffModalContent({
   /** Complete file content from SDK Edit result (never truncated). Null for file creation. */
   originalFile?: string | null;
   replaceAll?: boolean;
+  provider?: string;
 }) {
   const { projectPath } = useSessionMetadata();
   const [showFullContext, setShowFullContext] = useState(false);
@@ -439,10 +460,12 @@ function EditCollapsedPreview({
   input,
   result,
   isError,
+  provider,
 }: {
   input: EditInputWithAugment;
   result: EditResult | undefined;
   isError: boolean;
+  provider?: string;
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { enabled, reportValidationError, isToolIgnored } =
@@ -603,6 +626,7 @@ function EditCollapsedPreview({
               oldString={oldString}
               newString={newString}
               replaceAll={replaceAll}
+              provider={provider}
             />
           </Modal>
         )}
@@ -728,6 +752,7 @@ function EditCollapsedPreview({
             newString={newString}
             originalFile={originalFile}
             replaceAll={replaceAll}
+            provider={provider}
           />
         </Modal>
       )}
@@ -743,10 +768,12 @@ function EditInteractiveSummary({
   input,
   result,
   isError,
+  provider,
 }: {
   input: EditInputWithAugment;
   result: EditResult | undefined;
   isError: boolean;
+  provider?: string;
 }) {
   const [showModal, setShowModal] = useState(false);
   const { enabled, reportValidationError, isToolIgnored } =
@@ -834,6 +861,7 @@ function EditInteractiveSummary({
             oldString={oldString}
             newString={newString}
             originalFile={originalFile}
+            provider={provider}
           />
         </Modal>
       )}
@@ -848,10 +876,12 @@ function EditToolResult({
   result,
   input,
   isError,
+  provider,
 }: {
   result: EditResult;
   input?: EditInput;
   isError: boolean;
+  provider?: string;
 }) {
   const [showModal, setShowModal] = useState(false);
   const { enabled, reportValidationError, isToolIgnored } =
@@ -1144,16 +1174,22 @@ function EditToolResult({
 export const editRenderer: ToolRenderer<EditInput, EditResult> = {
   tool: "Edit",
 
-  renderToolUse(input) {
-    return <EditToolUse input={input as EditInputWithAugment} />;
+  renderToolUse(input, context) {
+    return (
+      <EditToolUse
+        input={input as EditInputWithAugment}
+        provider={context?.provider}
+      />
+    );
   },
 
-  renderToolResult(result, isError, _context, input) {
+  renderToolResult(result, isError, context, input) {
     return (
       <EditToolResult
         result={result as EditResult}
         input={input as EditInput | undefined}
         isError={isError}
+        provider={context?.provider}
       />
     );
   },
@@ -1184,22 +1220,24 @@ export const editRenderer: ToolRenderer<EditInput, EditResult> = {
     return r?.filePath ? getFileName(r.filePath) : "file";
   },
 
-  renderCollapsedPreview(input, result, isError) {
+  renderCollapsedPreview(input, result, isError, context) {
     return (
       <EditCollapsedPreview
         input={input as EditInputWithAugment}
         result={result as EditResult | undefined}
         isError={isError}
+        provider={context?.provider}
       />
     );
   },
 
-  renderInteractiveSummary(input, result, isError, _context) {
+  renderInteractiveSummary(input, result, isError, context) {
     return (
       <EditInteractiveSummary
         input={input as EditInputWithAugment}
         result={result as EditResult | undefined}
         isError={isError}
+        provider={context?.provider}
       />
     );
   },

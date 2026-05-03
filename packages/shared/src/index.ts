@@ -1,6 +1,8 @@
 export {
   isIdeMetadata,
+  isCommandMetadata,
   stripIdeMetadata,
+  stripCommandMetadata,
   extractOpenedFilePath,
   parseOpenedFiles,
   getFilename,

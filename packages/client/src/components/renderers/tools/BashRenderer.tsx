@@ -23,10 +23,10 @@ const CODEX_NOISE_PATTERNS = [
 ];
 
 const terminalFrameClasses =
-  "rounded-[16px] border border-black/10 bg-[#171717] px-4 py-3 [font-family:var(--font-mono)] text-[13px] leading-6 text-[#e8e3d8] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]";
+  "rounded-[16px] border border-[var(--border-color)] bg-[var(--bg-code)] px-4 py-3 [font-family:var(--font-mono)] text-[13px] leading-6 text-[var(--text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]";
 
 const subtleButtonClasses =
-  "min-h-[40px] rounded-full border border-black/10 bg-white/85 px-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7c6f63] transition-colors hover:bg-[#f7f2e8] hover:text-[#2f2923]";
+  "min-h-[40px] rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] px-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]";
 
 function StatusPill({
   tone,
@@ -36,8 +36,9 @@ function StatusPill({
   children: ReactNode;
 }) {
   const tones = {
-    amber: "border-[#edd2a8] bg-[#fbf2df] text-[#9d622c]",
-    blue: "border-[#cad7ea] bg-[#edf3fb] text-[#46698d]",
+    amber:
+      "border-[var(--warning-color)] bg-[var(--bg-warning)] text-[var(--warning-color)]",
+    blue: "border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]",
   };
 
   return (
@@ -115,7 +116,7 @@ function CodePanel({
 }) {
   return (
     <pre
-      className={`${terminalFrameClasses} overflow-x-auto whitespace-pre-wrap break-words ${tone === "error" ? "border-[#6d342b] text-[#f3b3a1]" : ""}`}
+      className={`${terminalFrameClasses} overflow-x-auto whitespace-pre-wrap break-words ${tone === "error" ? "border-[var(--error-color)] text-[var(--error-color)]" : ""}`}
     >
       <code>{children}</code>
     </pre>
@@ -141,14 +142,14 @@ function BashModalContent({
   return (
     <div className="flex flex-col gap-4">
       <section className="flex flex-col gap-2">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8f8578]">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
           Command
         </div>
         <CodePanel>{command}</CodePanel>
       </section>
       {stdout && (
         <section className="flex flex-col gap-2">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8f8578]">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
             Output
           </div>
           <CodePanel>{stdout}</CodePanel>
@@ -156,14 +157,14 @@ function BashModalContent({
       )}
       {stderr && (
         <section className="flex flex-col gap-2">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#b05d4e]">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--error-color)]">
             {isError ? "Error" : "Stderr"}
           </div>
           <CodePanel tone="error">{stderr}</CodePanel>
         </section>
       )}
       {!stdout && !stderr && result && !result.interrupted && (
-        <div className="text-sm italic text-[#8f8578]">No output</div>
+        <div className="text-sm italic text-[var(--text-muted)]">No output</div>
       )}
       {result?.interrupted && <StatusPill tone="amber">Interrupted</StatusPill>}
       {result?.backgroundTaskId && (
@@ -264,7 +265,7 @@ function BashToolResult({
       )}
       {stderr && <CodePanel tone="error">{stderr}</CodePanel>}
       {!stdout && !stderr && !result.interrupted && (
-        <div className="text-sm italic text-[#8f8578]">No output</div>
+        <div className="text-sm italic text-[var(--text-muted)]">No output</div>
       )}
     </div>
   );
@@ -356,16 +357,17 @@ function BashCollapsedPreview({
     <>
       <button
         type="button"
-        className="group w-full overflow-hidden rounded-[16px] border border-black/10 bg-[#171717] text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-black/20"
+        className="group w-full overflow-hidden rounded-[16px] border border-[var(--border-color)] bg-[var(--bg-code)] text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-[var(--border-input)]"
         onClick={handleClick}
       >
-        <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
+        <div className="flex items-center gap-2 border-b border-[var(--border-color)] px-3 py-2">
           <svg
             width="14"
             height="14"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#978b7e"
+            stroke="currentColor"
+            className="text-[var(--text-muted)]"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -375,18 +377,18 @@ function BashCollapsedPreview({
             <line x1="8" y1="21" x2="16" y2="21" />
             <line x1="12" y1="17" x2="12" y2="21" />
           </svg>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#978b7e]">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
             Bash Output
           </span>
-          <span className="ml-auto text-[10px] text-[#978b7e] opacity-0 transition-opacity group-hover:opacity-100">
+          <span className="ml-auto text-[10px] text-[var(--text-muted)] opacity-0 transition-opacity group-hover:opacity-100">
             Click to expand
           </span>
         </div>
-        <div className="flex gap-3 border-b border-white/10 px-3 py-2">
-          <span className="w-8 shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#978b7e]">
+        <div className="flex gap-3 border-b border-[var(--border-color)] px-3 py-2">
+          <span className="w-8 shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
             In
           </span>
-          <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap [font-family:var(--font-mono)] text-[13px] text-[#e8e3d8]">
+          <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap [font-family:var(--font-mono)] text-[13px] text-[var(--text-primary)]">
             {command}
           </code>
           {showValidationWarning && validationErrors && (
@@ -395,35 +397,39 @@ function BashCollapsedPreview({
         </div>
         {hasOutput && (
           <div className="flex gap-3 px-3 py-2">
-            <span className="w-8 shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#978b7e]">
+            <span className="w-8 shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
               Out
             </span>
             <div className="relative min-w-0 flex-1 overflow-hidden">
               <pre
-                className={`m-0 whitespace-pre-wrap break-words [font-family:var(--font-mono)] text-[13px] leading-6 ${isError || result?.stderr ? "text-[#f3b3a1]" : "text-[#c4bcaf]"}`}
+                className={`m-0 whitespace-pre-wrap break-words [font-family:var(--font-mono)] text-[13px] leading-6 ${isError || result?.stderr ? "text-[var(--error-color)]" : "text-[var(--text-secondary)]"}`}
               >
                 <code>{previewText}</code>
               </pre>
               {truncated && (
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[#171717] to-transparent" />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[var(--bg-code)] to-transparent" />
               )}
             </div>
           </div>
         )}
         {!hasOutput && result && !result.interrupted && (
           <div className="flex gap-3 px-3 py-2">
-            <span className="w-8 shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#978b7e]">
+            <span className="w-8 shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
               Out
             </span>
-            <span className="text-sm italic text-[#8f8578]">No output</span>
+            <span className="text-sm italic text-[var(--text-muted)]">
+              No output
+            </span>
           </div>
         )}
         {result?.interrupted && (
           <div className="flex gap-3 px-3 py-2">
-            <span className="w-8 shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#978b7e]">
+            <span className="w-8 shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
               Out
             </span>
-            <span className="text-sm italic text-[#d4a55f]">Interrupted</span>
+            <span className="text-sm italic text-[var(--warning-color)]">
+              Interrupted
+            </span>
           </div>
         )}
       </button>

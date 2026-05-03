@@ -61,7 +61,7 @@ export const TextBlock = memo(function TextBlock({
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: click handler intercepts local media links only
     <div
-      className="group relative my-2 rounded-lg border border-[var(--border-subtle)] bg-white/85 px-5 py-4 pr-12 shadow-[0_1px_0_rgba(20,20,19,0.03)] backdrop-blur-sm"
+      className="group relative my-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-5 py-4 pr-12 shadow-[0_1px_0_rgba(20,20,19,0.03)] backdrop-blur-sm"
       onClick={handleClick}
     >
       <button

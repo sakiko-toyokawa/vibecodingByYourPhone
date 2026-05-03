@@ -6,7 +6,9 @@ import {
   SESSION_TITLE_MAX_LENGTH,
   type UrlProjectId,
   getModelContextWindow,
+  isCommandMetadata,
   isIdeMetadata,
+  stripCommandMetadata,
   stripIdeMetadata,
 } from "@yep-anywhere/shared";
 import type {
@@ -734,14 +736,15 @@ export class ClaudeSessionReader implements ISessionReader {
     content: string | Array<{ type: string; text?: string }>,
   ): string {
     if (typeof content === "string") {
-      return stripIdeMetadata(content);
+      return stripCommandMetadata(stripIdeMetadata(content));
     }
     return content
       .filter(
         (block): block is { type: string; text: string } =>
           block.type === "text" &&
           typeof block.text === "string" &&
-          !isIdeMetadata(block.text),
+          !isIdeMetadata(block.text) &&
+          !isCommandMetadata(block.text),
       )
       .map((block) => block.text)
       .join("\n");
