@@ -42,7 +42,7 @@ export function ConnectionBar() {
 
   return (
     <div
-      className={`fixed top-0 left-0 right-0 h-0.5 z-[9999] pointer-events-none transition-colors duration-300 ${statusClasses[status as keyof typeof statusClasses] || ""}`}
+      className={`fixed top-[env(safe-area-inset-top,0px)] left-0 right-0 h-0.5 z-[9999] pointer-events-none transition-colors duration-300 ${statusClasses[status as keyof typeof statusClasses] || ""}`}
     />
   );
 }

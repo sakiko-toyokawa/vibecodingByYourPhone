@@ -177,7 +177,7 @@ export function ProjectSelector({
           >
             <div
               ref={sheetRef}
-              className="flex w-full max-h-[70vh] flex-col overflow-hidden rounded-t-lg bg-[var(--bg-surface)] animate-[slideUp_0.2s_ease-out]"
+              className="flex w-full max-h-[70vh] flex-col overflow-hidden rounded-t-lg bg-[var(--bg-surface)] animate-[slideUp_0.2s_ease-out] pb-[env(safe-area-inset-bottom,0px)]"
               tabIndex={-1}
               aria-label={t("projectSelectorSelectProject")}
             >

@@ -446,7 +446,7 @@ export const FileViewer = memo(function FileViewer({
     "flex flex-col h-full bg-[var(--bg-surface)]",
     standalone && "min-h-full",
     fullscreen &&
-      "fixed inset-0 z-[10000] bg-[var(--bg-surface)] rounded-none max-h-none h-screen w-screen",
+      "fixed inset-0 z-[10000] bg-[var(--bg-surface)] rounded-none max-h-none h-[100dvh] w-screen pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]",
   ]
     .filter(Boolean)
     .join(" ");

@@ -9,7 +9,7 @@ export function ToastContainer({ toasts, onDismiss }: Props) {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-[100px] left-1/2 -translate-x-1/2 z-[1000] flex flex-col gap-2 pointer-events-none md:bottom-auto md:top-4 md:left-auto md:right-4 md:translate-x-0">
+    <div className="fixed bottom-[calc(100px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-[1000] flex flex-col gap-2 pointer-events-none md:bottom-auto md:top-4 md:left-auto md:right-4 md:translate-x-0">
       {toasts.map((toast) => {
         const typeClasses =
           toast.type === "error"

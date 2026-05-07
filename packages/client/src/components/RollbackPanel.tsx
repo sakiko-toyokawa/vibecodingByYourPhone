@@ -107,7 +107,7 @@ export function RollbackPanel({
   if (changes.length === 0) {
     return (
       <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center">
-        <div className="w-full max-w-lg rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] p-6 shadow-lg">
+        <div className="w-full max-w-lg rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] p-6 shadow-lg pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
           <h3 className="mb-4 text-lg font-medium text-[var(--text-primary)]">
             {t("rollbackPanelTitle")}
           </h3>
@@ -130,7 +130,7 @@ export function RollbackPanel({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center">
-      <div className="flex w-full max-w-lg flex-col rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-lg max-h-[80vh]">
+      <div className="flex w-full max-w-lg flex-col rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-lg max-h-[80vh] pb-[max(0px,env(safe-area-inset-bottom,0px))]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3">
           <h3 className="text-lg font-medium text-[var(--text-primary)]">

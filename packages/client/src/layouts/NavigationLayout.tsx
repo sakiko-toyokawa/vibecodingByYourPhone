@@ -73,7 +73,7 @@ export function NavigationLayout() {
     <div
       className={`flex min-h-[100dvh] bg-[var(--bg-surface)] text-[var(--text-primary)] ${
         isWideScreen ? "overflow-hidden" : "flex-col"
-      } ${isResizing ? "cursor-col-resize select-none" : ""}`}
+      } ${isResizing ? "cursor-col-resize select-none" : ""} pb-[env(safe-area-inset-bottom,0px)]`}
     >
       {/* Desktop sidebar - always visible on wide screens */}
       {isWideScreen && (

@@ -71,7 +71,7 @@ export function Modal({ title, children, onClose }: ModalProps) {
         aria-modal="true"
         onClick={handleModalClick}
       >
-        <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-secondary)] px-2 py-1.5 rounded-t max-[600px]:rounded-none max-[600px]:py-1">
+        <div className="flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-secondary)] px-2 py-1.5 rounded-t max-[600px]:rounded-none max-[600px]:py-1 max-[600px]:pt-[env(safe-area-inset-top,0px)]">
           <span className="min-w-0 overflow-hidden text-[0.9375rem] font-semibold whitespace-nowrap text-[var(--text-primary)] truncate max-[600px]:text-sm">
             {title}
           </span>
@@ -89,7 +89,7 @@ export function Modal({ title, children, onClose }: ModalProps) {
             ×
           </button>
         </div>
-        <div className="flex-1 overflow-auto p-2 max-[600px]:p-0">
+        <div className="flex-1 overflow-auto p-2 max-[600px]:p-0 max-[600px]:pb-[env(safe-area-inset-bottom,0px)]">
           {children}
         </div>
       </div>

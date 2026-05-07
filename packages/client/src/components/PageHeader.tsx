@@ -47,7 +47,7 @@ export function PageHeader({
     : t("actionOpenSidebar");
 
   return (
-    <header className="relative z-10 shrink-0 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)]">
+    <header className="relative z-10 shrink-0 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] pt-[env(safe-area-inset-top,0px)]">
       <div className="flex min-h-[64px] items-center justify-between px-6 py-4 pl-1">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {showBack && onBack ? (

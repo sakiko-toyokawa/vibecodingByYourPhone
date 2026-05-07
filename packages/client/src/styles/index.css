@@ -100,6 +100,12 @@
   --radius-md: 6px;
   --radius-lg: 8px;
 
+  /* Safe Area (for mobile notch/punch-hole screens) */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+
   /* Spinner */
   --app-spinner-foreground: var(--thinking-color);
 
