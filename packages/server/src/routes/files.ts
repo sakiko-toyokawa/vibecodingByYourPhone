@@ -276,7 +276,7 @@ function isTextFile(filePath: string): boolean {
  * Validate and resolve file path, preventing directory traversal.
  * Returns null if the path is invalid or escapes the project root.
  */
-function resolveFilePath(
+export function resolveFilePath(
   projectRoot: string,
   relativePath: string,
 ): string | null {

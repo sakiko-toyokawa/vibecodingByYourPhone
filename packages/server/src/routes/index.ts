@@ -26,6 +26,7 @@ import { createConnectionsRoutes } from "./connections.js";
 import { createDebugStreamingRoutes } from "./debug-streaming.js";
 import { createDevRoutes } from "./dev.js";
 import { createDeviceRoutes } from "./devices.js";
+import { createEditorRoutes } from "./editor.js";
 import { createFilesRoutes } from "./files.js";
 import { createGitStatusRoutes } from "./git-status.js";
 import { createGlobalSessionsRoutes } from "./global-sessions.js";
@@ -312,6 +313,16 @@ export function registerRoutes(
 
   // Files routes (file browser)
   app.route("/api/projects", createFilesRoutes({ scanner }));
+
+  // Editor routes (project tree, write, AI edit)
+  app.route(
+    "/api/projects",
+    createEditorRoutes({
+      scanner,
+      eventBus: options.eventBus,
+      serverSettingsService: options.serverSettingsService,
+    }),
+  );
 
   // Git status routes
   app.route("/api/projects", createGitStatusRoutes({ scanner }));
