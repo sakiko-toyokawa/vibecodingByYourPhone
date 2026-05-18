@@ -423,27 +423,45 @@ MIT
 // Install runtime dependencies into staging (for self-contained desktop bundle)
 // We dereference pnpm symlinks and prune dev files to avoid Windows MAX_PATH issues.
 step("Install runtime dependencies", () => {
-  // Use a relative temp directory to avoid Windows pnpm deploy path issues.
-  // pnpm deploy has bugs with Windows absolute paths (C:\... gets concatenated).
-  const deployDir = path.join(ROOT_DIR, `.yep-deployed-${Date.now()}`);
-
-  log(
-    `Deploying server package with production dependencies to ${deployDir}...`,
-  );
-  execStep(
-    `pnpm --filter @yep-anywhere/server deploy --prod --config.shamefully-hoist=true "${deployDir}"`,
-  );
-
-  const deployedNodeModules = path.join(deployDir, "node_modules");
   const stagingNodeModules = path.join(STAGING_DIR, "node_modules");
 
-  if (!fs.existsSync(deployedNodeModules)) {
-    throw new Error("pnpm deploy did not produce node_modules");
-  }
+  // On Windows, pnpm deploy often crashes with status 3221226505 (access violation).
+  // Fall back to copying from the workspace node_modules and pruning dev deps.
+  if (process.platform === "win32") {
+    log("Windows detected: using workspace node_modules copy instead of pnpm deploy");
+    const workspaceNodeModules = path.join(ROOT_DIR, "node_modules");
+    if (!fs.existsSync(workspaceNodeModules)) {
+      throw new Error("Workspace node_modules not found");
+    }
 
-  log("Copying node_modules to staging (dereferencing symlinks)...");
-  copyNodeModulesDeref(deployedNodeModules, stagingNodeModules);
-  log("  Runtime dependencies installed");
+    log("Copying workspace node_modules to staging (dereferencing symlinks)...");
+    copyNodeModulesDeref(workspaceNodeModules, stagingNodeModules);
+    log("  Runtime dependencies installed from workspace");
+  } else {
+    // Use a relative temp directory to avoid Windows pnpm deploy path issues.
+    // pnpm deploy has bugs with Windows absolute paths (C:\... gets concatenated).
+    const deployDir = path.join(ROOT_DIR, `.yep-deployed-${Date.now()}`);
+
+    log(
+      `Deploying server package with production dependencies to ${deployDir}...`,
+    );
+    execStep(
+      `pnpm --filter @yep-anywhere/server deploy --prod --config.shamefully-hoist=true "${deployDir}"`,
+    );
+
+    const deployedNodeModules = path.join(deployDir, "node_modules");
+
+    if (!fs.existsSync(deployedNodeModules)) {
+      throw new Error("pnpm deploy did not produce node_modules");
+    }
+
+    log("Copying node_modules to staging (dereferencing symlinks)...");
+    copyNodeModulesDeref(deployedNodeModules, stagingNodeModules);
+    log("  Runtime dependencies installed");
+
+    // Clean up temp deploy dir
+    fs.rmSync(deployDir, { recursive: true, force: true });
+  }
 
   // Verify core dependencies are present in the bundled node_modules
   const requiredPackages = [
@@ -469,9 +487,6 @@ step("Install runtime dependencies", () => {
     }
   }
   log("  Core dependency integrity check passed");
-
-  // Clean up temp deploy dir
-  fs.rmSync(deployDir, { recursive: true, force: true });
 });
 
 /// Copy node_modules while dereferencing symlinks and pruning unnecessary files.
