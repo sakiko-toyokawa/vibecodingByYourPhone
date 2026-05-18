@@ -74,14 +74,14 @@ jobs:
       # We generate a self-signed one in CI so the APK can be built unsigned.
       - name: Generate CI keystore
         run: |
-          mkdir -p packages/mobile/src-tauri/gen/android
+          mkdir -p packages/mobile/src-tauri/gen/android/app
           keytool -genkey -v \
-            -keystore packages/mobile/src-tauri/gen/android/yepanywhere.keystore \
+            -keystore packages/mobile/src-tauri/gen/android/app/yepanywhere.keystore \
             -alias yepanywhere \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass yepanywhere -keypass yepanywhere \
             -dname "CN=YepAnywhere"
-          cat > packages/mobile/src-tauri/gen/android/local.properties <<'LOCAL'
+          cat > packages/mobile/src-tauri/gen/android/app/local.properties <<'LOCAL'
           storeFile=yepanywhere.keystore
           storePassword=yepanywhere
           keyAlias=yepanywhere
