@@ -423,9 +423,9 @@ MIT
 // Install runtime dependencies into staging (for self-contained desktop bundle)
 // We dereference pnpm symlinks and prune dev files to avoid Windows MAX_PATH issues.
 step("Install runtime dependencies", () => {
-  // Use a fresh temp directory to avoid Windows EPERM on rename.
-  // Desktop paths (dist/) are often locked by Defender/OneDrive.
-  const deployDir = path.join(os.tmpdir(), `yep-deployed-${Date.now()}`);
+  // Use a relative temp directory to avoid Windows pnpm deploy path issues.
+  // pnpm deploy has bugs with Windows absolute paths (C:\... gets concatenated).
+  const deployDir = path.join(ROOT_DIR, `.yep-deployed-${Date.now()}`);
 
   log(
     `Deploying server package with production dependencies to ${deployDir}...`,
