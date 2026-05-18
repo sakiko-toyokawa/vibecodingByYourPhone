@@ -84,12 +84,13 @@ jobs:
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass yepanywhere -keypass yepanywhere \
             -dname "CN=YepAnywhere"
-          cat > packages/mobile/src-tauri/gen/android/local.properties << 'EOF'
-          storeFile=app/yepanywhere.keystore
-          storePassword=yepanywhere
-          keyAlias=yepanywhere
-          keyPassword=yepanywhere
-          EOF
+          # Use echo commands instead of heredoc to avoid YAML indentation issues
+          {
+            echo "storeFile=yepanywhere.keystore"
+            echo "storePassword=yepanywhere"
+            echo "keyAlias=yepanywhere"
+            echo "keyPassword=yepanywhere"
+          } > packages/mobile/src-tauri/gen/android/local.properties
           echo "--- local.properties contents ---"
           cat packages/mobile/src-tauri/gen/android/local.properties
           echo "--- verify keystore ---"
