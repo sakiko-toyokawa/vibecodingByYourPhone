@@ -5,6 +5,7 @@ on:
     branches: [main]
     tags:
       - 'desktop-v*'
+      - 'mobile-v*'
     paths:
       - 'packages/mobile/**'
       - 'packages/client/**'
