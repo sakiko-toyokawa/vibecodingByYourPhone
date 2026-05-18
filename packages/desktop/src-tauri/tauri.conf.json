@@ -28,7 +28,7 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": false,
-    "targets": "nsis",
+    "targets": ["nsis", "dmg", "deb", "rpm", "appimage"],
     "externalBin": [
       "binaries/bun"
     ],
