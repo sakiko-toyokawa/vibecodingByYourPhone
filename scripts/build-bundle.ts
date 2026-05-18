@@ -431,7 +431,7 @@ step("Install runtime dependencies", () => {
     `Deploying server package with production dependencies to ${deployDir}...`,
   );
   execStep(
-    `pnpm --filter @yep-anywhere/server deploy --prod --config.shamefully-hoist=true ${deployDir}`,
+    `pnpm --filter @yep-anywhere/server deploy --prod --config.shamefully-hoist=true "${deployDir}"`,
   );
 
   const deployedNodeModules = path.join(deployDir, "node_modules");
