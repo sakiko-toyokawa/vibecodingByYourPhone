@@ -269,6 +269,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           APPIMAGE=$(find packages/desktop/src-tauri/target/release/bundle/appimage -name '*.AppImage' -type f | head -1)
+          if [ -z "$APPIMAGE" ] || [ ! -f "$APPIMAGE" ]; then
+            echo "No AppImage found, skipping upload"
+            exit 0
+          fi
           echo "Uploading: $APPIMAGE"
           gh release upload "${GITHUB_REF_NAME}" "$APPIMAGE" --clobber
 
