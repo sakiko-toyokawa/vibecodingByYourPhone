@@ -14,9 +14,6 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-      - name: Install Playwright system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libnss3 libatk-bridge2.0-0 libdrm2 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 libatspi2.0-0
-      - run: pnpm -F @yep-anywhere/client exec playwright install chromium
+      - name: Install Playwright with deps
+        run: pnpm -F @yep-anywhere/client exec playwright install --with-deps chromium
       - run: pnpm test:e2e
