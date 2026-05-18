@@ -426,17 +426,17 @@ step("Install runtime dependencies", () => {
   const stagingNodeModules = path.join(STAGING_DIR, "node_modules");
 
   // On Windows, pnpm deploy often crashes with status 3221226505 (access violation).
-  // Fall back to copying from the workspace node_modules and pruning dev deps.
+  // Fall back to copying from the server package node_modules.
   if (process.platform === "win32") {
-    log("Windows detected: using workspace node_modules copy instead of pnpm deploy");
-    const workspaceNodeModules = path.join(ROOT_DIR, "node_modules");
-    if (!fs.existsSync(workspaceNodeModules)) {
-      throw new Error("Workspace node_modules not found");
+    log("Windows detected: using server package node_modules copy instead of pnpm deploy");
+    const serverNodeModules = path.join(SERVER_PACKAGE, "node_modules");
+    if (!fs.existsSync(serverNodeModules)) {
+      throw new Error("Server package node_modules not found at " + serverNodeModules);
     }
 
-    log("Copying workspace node_modules to staging (dereferencing symlinks)...");
-    copyNodeModulesDeref(workspaceNodeModules, stagingNodeModules);
-    log("  Runtime dependencies installed from workspace");
+    log("Copying server node_modules to staging (dereferencing symlinks)...");
+    copyNodeModulesDeref(serverNodeModules, stagingNodeModules);
+    log("  Runtime dependencies installed from server package");
   } else {
     // Use a relative temp directory to avoid Windows pnpm deploy path issues.
     // pnpm deploy has bugs with Windows absolute paths (C:\... gets concatenated).
