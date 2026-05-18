@@ -1,3 +1,4 @@
+import { SettingsRow } from "../../components/settings/SettingsRow";
 import {
   EFFORT_LEVEL_OPTIONS,
   MODEL_OPTIONS,
@@ -18,11 +19,10 @@ export function ModelSettings() {
         {t("modelSettingsTitle")}
       </h2>
       <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("modelSettingsModelTitle")}</strong>
-            <p>{t("modelSettingsModelDescription")}</p>
-          </div>
+        <SettingsRow
+          title={t("modelSettingsModelTitle")}
+          description={t("modelSettingsModelDescription")}
+        >
           <div className="flex gap-[2px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-[2px]">
             {MODEL_OPTIONS.map((opt) => (
               <button
@@ -35,12 +35,11 @@ export function ModelSettings() {
               </button>
             ))}
           </div>
-        </div>
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("modelSettingsEffortTitle")}</strong>
-            <p>{t("modelSettingsEffortDescription")}</p>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          title={t("modelSettingsEffortTitle")}
+          description={t("modelSettingsEffortDescription")}
+        >
           <div className="flex gap-[2px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-[2px]">
             {EFFORT_LEVEL_OPTIONS.map((opt) => (
               <button
@@ -54,7 +53,7 @@ export function ModelSettings() {
               </button>
             ))}
           </div>
-        </div>
+        </SettingsRow>
       </div>
     </section>
   );

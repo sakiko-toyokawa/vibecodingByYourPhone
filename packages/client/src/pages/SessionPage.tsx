@@ -1082,7 +1082,7 @@ export function SessionPageContent({
               {!isEmbedded && !(isWideScreen && isSidebarCollapsed) && (
                 <button
                   type="button"
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent p-1 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                  className="btn-icon h-8 w-8 shrink-0"
                   onClick={isWideScreen ? toggleSidebar : openSidebar}
                   title={
                     isWideScreen
@@ -1137,7 +1137,6 @@ export function SessionPageContent({
                     ref={renameInputRef}
                     type="text"
                     className="min-w-[120px] max-w-[calc(100vw-150px)] rounded border border-[var(--border-input)] bg-[var(--bg-input)] px-1.5 py-0.5 text-sm font-medium text-[var(--text-primary)] focus:border-[var(--focus-border)] focus:outline-none"
-                    style={{ boxShadow: "0 0 0 2px rgba(0,102,204,0.2)" }}
                     value={renameValue}
                     onChange={(e) => setRenameValue(e.target.value)}
                     onKeyDown={handleTitleKeyDown}

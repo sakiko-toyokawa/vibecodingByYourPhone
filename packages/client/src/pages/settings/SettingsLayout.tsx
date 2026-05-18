@@ -56,9 +56,9 @@ function SettingsCategoryItem({
   return (
     <button
       type="button"
-      className={`flex w-full cursor-pointer py-1.5 text-left text-[13px] transition-colors duration-150 ${
+      className={`btn-ghost w-full justify-start text-left text-[13px] ${
         isActive
-          ? "text-[var(--accent-rust)]"
+          ? "!text-[var(--accent-rust)]"
           : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
       }`}
       onClick={onClick}

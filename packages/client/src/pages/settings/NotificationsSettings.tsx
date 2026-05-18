@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { BrowserNotificationToggle } from "../../components/BrowserNotificationToggle";
 import { PushNotificationToggle } from "../../components/PushNotificationToggle";
 import { SettingsSwitch } from "../../components/settings/SettingsFormControls";
+import { SettingsRow } from "../../components/settings/SettingsRow";
 import { useBrowserNotifications } from "../../hooks/useBrowserNotifications";
 import { useConnectedDevices } from "../../hooks/useConnectedDevices";
 import { useNotificationSettings } from "../../hooks/useNotificationSettings";
@@ -232,44 +233,41 @@ export function NotificationsSettings() {
           {t("notificationsServerDescription")}
         </p>
         <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
-          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-            <div className="flex flex-col gap-1">
-              <strong>{t("notificationsToolApprovalsTitle")}</strong>
-              <p>{t("notificationsToolApprovalsDescription")}</p>
-            </div>
+          <SettingsRow
+            title={t("notificationsToolApprovalsTitle")}
+            description={t("notificationsToolApprovalsDescription")}
+          >
             <SettingsSwitch
               checked={settings?.toolApproval ?? true}
               onChange={(checked) => updateSetting("toolApproval", checked)}
               disabled={settingsLoading || !hasSubscriptions}
               ariaLabel={t("notificationsToolApprovalsTitle")}
             />
-          </div>
+          </SettingsRow>
 
-          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-            <div className="flex flex-col gap-1">
-              <strong>{t("notificationsQuestionsTitle")}</strong>
-              <p>{t("notificationsQuestionsDescription")}</p>
-            </div>
+          <SettingsRow
+            title={t("notificationsQuestionsTitle")}
+            description={t("notificationsQuestionsDescription")}
+          >
             <SettingsSwitch
               checked={settings?.userQuestion ?? true}
               onChange={(checked) => updateSetting("userQuestion", checked)}
               disabled={settingsLoading || !hasSubscriptions}
               ariaLabel={t("notificationsQuestionsTitle")}
             />
-          </div>
+          </SettingsRow>
 
-          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-            <div className="flex flex-col gap-1">
-              <strong>{t("notificationsSessionHaltedTitle")}</strong>
-              <p>{t("notificationsSessionHaltedDescription")}</p>
-            </div>
+          <SettingsRow
+            title={t("notificationsSessionHaltedTitle")}
+            description={t("notificationsSessionHaltedDescription")}
+          >
             <SettingsSwitch
               checked={settings?.sessionHalted ?? true}
               onChange={(checked) => updateSetting("sessionHalted", checked)}
               disabled={settingsLoading || !hasSubscriptions}
               ariaLabel={t("notificationsSessionHaltedTitle")}
             />
-          </div>
+          </SettingsRow>
 
           {!hasSubscriptions && !devicesLoading && (
             <p className="text-[var(--text-muted)] [font-size:var(--font-size-sm)] p-[var(--space-2)]">
@@ -294,17 +292,16 @@ export function NotificationsSettings() {
           <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
             <BrowserNotificationToggle />
             {isDesktopTauri && (
-              <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-                <div className="flex flex-col gap-1">
-                  <strong>{t("desktopNativeNotifyTitle")}</strong>
-                  <p>{t("desktopNativeNotifyDescription")}</p>
-                </div>
+              <SettingsRow
+                title={t("desktopNativeNotifyTitle")}
+                description={t("desktopNativeNotifyDescription")}
+              >
                 <SettingsSwitch
                   checked={desktopNotifyEnabled}
                   onChange={toggleDesktopNotify}
                   ariaLabel={t("desktopNativeNotifyTitle")}
                 />
-              </div>
+              </SettingsRow>
             )}
           </div>
         </section>
@@ -323,17 +320,16 @@ export function NotificationsSettings() {
             {t("notificationsNativeDescription")}
           </p>
           <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
-            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-              <div className="flex flex-col gap-1">
-                <strong>{t("mobileNativeNotifyTitle")}</strong>
-                <p>{t("mobileNativeNotifyDescription")}</p>
-              </div>
+            <SettingsRow
+              title={t("mobileNativeNotifyTitle")}
+              description={t("mobileNativeNotifyDescription")}
+            >
               <SettingsSwitch
                 checked={desktopNotifyEnabled}
                 onChange={toggleDesktopNotify}
                 ariaLabel={t("mobileNativeNotifyTitle")}
               />
-            </div>
+            </SettingsRow>
           </div>
         </section>
       )}

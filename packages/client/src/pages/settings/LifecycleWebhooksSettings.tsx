@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { SettingsTextInput } from "../../components/settings/SettingsFormControls";
+import { SettingsRow } from "../../components/settings/SettingsRow";
 import { useServerSettings } from "../../hooks/useServerSettings";
 import { useI18n } from "../../i18n";
 
@@ -73,11 +74,10 @@ export function LifecycleWebhooksSettings() {
       </p>
 
       <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
-        <label className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("lifecycleWebhooksEnableTitle")}</strong>
-            <p>{t("lifecycleWebhooksEnableDescription")}</p>
-          </div>
+        <SettingsRow
+          title={t("lifecycleWebhooksEnableTitle")}
+          description={t("lifecycleWebhooksEnableDescription")}
+        >
           <input
             type="checkbox"
             checked={enabled}
@@ -85,19 +85,15 @@ export function LifecycleWebhooksSettings() {
               void updateSetting("lifecycleWebhooksEnabled", e.target.checked)
             }
           />
-        </label>
+        </SettingsRow>
 
-        <div
-          className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]"
-          style={{ flexDirection: "column", alignItems: "stretch" }}
+        <SettingsRow
+          title={t("lifecycleWebhooksUrlTitle")}
+          description={t("lifecycleWebhooksUrlDescription")}
         >
-          <div className="flex flex-col gap-1">
-            <strong>{t("lifecycleWebhooksUrlTitle")}</strong>
-            <p>{t("lifecycleWebhooksUrlDescription")}</p>
-          </div>
           <SettingsTextInput
             type="url"
-            className="mt-[var(--space-3)] w-full"
+            className="w-full min-w-[260px]"
             value={url}
             onChange={(e) => {
               const value = e.target.value.slice(0, MAX_URL_LENGTH);
@@ -107,19 +103,15 @@ export function LifecycleWebhooksSettings() {
             }}
             placeholder="https://example.com/hooks/yep"
           />
-        </div>
+        </SettingsRow>
 
-        <div
-          className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]"
-          style={{ flexDirection: "column", alignItems: "stretch" }}
+        <SettingsRow
+          title={t("lifecycleWebhooksTokenTitle")}
+          description={t("lifecycleWebhooksTokenDescription")}
         >
-          <div className="flex flex-col gap-1">
-            <strong>{t("lifecycleWebhooksTokenTitle")}</strong>
-            <p>{t("lifecycleWebhooksTokenDescription")}</p>
-          </div>
           <SettingsTextInput
             type="password"
-            className="mt-[var(--space-3)] w-full"
+            className="w-full min-w-[260px]"
             value={token}
             onChange={(e) => {
               const value = e.target.value.slice(0, MAX_TOKEN_LENGTH);
@@ -129,13 +121,12 @@ export function LifecycleWebhooksSettings() {
             }}
             placeholder={t("lifecycleWebhooksTokenPlaceholder")}
           />
-        </div>
+        </SettingsRow>
 
-        <label className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("lifecycleWebhooksDryRunTitle")}</strong>
-            <p>{t("lifecycleWebhooksDryRunDescription")}</p>
-          </div>
+        <SettingsRow
+          title={t("lifecycleWebhooksDryRunTitle")}
+          description={t("lifecycleWebhooksDryRunDescription")}
+        >
           <input
             type="checkbox"
             checked={dryRun}
@@ -143,7 +134,7 @@ export function LifecycleWebhooksSettings() {
               void updateSetting("lifecycleWebhookDryRun", e.target.checked)
             }
           />
-        </label>
+        </SettingsRow>
 
         <div
           className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]"

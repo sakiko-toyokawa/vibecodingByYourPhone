@@ -100,7 +100,7 @@ function getProviderBadgeClass(provider: string | undefined): string {
     case "local":
       return "bg-gradient-to-br from-[#6b7280] to-[#9ca3af] text-white";
     default:
-      return "bg-gradient-to-br from-[#d97706] to-[#f59e0b] text-white";
+      return "bg-gradient-to-br from-[#D97757] to-[#99462a] text-white";
   }
 }
 

@@ -42,7 +42,7 @@ function ActionButton({
   return (
     <button
       type="button"
-      className="inline-flex min-w-[7.5rem] flex-1 items-center justify-center rounded-sm border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-surface)] transition-colors hover:bg-[var(--surface-container-high)] sm:min-w-0 sm:flex-none"
+      className="inline-flex min-w-[5.5rem] flex-none items-center justify-center rounded-sm border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-surface)] transition-colors hover:bg-[var(--surface-container-high)] sm:min-w-[7.5rem]"
       onClick={onClick}
     >
       {label}

@@ -218,7 +218,7 @@ export function CodeEditorPage() {
   const mobileToolbarActions = !isWideScreen ? (
     <button
       type="button"
-      className="inline-flex min-w-[7.5rem] flex-1 items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)] sm:min-w-0 sm:flex-none"
+      className="inline-flex min-w-[5.5rem] flex-none items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)] sm:min-w-[7.5rem]"
       onClick={() => setShowMobileTree(true)}
     >
       Files

@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { RemoteAccessSetup } from "../../components/RemoteAccessSetup";
 import { SettingsSwitch } from "../../components/settings/SettingsFormControls";
+import { SettingsRow } from "../../components/settings/SettingsRow";
 import { useOptionalRemoteConnection } from "../../contexts/RemoteConnectionContext";
 import { useServerSettings } from "../../hooks/useServerSettings";
 import { useI18n } from "../../i18n";
@@ -21,15 +22,16 @@ export function RemoteAccessSettings() {
   const persistSessionsToggle = (
     <>
       <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("developmentPersistRemoteTitle")}</strong>
-            <p>
+        <SettingsRow
+          title={t("developmentPersistRemoteTitle")}
+          description={
+            <>
               {t("developmentPersistRemoteDescriptionPrefix")}{" "}
               <code>remote-sessions.json</code> so relay reconnect survives
               {t("developmentPersistRemoteDescriptionSuffix")}
-            </p>
-          </div>
+            </>
+          }
+        >
           <SettingsSwitch
             checked={settings?.persistRemoteSessionsToDisk ?? false}
             disabled={isLoading}
@@ -38,7 +40,7 @@ export function RemoteAccessSettings() {
             }
             ariaLabel={t("developmentPersistRemoteTitle")}
           />
-        </div>
+        </SettingsRow>
       </div>
 
       {error && (
@@ -70,11 +72,10 @@ export function RemoteAccessSettings() {
           {t("remoteAccessConnectedDescription")}
         </p>
         <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
-          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-            <div className="flex flex-col gap-1">
-              <strong>{t("remoteAccessCurrentHostTitle")}</strong>
-              <p>{displayName}</p>
-            </div>
+          <SettingsRow
+            title={t("remoteAccessCurrentHostTitle")}
+            description={displayName}
+          >
             <button
               type="button"
               className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
@@ -82,12 +83,11 @@ export function RemoteAccessSettings() {
             >
               {t("sidebarSwitchHost")}
             </button>
-          </div>
-          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-            <div className="flex flex-col gap-1">
-              <strong>{t("remoteAccessLogoutTitle")}</strong>
-              <p>{t("remoteAccessLogoutDescription")}</p>
-            </div>
+          </SettingsRow>
+          <SettingsRow
+            title={t("remoteAccessLogoutTitle")}
+            description={t("remoteAccessLogoutDescription")}
+          >
             <button
               type="button"
               className="px-[var(--space-3)] py-[var(--space-2)] rounded-[var(--radius-sm)] text-sm cursor-pointer transition-colors duration-150 whitespace-nowrap border bg-[var(--error-color)] border-[var(--error-color)] text-white hover:bg-[var(--error-hover,#b91c1c)] hover:border-[var(--error-hover,#b91c1c)] disabled:opacity-50 disabled:cursor-not-allowed"
@@ -95,7 +95,7 @@ export function RemoteAccessSettings() {
             >
               {t("remoteAccessLogout")}
             </button>
-          </div>
+          </SettingsRow>
         </div>
         {persistSessionsToggle}
       </section>

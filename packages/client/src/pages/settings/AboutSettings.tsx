@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, fetchJSON } from "../../api/client";
 import { SettingsSwitch } from "../../components/settings/SettingsFormControls";
+import { SettingsRow } from "../../components/settings/SettingsRow";
 import { useOptionalRemoteConnection } from "../../contexts/RemoteConnectionContext";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { useOnboarding } from "../../hooks/useOnboarding";
@@ -8,7 +9,10 @@ import { usePwaInstall } from "../../hooks/usePwaInstall";
 import { useVersion } from "../../hooks/useVersion";
 import { useI18n } from "../../i18n";
 import { activityBus } from "../../lib/activityBus";
-import { isDesktopTauriApp, restartDesktopServer } from "../../lib/desktopRuntime";
+import {
+  isDesktopTauriApp,
+  restartDesktopServer,
+} from "../../lib/desktopRuntime";
 
 export function AboutSettings() {
   const { t } = useI18n();
@@ -77,15 +81,14 @@ export function AboutSettings() {
       <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
         {/* Only show Install option if install is possible or already installed */}
         {(canInstall || isInstalled) && (
-          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-            <div className="flex flex-col gap-1">
-              <strong>{t("aboutInstallTitle")}</strong>
-              <p>
-                {isInstalled
-                  ? t("aboutInstalledDescription")
-                  : t("aboutInstallDescription")}
-              </p>
-            </div>
+          <SettingsRow
+            title={t("aboutInstallTitle")}
+            description={
+              isInstalled
+                ? t("aboutInstalledDescription")
+                : t("aboutInstallDescription")
+            }
+          >
             {isInstalled ? (
               <span className="px-[var(--space-2)] py-[var(--space-1)] rounded-[var(--radius-sm)] bg-[var(--text-primary)] text-white [font-size:var(--font-size-sm)] font-medium">
                 {t("aboutInstalled")}
@@ -99,53 +102,56 @@ export function AboutSettings() {
                 {t("aboutInstall")}
               </button>
             )}
-          </div>
+          </SettingsRow>
         )}
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("aboutVersionTitle")}</strong>
-            <p>
-              {t("aboutServerVersion")}{" "}
-              {versionInfo ? (
-                <>
-                  v{versionInfo.current}
-                  {versionInfo.updateAvailable && versionInfo.latest ? (
-                    <span className="text-[var(--success-color)] font-medium">
-                      {" "}
-                      {t("aboutVersionAvailable", {
-                        version: versionInfo.latest,
-                      })}
-                    </span>
-                  ) : versionInfo.latest ? (
-                    <span className="text-[var(--text-muted)]">
-                      {" "}
-                      {t("aboutUpToDate")}
-                    </span>
-                  ) : null}
-                </>
-              ) : (
-                t("loginLoading")
+        <SettingsRow
+          title={t("aboutVersionTitle")}
+          description={
+            <>
+              <p>
+                {t("aboutServerVersion")}{" "}
+                {versionInfo ? (
+                  <>
+                    v{versionInfo.current}
+                    {versionInfo.updateAvailable && versionInfo.latest ? (
+                      <span className="text-[var(--success-color)] font-medium">
+                        {" "}
+                        {t("aboutVersionAvailable", {
+                          version: versionInfo.latest,
+                        })}
+                      </span>
+                    ) : versionInfo.latest ? (
+                      <span className="text-[var(--text-muted)]">
+                        {" "}
+                        {t("aboutUpToDate")}
+                      </span>
+                    ) : null}
+                  </>
+                ) : (
+                  t("loginLoading")
+                )}
+              </p>
+              <p>
+                {t("aboutClientVersion")} v{clientVersion}
+              </p>
+              {versionError && (
+                <p className="text-xs text-[var(--warning-color)] mt-1">
+                  {t("aboutUnableRefresh")}
+                </p>
               )}
-            </p>
-            <p>
-              {t("aboutClientVersion")} v{clientVersion}
-            </p>
-            {versionError && (
-              <p className="text-xs text-[var(--warning-color)] mt-1">
-                {t("aboutUnableRefresh")}
-              </p>
-            )}
-            {showRelayResumeUpdateWarning && (
-              <p className="text-xs text-[var(--warning-color)] mt-1">
-                {t("aboutRelayResumeWarning")}
-              </p>
-            )}
-            {versionInfo?.updateAvailable && (
-              <p className="mt-[var(--space-1)] [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
-                {t("aboutUpdateHint")}
-              </p>
-            )}
-          </div>
+              {showRelayResumeUpdateWarning && (
+                <p className="text-xs text-[var(--warning-color)] mt-1">
+                  {t("aboutRelayResumeWarning")}
+                </p>
+              )}
+              {versionInfo?.updateAvailable && (
+                <p className="mt-[var(--space-1)] [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                  {t("aboutUpdateHint")}
+                </p>
+              )}
+            </>
+          }
+        >
           <button
             type="button"
             className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
@@ -154,20 +160,23 @@ export function AboutSettings() {
           >
             {versionLoading ? t("aboutChecking") : t("aboutCheckUpdates")}
           </button>
-        </div>
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("developmentRestartTitle")}</strong>
-            <p>{t("developmentRestartDescription")}</p>
-            {activeWorkers > 0 && !restarting && (
-              <p className="text-xs text-[var(--warning-color)] mt-1">
-                {t("developmentInterruptedWarning", {
-                  count: activeWorkers,
-                  suffix: activeWorkers !== 1 ? "s " : " ",
-                })}
-              </p>
-            )}
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          title={t("developmentRestartTitle")}
+          description={
+            <>
+              <p>{t("developmentRestartDescription")}</p>
+              {activeWorkers > 0 && !restarting && (
+                <p className="text-xs text-[var(--warning-color)] mt-1">
+                  {t("developmentInterruptedWarning", {
+                    count: activeWorkers,
+                    suffix: activeWorkers !== 1 ? "s " : " ",
+                  })}
+                </p>
+              )}
+            </>
+          }
+        >
           <button
             type="button"
             className={`px-[var(--space-2)] py-[var(--space-2)] bg-[var(--bg-hover)] border border-[var(--border-color)] rounded-[var(--radius-sm)] text-[var(--text-primary)] [font-size:var(--font-size-sm)] cursor-pointer transition-[background] duration-150 whitespace-nowrap ${activeWorkers > 0 ? "bg-[var(--error-color)] border-[var(--error-color)] text-white hover:bg-[var(--error-hover,#b91c1c)] hover:border-[var(--error-hover,#b91c1c)]" : "hover:bg-[var(--border-color)]"}`}
@@ -180,12 +189,11 @@ export function AboutSettings() {
                 ? t("developmentRestartAnyway")
                 : t("developmentRestart")}
           </button>
-        </div>
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("aboutReportBugTitle")}</strong>
-            <p>{t("aboutReportBugDescription")}</p>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          title={t("aboutReportBugTitle")}
+          description={t("aboutReportBugDescription")}
+        >
           <a
             href="https://github.com/kzahel/yepanywhere/issues"
             target="_blank"
@@ -194,12 +202,11 @@ export function AboutSettings() {
           >
             {t("aboutReportBug")}
           </a>
-        </div>
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("aboutSetupWizardTitle")}</strong>
-            <p>{t("aboutSetupWizardDescription")}</p>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          title={t("aboutSetupWizardTitle")}
+          description={t("aboutSetupWizardDescription")}
+        >
           <button
             type="button"
             className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
@@ -207,18 +214,17 @@ export function AboutSettings() {
           >
             {t("aboutLaunchWizard")}
           </button>
-        </div>
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("aboutDiagnosticsTitle")}</strong>
-            <p>{t("aboutDiagnosticsDescription")}</p>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          title={t("aboutDiagnosticsTitle")}
+          description={t("aboutDiagnosticsDescription")}
+        >
           <SettingsSwitch
             checked={remoteLogCollectionEnabled}
             onChange={setRemoteLogCollectionEnabled}
             ariaLabel={t("aboutDiagnosticsTitle")}
           />
-        </div>
+        </SettingsRow>
       </div>
     </section>
   );

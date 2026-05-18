@@ -200,12 +200,12 @@ export function EditorToolbar({
           )}
         </div>
 
-        <div className="flex w-full flex-wrap items-stretch gap-2 sm:w-auto sm:justify-end">
+        <div className="flex w-full flex-wrap items-center justify-center gap-2 sm:w-auto sm:justify-end">
           {auxiliaryActions}
           {onAskAi && (
             <button
               type="button"
-              className="inline-flex min-w-[7.5rem] flex-1 items-center justify-center gap-2 rounded-sm border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-surface)] transition-colors hover:bg-[var(--surface-container-high)] disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-0 sm:flex-none"
+              className="inline-flex min-w-[5.5rem] flex-none items-center justify-center gap-2 rounded-sm border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-surface)] transition-colors hover:bg-[var(--surface-container-high)] disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[7.5rem]"
               onClick={handleAskAiOpen}
               disabled={!canAskAi}
               title={
@@ -222,7 +222,7 @@ export function EditorToolbar({
           )}
           <button
             type="button"
-            className="inline-flex min-w-[7.5rem] flex-1 items-center justify-center gap-2 rounded-sm border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-surface)] transition-colors hover:bg-[var(--surface-container-high)] disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-0 sm:flex-none"
+            className="inline-flex min-w-[5.5rem] flex-none items-center justify-center gap-2 rounded-sm border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-surface)] transition-colors hover:bg-[var(--surface-container-high)] disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[7.5rem]"
             onClick={onOpenAiEdit}
             disabled={!filePath || readOnly || !hasSelection}
             title={
@@ -236,7 +236,7 @@ export function EditorToolbar({
           </button>
           <button
             type="button"
-            className="inline-flex min-w-[7.5rem] flex-1 items-center justify-center gap-2 rounded-sm bg-[var(--primary)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-0 sm:flex-none"
+            className="inline-flex min-w-[5.5rem] flex-none items-center justify-center gap-2 rounded-sm bg-[var(--primary)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[7.5rem]"
             onClick={onSave}
             disabled={!filePath || readOnly || !dirty || saving}
           >
@@ -262,7 +262,7 @@ export function EditorToolbar({
             <div className="flex shrink-0 flex-row gap-2 lg:w-[9rem] lg:flex-col">
               <button
                 type="button"
-                className="inline-flex min-w-[7rem] flex-1 items-center justify-center rounded-sm bg-[var(--primary)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex min-w-[5.5rem] flex-none items-center justify-center rounded-sm bg-[var(--primary)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 lg:flex-1 lg:min-w-0"
                 onClick={() => {
                   void handleAskAiSubmit();
                 }}
@@ -272,7 +272,7 @@ export function EditorToolbar({
               </button>
               <button
                 type="button"
-                className="inline-flex min-w-[7rem] flex-1 items-center justify-center rounded-sm border border-[var(--outline-variant)] bg-[var(--surface)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-surface)] transition-colors hover:bg-[var(--surface-container-high)]"
+                className="inline-flex min-w-[5.5rem] flex-none items-center justify-center rounded-sm border border-[var(--outline-variant)] bg-[var(--surface)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-surface)] transition-colors hover:bg-[var(--surface-container-high)] lg:flex-1 lg:min-w-0"
                 onClick={() => setAskAiOpen(false)}
                 disabled={askAiSending}
               >

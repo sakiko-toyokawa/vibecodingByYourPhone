@@ -5,6 +5,7 @@ import {
   SettingsSwitch,
   SettingsTextInput,
 } from "../../components/settings/SettingsFormControls";
+import { SettingsRow } from "../../components/settings/SettingsRow";
 import { useOptionalAuth } from "../../contexts/AuthContext";
 import { useOptionalRemoteConnection } from "../../contexts/RemoteConnectionContext";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
@@ -277,57 +278,54 @@ export function LocalAccessSettings() {
 
         {/* Current status */}
         <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
-          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-            <div className="flex flex-col gap-1">
-              <strong>{t("localAccessStatusTitle")}</strong>
-              <p>
-                {serverInfo
-                  ? (() => {
-                      const networkHost = binding?.network.host;
-                      const networkPort =
-                        binding?.network.port ?? serverInfo.port;
-                      const isAllInterfaces =
-                        networkHost === "0.0.0.0" || networkHost === "::";
-                      const samePort = networkPort === serverInfo.port;
+          <SettingsRow
+            title={t("localAccessStatusTitle")}
+            description={
+              serverInfo
+                ? (() => {
+                    const networkHost = binding?.network.host;
+                    const networkPort =
+                      binding?.network.port ?? serverInfo.port;
+                    const isAllInterfaces =
+                      networkHost === "0.0.0.0" || networkHost === "::";
+                    const samePort = networkPort === serverInfo.port;
 
-                      // If bound to all interfaces on same port, just show that
-                      if (
-                        binding?.network.enabled &&
-                        isAllInterfaces &&
-                        samePort
-                      ) {
-                        return (
-                          <>
-                            {t("localAccessListeningOn")}{" "}
-                            <code>
-                              {networkHost}:{networkPort}
-                            </code>
-                          </>
-                        );
-                      }
-
-                      // Otherwise show localhost, and optionally network
+                    if (
+                      binding?.network.enabled &&
+                      isAllInterfaces &&
+                      samePort
+                    ) {
                       return (
                         <>
                           {t("localAccessListeningOn")}{" "}
                           <code>
-                            {serverInfo.host}:{serverInfo.port}
+                            {networkHost}:{networkPort}
                           </code>
-                          {binding?.network.enabled && networkHost && (
-                            <>
-                              {" "}
-                              {t("localAccessListeningAnd")}{" "}
-                              <code>
-                                {networkHost}:{networkPort}
-                              </code>
-                            </>
-                          )}
                         </>
                       );
-                    })()
-                  : t("localAccessUnableToFetch")}
-              </p>
-            </div>
+                    }
+
+                    return (
+                      <>
+                        {t("localAccessListeningOn")}{" "}
+                        <code>
+                          {serverInfo.host}:{serverInfo.port}
+                        </code>
+                        {binding?.network.enabled && networkHost && (
+                          <>
+                            {" "}
+                            {t("localAccessListeningAnd")}{" "}
+                            <code>
+                              {networkHost}:{networkPort}
+                            </code>
+                          </>
+                        )}
+                      </>
+                    );
+                  })()
+                : t("localAccessUnableToFetch")
+            }
+          >
             {serverInfo?.localhostOnly && !binding?.network.enabled && (
               <span className="px-[var(--space-1)] py-[var(--space-2)] rounded-[var(--radius-sm)] text-sm font-medium bg-[var(--bg-hover)] text-[var(--text-secondary)]">
                 {t("localAccessBadgeLocalOnly")}
@@ -339,7 +337,7 @@ export function LocalAccessSettings() {
                   {t("localAccessBadgeNetworkExposed")}
                 </span>
               )}
-          </div>
+          </SettingsRow>
         </div>
 
         {/* Network Configuration */}
@@ -350,11 +348,10 @@ export function LocalAccessSettings() {
             handleApplyChanges();
           }}
         >
-          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-            <div className="flex flex-col gap-1">
-              <strong>{t("localAccessListeningPortTitle")}</strong>
-              <p>{t("localAccessListeningPortDescription")}</p>
-            </div>
+          <SettingsRow
+            title={t("localAccessListeningPortTitle")}
+            description={t("localAccessListeningPortDescription")}
+          >
             {binding?.localhost.overriddenByCli ? (
               <span className="text-sm text-[var(--text-primary)]">
                 {binding.localhost.port}{" "}
@@ -376,13 +373,12 @@ export function LocalAccessSettings() {
                 autoComplete="off"
               />
             )}
-          </div>
+          </SettingsRow>
 
-          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-            <div className="flex flex-col gap-1">
-              <strong>{t("localAccessNetworkTitle")}</strong>
-              <p>{t("localAccessNetworkDescription")}</p>
-            </div>
+          <SettingsRow
+            title={t("localAccessNetworkTitle")}
+            description={t("localAccessNetworkDescription")}
+          >
             {binding?.network.overriddenByCli ? (
               <span className="text-sm text-[var(--text-primary)]">
                 {binding.network.host}:{binding.network.port}{" "}
@@ -400,14 +396,13 @@ export function LocalAccessSettings() {
                 ariaLabel={t("localAccessNetworkTitle")}
               />
             )}
-          </div>
+          </SettingsRow>
 
           {networkEnabled && !binding?.network.overriddenByCli && binding && (
-            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-              <div className="flex flex-col gap-1">
-                <strong>{t("localAccessInterfaceTitle")}</strong>
-                <p>{t("localAccessInterfaceDescription")}</p>
-              </div>
+            <SettingsRow
+              title={t("localAccessInterfaceTitle")}
+              description={t("localAccessInterfaceDescription")}
+            >
               <FilterDropdown
                 label={t("localAccessInterfaceTitle")}
                 placeholder={t("localAccessInterfacePlaceholder")}
@@ -431,32 +426,30 @@ export function LocalAccessSettings() {
                   updateHasChanges({ iface: newInterface });
                 }}
               />
-            </div>
+            </SettingsRow>
           )}
 
           {networkEnabled &&
             !binding?.network.overriddenByCli &&
             selectedInterface === "custom" && (
-              <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-                <div className="flex flex-col gap-1">
-                  <strong>{t("localAccessCustomIpTitle")}</strong>
-                  <p>{t("localAccessCustomIpDescription")}</p>
-                </div>
+              <SettingsRow
+                title={t("localAccessCustomIpTitle")}
+                description={t("localAccessCustomIpDescription")}
+              >
                 <SettingsTextInput
                   type="text"
                   placeholder="192.168.1.100"
                   value={customIp}
                   onChange={(e) => setCustomIp(e.target.value)}
                 />
-              </div>
+              </SettingsRow>
             )}
 
           {/* Allowed Hosts — applies even on localhost (reverse proxy may use different hostname) */}
-          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-            <div className="flex flex-col gap-1">
-              <strong>{t("localAccessAllowAllHostsTitle")}</strong>
-              <p>{t("localAccessAllowAllHostsDescription")}</p>
-            </div>
+          <SettingsRow
+            title={t("localAccessAllowAllHostsTitle")}
+            description={t("localAccessAllowAllHostsDescription")}
+          >
             <SettingsSwitch
               checked={allowAllHostsToggle}
               onChange={(checked) => {
@@ -465,13 +458,12 @@ export function LocalAccessSettings() {
               }}
               ariaLabel={t("localAccessAllowAllHostsTitle")}
             />
-          </div>
+          </SettingsRow>
           {!allowAllHostsToggle && (
-            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-              <div className="flex flex-col gap-1">
-                <strong>{t("localAccessAllowedHostsTitle")}</strong>
-                <p>{t("localAccessAllowedHostsDescription")}</p>
-              </div>
+            <SettingsRow
+              title={t("localAccessAllowedHostsTitle")}
+              description={t("localAccessAllowedHostsDescription")}
+            >
               <SettingsTextInput
                 type="text"
                 className="min-w-[260px]"
@@ -482,7 +474,7 @@ export function LocalAccessSettings() {
                   updateHasChanges({ hostsText: e.target.value });
                 }}
               />
-            </div>
+            </SettingsRow>
           )}
           <p className="text-xs text-[var(--text-muted)] mt-1">
             {t("localAccessAllowedHostsHint")}
@@ -490,11 +482,10 @@ export function LocalAccessSettings() {
 
           {/* Require Password toggle */}
           {!auth.authDisabledByEnv && (
-            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-              <div className="flex flex-col gap-1">
-                <strong>{t("localAccessRequirePasswordTitle")}</strong>
-                <p>{t("localAccessRequirePasswordDescription")}</p>
-              </div>
+            <SettingsRow
+              title={t("localAccessRequirePasswordTitle")}
+              description={t("localAccessRequirePasswordDescription")}
+            >
               <SettingsSwitch
                 checked={requirePassword}
                 onChange={(checked) => {
@@ -503,7 +494,7 @@ export function LocalAccessSettings() {
                 }}
                 ariaLabel={t("localAccessRequirePasswordTitle")}
               />
-            </div>
+            </SettingsRow>
           )}
 
           {/* Password fields - shown when auth is on */}
@@ -521,15 +512,14 @@ export function LocalAccessSettings() {
                 }}
                 tabIndex={-1}
               />
-              <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-                <div className="flex flex-col gap-1">
-                  <strong>{t("localAccessPasswordTitle")}</strong>
-                  <p>
-                    {auth.authEnabled
-                      ? t("localAccessPasswordKeepCurrent")
-                      : t("localAccessPasswordMinLength")}
-                  </p>
-                </div>
+              <SettingsRow
+                title={t("localAccessPasswordTitle")}
+                description={
+                  auth.authEnabled
+                    ? t("localAccessPasswordKeepCurrent")
+                    : t("localAccessPasswordMinLength")
+                }
+              >
                 <SettingsTextInput
                   type="password"
                   className="min-w-[220px]"
@@ -545,12 +535,9 @@ export function LocalAccessSettings() {
                       : t("localAccessPasswordPlaceholder")
                   }
                 />
-              </div>
+              </SettingsRow>
               {authPassword.length > 0 && (
-                <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-                  <div className="flex flex-col gap-1">
-                    <strong>{t("localAccessConfirmPasswordTitle")}</strong>
-                  </div>
+                <SettingsRow title={t("localAccessConfirmPasswordTitle")}>
                   <SettingsTextInput
                     type="password"
                     className="min-w-[220px]"
@@ -559,7 +546,7 @@ export function LocalAccessSettings() {
                     autoComplete="new-password"
                     placeholder={t("localAccessConfirmPasswordPlaceholder")}
                   />
-                </div>
+                </SettingsRow>
               )}
               {!auth.authEnabled && (
                 <p className="text-xs text-[var(--text-muted)] mt-1">
@@ -573,11 +560,10 @@ export function LocalAccessSettings() {
           {auth.hasDesktopToken &&
             !requirePassword &&
             !auth.authDisabledByEnv && (
-              <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-                <div className="flex flex-col gap-1">
-                  <strong>{t("localAccessLocalhostOpenTitle")}</strong>
-                  <p>{t("localAccessLocalhostOpenDescription")}</p>
-                </div>
+              <SettingsRow
+                title={t("localAccessLocalhostOpenTitle")}
+                description={t("localAccessLocalhostOpenDescription")}
+              >
                 <SettingsSwitch
                   checked={localhostOpenToggle}
                   onChange={(checked) => {
@@ -586,7 +572,7 @@ export function LocalAccessSettings() {
                   }}
                   ariaLabel={t("localAccessLocalhostOpenTitle")}
                 />
-              </div>
+              </SettingsRow>
             )}
 
           {auth.authDisabledByEnv && (
@@ -598,7 +584,7 @@ export function LocalAccessSettings() {
           {/* Apply button - always visible */}
           <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
             {formError && (
-              <p className="text-[var(--error-color)] text-sm p-[var(--space-2)] bg-[rgba(199,78,57,0.1)] rounded-[var(--radius-md)]">
+              <p className="text-[var(--error-color)] text-sm p-[var(--space-2)] bg-[var(--bg-error)] rounded-[var(--radius-md)]">
                 {formError}
               </p>
             )}
@@ -617,11 +603,10 @@ export function LocalAccessSettings() {
         {/* Logout - shown when auth is enabled */}
         {auth.authEnabled && auth.isAuthenticated && (
           <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
-            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-              <div className="flex flex-col gap-1">
-                <strong>{t("remoteAccessLogoutTitle")}</strong>
-                <p>{t("localAccessLogoutDescription")}</p>
-              </div>
+            <SettingsRow
+              title={t("remoteAccessLogoutTitle")}
+              description={t("localAccessLogoutDescription")}
+            >
               <button
                 type="button"
                 className="px-[var(--space-3)] py-[var(--space-2)] rounded-[var(--radius-sm)] text-sm cursor-pointer transition-colors duration-150 whitespace-nowrap border bg-[var(--error-color)] border-[var(--error-color)] text-white hover:bg-[var(--error-hover,#b91c1c)] hover:border-[var(--error-hover,#b91c1c)] disabled:opacity-50 disabled:cursor-not-allowed"
@@ -629,7 +614,7 @@ export function LocalAccessSettings() {
               >
                 {t("remoteAccessLogout")}
               </button>
-            </div>
+            </SettingsRow>
           </div>
         )}
       </section>
@@ -650,11 +635,10 @@ export function LocalAccessSettings() {
           {t("localAccessRemoteDescription")}
         </p>
         <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
-          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-            <div className="flex flex-col gap-1">
-              <strong>{t("remoteAccessLogoutTitle")}</strong>
-              <p>{t("localAccessRemoteLogoutDescription")}</p>
-            </div>
+          <SettingsRow
+            title={t("remoteAccessLogoutTitle")}
+            description={t("localAccessRemoteLogoutDescription")}
+          >
             <button
               type="button"
               className="px-[var(--space-3)] py-[var(--space-2)] rounded-[var(--radius-sm)] text-sm cursor-pointer transition-colors duration-150 whitespace-nowrap border bg-[var(--error-color)] border-[var(--error-color)] text-white hover:bg-[var(--error-hover,#b91c1c)] hover:border-[var(--error-hover,#b91c1c)] disabled:opacity-50 disabled:cursor-not-allowed"
@@ -662,18 +646,17 @@ export function LocalAccessSettings() {
             >
               {t("remoteAccessLogout")}
             </button>
-          </div>
-          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-            <div className="flex flex-col gap-1">
-              <strong>{t("localAccessRelayDebugTitle")}</strong>
-              <p>{t("localAccessRelayDebugDescription")}</p>
-            </div>
+          </SettingsRow>
+          <SettingsRow
+            title={t("localAccessRelayDebugTitle")}
+            description={t("localAccessRelayDebugDescription")}
+          >
             <SettingsSwitch
               checked={relayDebugEnabled}
               onChange={setRelayDebugEnabled}
               ariaLabel={t("localAccessRelayDebugTitle")}
             />
-          </div>
+          </SettingsRow>
         </div>
       </section>
     );

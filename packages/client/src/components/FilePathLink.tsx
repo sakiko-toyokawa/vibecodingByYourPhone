@@ -177,7 +177,7 @@ function FileViewerModal({
     >
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: click only stops propagation, keyboard handled globally */}
       <dialog
-        className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded w-[90vw] max-w-[1200px] max-h-[85vh] flex flex-col shadow-[0_8px_32px_rgba(0,0,0,0.3)] max-sm:w-screen max-sm:max-w-[100vw] max-sm:max-h-[100dvh] max-sm:h-[100dvh] max-sm:rounded-none max-sm:border-none"
+        className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded w-[90vw] max-w-[1200px] max-h-[85vh] flex flex-col shadow-[0_8px_32px_var(--bg-overlay)] max-sm:w-screen max-sm:max-w-[100vw] max-sm:max-h-[100dvh] max-sm:h-[100dvh] max-sm:rounded-none max-sm:border-none"
         open
         onClick={(e) => e.stopPropagation()}
       >

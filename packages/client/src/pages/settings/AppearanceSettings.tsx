@@ -1,5 +1,6 @@
 import type { FilterOption } from "../../components/FilterDropdown";
 import { SettingsSelect } from "../../components/settings/SettingsFormControls";
+import { SettingsRow } from "../../components/settings/SettingsRow";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { FONT_SIZES, useFontSize } from "../../hooks/useFontSize";
 import { useFunPhrases } from "../../hooks/useFunPhrases";
@@ -35,11 +36,10 @@ export function AppearanceSettings() {
         {t("appearanceSectionTitle")}
       </h2>
       <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("appearanceLanguageTitle")}</strong>
-            <p>{t("appearanceLanguageDescription")}</p>
-          </div>
+        <SettingsRow
+          title={t("appearanceLanguageTitle")}
+          description={t("appearanceLanguageDescription")}
+        >
           <SettingsSelect
             label={t("appearanceLanguageTitle")}
             options={localeOptions}
@@ -51,12 +51,11 @@ export function AppearanceSettings() {
               }
             }}
           />
-        </div>
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("appearanceFontSizeTitle")}</strong>
-            <p>{t("appearanceFontSizeDescription")}</p>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          title={t("appearanceFontSizeTitle")}
+          description={t("appearanceFontSizeDescription")}
+        >
           <div className="flex gap-[2px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-[2px]">
             {FONT_SIZES.map((size) => (
               <button
@@ -69,12 +68,11 @@ export function AppearanceSettings() {
               </button>
             ))}
           </div>
-        </div>
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("appearanceTabSizeTitle")}</strong>
-            <p>{t("appearanceTabSizeDescription")}</p>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          title={t("appearanceTabSizeTitle")}
+          description={t("appearanceTabSizeDescription")}
+        >
           <div className="flex gap-[2px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-[2px]">
             {TAB_SIZES.map((size) => (
               <button
@@ -87,12 +85,11 @@ export function AppearanceSettings() {
               </button>
             ))}
           </div>
-        </div>
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("appearanceStreamingTitle")}</strong>
-            <p>{t("appearanceStreamingDescription")}</p>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          title={t("appearanceStreamingTitle")}
+          description={t("appearanceStreamingDescription")}
+        >
           <label className="relative inline-block w-[44px] h-[24px] shrink-0">
             <input
               type="checkbox"
@@ -102,12 +99,11 @@ export function AppearanceSettings() {
             />
             <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
           </label>
-        </div>
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("appearanceFunPhrasesTitle")}</strong>
-            <p>{t("appearanceFunPhrasesDescription")}</p>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          title={t("appearanceFunPhrasesTitle")}
+          description={t("appearanceFunPhrasesDescription")}
+        >
           <label className="relative inline-block w-[44px] h-[24px] shrink-0">
             <input
               type="checkbox"
@@ -117,12 +113,11 @@ export function AppearanceSettings() {
             />
             <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
           </label>
-        </div>
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("appearanceConnectionBarsTitle")}</strong>
-            <p>{t("appearanceConnectionBarsDescription")}</p>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          title={t("appearanceConnectionBarsTitle")}
+          description={t("appearanceConnectionBarsDescription")}
+        >
           <label className="relative inline-block w-[44px] h-[24px] shrink-0">
             <input
               type="checkbox"
@@ -132,7 +127,7 @@ export function AppearanceSettings() {
             />
             <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
           </label>
-        </div>
+        </SettingsRow>
       </div>
     </section>
   );

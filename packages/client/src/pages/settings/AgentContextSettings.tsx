@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { SettingsTextarea } from "../../components/settings/SettingsFormControls";
+import { SettingsRow } from "../../components/settings/SettingsRow";
 import { useServerSettings } from "../../hooks/useServerSettings";
 import { useI18n } from "../../i18n";
 

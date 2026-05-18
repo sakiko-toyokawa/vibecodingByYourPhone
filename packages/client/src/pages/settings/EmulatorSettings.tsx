@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { SettingsSwitch } from "../../components/settings/SettingsFormControls";
+import { SettingsRow } from "../../components/settings/SettingsRow";
 import {
   EMULATOR_FPS_OPTIONS,
   EMULATOR_WIDTH_OPTIONS,
@@ -108,11 +109,10 @@ export function EmulatorSettings() {
       </p>
 
       <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("emulatorEnableTitle")}</strong>
-            <p>{t("emulatorEnableDescription")}</p>
-          </div>
+        <SettingsRow
+          title={t("emulatorEnableTitle")}
+          description={t("emulatorEnableDescription")}
+        >
           <SettingsSwitch
             checked={deviceBridgeEnabled}
             onChange={(checked) => {
@@ -121,7 +121,7 @@ export function EmulatorSettings() {
             disabled={settingsLoading}
             ariaLabel={t("emulatorEnableTitle")}
           />
-        </div>
+        </SettingsRow>
       </div>
 
       {!deviceBridgeEnabled ? null : (
@@ -132,11 +132,10 @@ export function EmulatorSettings() {
               {t("emulatorStreamQualityDescription")}
             </p>
 
-            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-              <div className="flex flex-col gap-1">
-                <strong>{t("emulatorFrameRateTitle")}</strong>
-                <p>{t("emulatorFrameRateDescription")}</p>
-              </div>
+            <SettingsRow
+              title={t("emulatorFrameRateTitle")}
+              description={t("emulatorFrameRateDescription")}
+            >
               <div className="flex gap-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-0.5">
                 {EMULATOR_FPS_OPTIONS.map((fps) => (
                   <button
@@ -149,13 +148,12 @@ export function EmulatorSettings() {
                   </button>
                 ))}
               </div>
-            </div>
+            </SettingsRow>
 
-            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-              <div className="flex flex-col gap-1">
-                <strong>{t("emulatorResolutionTitle")}</strong>
-                <p>{t("emulatorResolutionDescription")}</p>
-              </div>
+            <SettingsRow
+              title={t("emulatorResolutionTitle")}
+              description={t("emulatorResolutionDescription")}
+            >
               <div className="flex gap-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-0.5">
                 {EMULATOR_WIDTH_OPTIONS.map((w) => (
                   <button
@@ -168,13 +166,12 @@ export function EmulatorSettings() {
                   </button>
                 ))}
               </div>
-            </div>
+            </SettingsRow>
 
-            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-              <div className="flex flex-col gap-1">
-                <strong>{t("emulatorQualityTitle")}</strong>
-                <p>{t("emulatorQualityDescription")}</p>
-              </div>
+            <SettingsRow
+              title={t("emulatorQualityTitle")}
+              description={t("emulatorQualityDescription")}
+            >
               <div className="flex gap-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-md)] p-0.5">
                 {QUALITY_OPTIONS.map((q) => (
                   <button
@@ -187,19 +184,18 @@ export function EmulatorSettings() {
                   </button>
                 ))}
               </div>
-            </div>
+            </SettingsRow>
 
-            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-              <div className="flex flex-col gap-1">
-                <strong>{t("emulatorAdaptiveFpsTitle")}</strong>
-                <p>{t("emulatorAdaptiveFpsDescription")}</p>
-              </div>
+            <SettingsRow
+              title={t("emulatorAdaptiveFpsTitle")}
+              description={t("emulatorAdaptiveFpsDescription")}
+            >
               <SettingsSwitch
                 checked={adaptiveFps}
                 onChange={setAdaptiveFps}
                 ariaLabel={t("emulatorAdaptiveFpsTitle")}
               />
-            </div>
+            </SettingsRow>
           </div>
 
           <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
@@ -210,11 +206,10 @@ export function EmulatorSettings() {
               {t("emulatorChromeOsHostsDescriptionSuffix")}
             </p>
 
-            <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-              <div className="flex flex-col gap-1">
-                <strong>{t("emulatorAddHostAliasTitle")}</strong>
-                <p>{t("emulatorAddHostAliasDescription")}</p>
-              </div>
+            <SettingsRow
+              title={t("emulatorAddHostAliasTitle")}
+              description={t("emulatorAddHostAliasDescription")}
+            >
               <form
                 className="flex items-center gap-[var(--space-2)] shrink-0"
                 onSubmit={(event) => {
@@ -239,7 +234,7 @@ export function EmulatorSettings() {
                   {t("projectsAddConfirm")}
                 </button>
               </form>
-            </div>
+            </SettingsRow>
 
             {chromeOsHostError && (
               <p className="text-xs text-[var(--error-color)] mt-1">
@@ -258,31 +253,30 @@ export function EmulatorSettings() {
               </p>
             ) : (
               chromeOsHosts.map((host) => (
-                <div
+                <SettingsRow
                   key={host}
-                  className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]"
-                >
-                  <div className="flex flex-col gap-1">
+                  title={
                     <span className="text-sm font-medium text-[var(--text-primary)]">
                       {host}
                     </span>
+                  }
+                  description={
                     <span className="text-sm text-[var(--text-muted)]">
                       Device ID: chromeos:{host}
                     </span>
-                  </div>
-                  <div className="shrink-0">
-                    <button
-                      type="button"
-                      className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
-                      onClick={() => {
-                        void removeHost(host);
-                      }}
-                      disabled={settingsLoading}
-                    >
-                      {t("emulatorRemove")}
-                    </button>
-                  </div>
-                </div>
+                  }
+                >
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
+                    onClick={() => {
+                      void removeHost(host);
+                    }}
+                    disabled={settingsLoading}
+                  >
+                    {t("emulatorRemove")}
+                  </button>
+                </SettingsRow>
               ))
             )}
           </div>
@@ -306,42 +300,41 @@ export function EmulatorSettings() {
             )}
 
             {emulators.map((device) => (
-              <div
+              <SettingsRow
                 key={device.id}
-                className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]"
-              >
-                <div className="flex flex-col gap-1">
+                title={
                   <span className="text-sm font-medium text-[var(--text-primary)]">
                     {device.label || device.avd || device.id}
                   </span>
+                }
+                description={
                   <span className="text-sm text-[var(--text-muted)]">
                     {device.type} - {device.id} - {device.state}
                   </span>
-                </div>
-                <div className="shrink-0">
-                  {canStopDevice(device.type, device.state, device.actions) ? (
-                    <button
-                      type="button"
-                      className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
-                      onClick={() => stopEmulator(device.id)}
-                    >
-                      {t("emulatorStop")}
-                    </button>
-                  ) : canStartDevice(
-                      device.type,
-                      device.state,
-                      device.actions,
-                    ) ? (
-                    <button
-                      type="button"
-                      className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
-                      onClick={() => startEmulator(device.id)}
-                    >
-                      {t("emulatorStart")}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
+                }
+              >
+                {canStopDevice(device.type, device.state, device.actions) ? (
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
+                    onClick={() => stopEmulator(device.id)}
+                  >
+                    {t("emulatorStop")}
+                  </button>
+                ) : canStartDevice(
+                    device.type,
+                    device.state,
+                    device.actions,
+                  ) ? (
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-md border border-[var(--border-color)] bg-transparent text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
+                    onClick={() => startEmulator(device.id)}
+                  >
+                    {t("emulatorStart")}
+                  </button>
+                ) : null}
+              </SettingsRow>
             ))}
           </div>
         </>

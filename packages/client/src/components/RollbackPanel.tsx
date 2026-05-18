@@ -193,7 +193,7 @@ export function RollbackPanel({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] px-4 py-3">
+        <div className="flex items-center justify-center gap-2 border-t border-[var(--border-subtle)] px-4 py-3 sm:justify-end">
           <button
             type="button"
             onClick={onClose}

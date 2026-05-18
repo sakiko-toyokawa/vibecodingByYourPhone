@@ -397,7 +397,7 @@ export function AiEditPanel({
         </div>
 
         <div className="border-t border-[var(--border-color)] bg-[var(--bg-secondary)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end">
             <button
               type="button"
               className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"

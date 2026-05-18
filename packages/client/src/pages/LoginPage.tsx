@@ -148,7 +148,7 @@ export function LoginPage() {
           )}
 
           {error && (
-            <div className="text-[var(--error-color)] text-sm text-center p-2 bg-[rgba(199,78,57,0.1)] rounded-[var(--radius-md)]">
+            <div className="text-[var(--error-color)] text-sm text-center p-2 bg-[var(--bg-error)] rounded-[var(--radius-md)]">
               {error}
             </div>
           )}

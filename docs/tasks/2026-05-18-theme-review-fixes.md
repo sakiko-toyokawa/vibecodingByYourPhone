@@ -54,6 +54,19 @@
 - Environment status:
   - `pnpm.cmd typecheck` still fails with the same `EPERM` reading the local TypeScript shim
 
+### 2026-05-18 4
+
+- Attempted the next validation step: an actual three-theme visual sweep with browser automation.
+- Added a local helper script at `workspace/theme-sweep/capture-theme-screenshots.ps1` to drive a headless browser through the DevTools protocol.
+- Verified that the local app can be started and reached:
+  - `http://localhost:3400` returned `200`
+  - `http://localhost:3402` returned `200`
+- Blocker:
+  - both Chrome and Edge launched in headless mode, but none of the requested remote debugging ports (`9223`, `9224`, `9225`, `9226`) ever exposed a reachable DevTools endpoint in this environment, so automated screenshots could not be captured.
+- Outcome:
+  - runtime availability is confirmed
+  - visual verification remains pending until a working browser automation/debugging channel is available
+
 ## Verification Notes
 
 - `pnpm.cmd typecheck` is currently blocked by a local `EPERM` error opening the TypeScript shim under `node_modules\\.pnpm\\typescript@5.9.3\\node_modules\\typescript\\bin\\tsc`.

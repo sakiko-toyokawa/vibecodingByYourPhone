@@ -66,7 +66,7 @@ export function Modal({ title, children, onClose }: ModalProps) {
     >
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: click only stops propagation, keyboard handled globally */}
       <div
-        className="flex w-[90vw] max-w-[1200px] max-h-[85vh] flex-col rounded border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.3)] max-[600px]:h-dvh max-[600px]:max-h-dvh max-[600px]:w-screen max-[600px]:max-w-none max-[600px]:rounded-none max-[600px]:border-none"
+        className="flex w-[90vw] max-w-[1200px] max-h-[85vh] flex-col rounded border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-[0_8px_32px_var(--bg-overlay)] max-[600px]:h-dvh max-[600px]:max-h-dvh max-[600px]:w-screen max-[600px]:max-w-none max-[600px]:rounded-none max-[600px]:border-none"
         role="dialog"
         aria-modal="true"
         onClick={handleModalClick}
@@ -78,7 +78,7 @@ export function Modal({ title, children, onClose }: ModalProps) {
           <button
             ref={closeButtonRef}
             type="button"
-            className="shrink-0 cursor-pointer border-none bg-transparent px-2 py-1 text-xl leading-none text-[var(--text-primary)] rounded hover:bg-[var(--bg-hover)]"
+            className="btn-icon shrink-0 px-2 py-1 text-xl leading-none text-[var(--text-primary)]"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();

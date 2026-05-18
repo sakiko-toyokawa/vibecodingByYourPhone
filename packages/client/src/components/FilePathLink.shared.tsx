@@ -34,7 +34,7 @@ export function FilePathLinkModalFooter({
     <div className="flex justify-end border-t border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2">
       <button
         type="button"
-        className="inline-flex items-center rounded-sm border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-surface)] transition-colors hover:bg-[var(--surface-container-high)]"
+        className="inline-flex items-center rounded-sm border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
         onClick={onOpen}
       >
         Open in Editor

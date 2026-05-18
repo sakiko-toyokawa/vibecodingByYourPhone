@@ -296,7 +296,7 @@ export function HostPickerPage() {
 
             {error && (
               <div
-                className="rounded-[var(--radius-md)] bg-[rgba(199,78,57,0.1)] p-2 text-center text-sm text-[var(--error-color)]"
+                className="rounded-[var(--radius-md)] bg-[var(--bg-error)] p-2 text-center text-sm text-[var(--error-color)]"
                 data-testid="host-picker-error"
               >
                 {error}

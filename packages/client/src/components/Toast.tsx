@@ -23,7 +23,7 @@ export function ToastContainer({ toasts, onDismiss }: Props) {
         return (
           <div
             key={toast.id}
-            className={`px-4 py-3 rounded-md text-sm cursor-pointer pointer-events-auto animate-[toast-slide-in_0.2s_ease-out] max-w-[400px] text-center shadow-[0_4px_12px_rgba(0,0,0,0.3)] ${typeClasses} ${hasAction ? "flex items-center gap-3 text-left" : ""}`}
+            className={`px-4 py-3 rounded-md text-sm cursor-pointer pointer-events-auto animate-[toast-slide-in_0.2s_ease-out] max-w-[400px] text-center shadow-[0_4px_12px_var(--bg-overlay)] ${typeClasses} ${hasAction ? "flex items-center gap-3 text-left" : ""}`}
             onClick={() => onDismiss(toast.id)}
             onKeyDown={(e) => e.key === "Enter" && onDismiss(toast.id)}
             role="alert"

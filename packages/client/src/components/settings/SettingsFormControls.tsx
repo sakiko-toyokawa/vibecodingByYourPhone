@@ -95,14 +95,14 @@ export function SettingsSwitch({
           onChange(!checked);
         }
       }}
-      className={`relative inline-block h-6 w-11 shrink-0 rounded-full border transition-all duration-200 ${
+      className={`relative block h-6 w-11 shrink-0 rounded-full border transition-all duration-200 ${
         checked
           ? "border-[var(--accent-color,#3b82f6)] bg-[var(--accent-color,#3b82f6)]"
           : "border-[var(--border-color)] bg-[var(--bg-hover)]"
       } ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"} ${className}`.trim()}
     >
       <span
-        className={`absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full transition-all duration-200 ${
+        className={`absolute top-1/2 left-[2px] h-[18px] w-[18px] -translate-y-1/2 rounded-full transition-all duration-200 ${
           checked
             ? "translate-x-5 bg-[var(--bg-input)]"
             : "translate-x-0 bg-[var(--text-muted)]"

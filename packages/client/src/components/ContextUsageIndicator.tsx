@@ -34,9 +34,9 @@ export function ContextUsageIndicator({
 
   // Fill color - lighter color that shows usage amount
   const getFillColor = () => {
-    if (clampedPercentage >= 90) return "var(--color-error, #dc3545)";
-    if (clampedPercentage >= 75) return "var(--color-warning, #ffc107)";
-    return "var(--text-muted, #9d9d9d)";
+    if (clampedPercentage >= 90) return "var(--color-error)";
+    if (clampedPercentage >= 75) return "var(--color-warning)";
+    return "var(--text-muted)";
   };
 
   const tooltip = usage.contextWindow
@@ -68,7 +68,7 @@ export function ContextUsageIndicator({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="var(--border-color, #3c3c3c)"
+          stroke="var(--border-color)"
           strokeWidth="2"
         />
         {/* Filled arc - lighter color showing usage, rotated -90deg so it starts from top */}

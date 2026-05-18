@@ -42,12 +42,12 @@ export function normalizeProvider(provider?: string): ProviderStyle {
 
 const STYLES: Record<ProviderStyle, ProviderStyleConfig> = {
   claude: {
-    accent: "border-l-amber-500",
-    bg: "bg-amber-50/30",
+    accent: "border-l-[#D97757]",
+    bg: "bg-[#D97757]/10",
     shadow: "shadow-[0_1px_0_rgba(20,20,19,0.03)]",
-    label: "text-amber-700",
-    badge: "bg-amber-100/70 text-amber-800",
-    diffAdded: "bg-amber-100/50 text-amber-950",
+    label: "text-[#7a3720]",
+    badge: "bg-[#D97757]/20 text-[#7a3720]",
+    diffAdded: "bg-[#D97757]/15 text-[#191919]",
     diffRemoved: "bg-rose-100/50 text-rose-800",
     addedCount: "text-emerald-600",
     removedCount: "text-rose-500",

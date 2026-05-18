@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 import { SettingsSwitch } from "../../components/settings/SettingsFormControls";
+import { SettingsRow } from "../../components/settings/SettingsRow";
 import { useSchemaValidationContext } from "../../contexts/SchemaValidationContext";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { useReloadNotifications } from "../../hooks/useReloadNotifications";
 import { useSchemaValidation } from "../../hooks/useSchemaValidation";
 import { useServerSettings } from "../../hooks/useServerSettings";
 import { useI18n } from "../../i18n";
-import { isDesktopTauriApp, restartDesktopServer } from "../../lib/desktopRuntime";
+import {
+  isDesktopTauriApp,
+  restartDesktopServer,
+} from "../../lib/desktopRuntime";
 
 export function DevelopmentSettings() {
   const { t } = useI18n();
@@ -61,33 +65,35 @@ export function DevelopmentSettings() {
       </h2>
 
       <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("developmentSchemaTitle")}</strong>
-            <p>{t("developmentSchemaDescription")}</p>
-          </div>
+        <SettingsRow
+          title={t("developmentSchemaTitle")}
+          description={t("developmentSchemaDescription")}
+        >
           <SettingsSwitch
             checked={validationSettings.enabled}
             onChange={setValidationEnabled}
             ariaLabel={t("developmentSchemaTitle")}
           />
-        </div>
+        </SettingsRow>
         {ignoredTools.length > 0 && (
-          <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-            <div className="flex flex-col gap-1">
-              <strong>{t("developmentIgnoredToolsTitle")}</strong>
-              <p>{t("developmentIgnoredToolsDescription")}</p>
-              <div className="flex flex-wrap gap-[var(--space-1)] mt-[var(--space-2)]">
-                {ignoredTools.map((tool) => (
-                  <span
-                    key={tool}
-                    className="px-[var(--space-2)] py-[var(--space-1)] bg-[var(--bg-tertiary)] rounded-[var(--radius-sm)] [font-size:var(--font-size-xs)] text-[var(--text-secondary)] [font-family:var(--font-mono)]"
-                  >
-                    {tool}
-                  </span>
-                ))}
-              </div>
-            </div>
+          <SettingsRow
+            title={t("developmentIgnoredToolsTitle")}
+            description={
+              <>
+                <p>{t("developmentIgnoredToolsDescription")}</p>
+                <div className="flex flex-wrap gap-[var(--space-1)] mt-[var(--space-2)]">
+                  {ignoredTools.map((tool) => (
+                    <span
+                      key={tool}
+                      className="px-[var(--space-2)] py-[var(--space-1)] bg-[var(--bg-tertiary)] rounded-[var(--radius-sm)] [font-size:var(--font-size-xs)] text-[var(--text-secondary)] [font-family:var(--font-mono)]"
+                    >
+                      {tool}
+                    </span>
+                  ))}
+                </div>
+              </>
+            }
+          >
             <button
               type="button"
               className="px-[var(--space-2)] py-[var(--space-2)] bg-transparent border border-[var(--border-color)] rounded-[var(--radius-sm)] text-[var(--text-primary)] [font-size:var(--font-size-sm)] cursor-pointer transition-[background] duration-150 whitespace-nowrap hover:bg-[var(--bg-hover)]"
@@ -95,24 +101,22 @@ export function DevelopmentSettings() {
             >
               {t("developmentClearIgnored")}
             </button>
-          </div>
+          </SettingsRow>
         )}
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("developmentHoldModeTitle")}</strong>
-            <p>{t("developmentHoldModeDescription")}</p>
-          </div>
+        <SettingsRow
+          title={t("developmentHoldModeTitle")}
+          description={t("developmentHoldModeDescription")}
+        >
           <SettingsSwitch
             checked={holdModeEnabled}
             onChange={setHoldModeEnabled}
             ariaLabel={t("developmentHoldModeTitle")}
           />
-        </div>
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("developmentServiceWorkerTitle")}</strong>
-            <p>{t("developmentServiceWorkerDescription")}</p>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          title={t("developmentServiceWorkerTitle")}
+          description={t("developmentServiceWorkerDescription")}
+        >
           <SettingsSwitch
             checked={serverSettings?.serviceWorkerEnabled ?? true}
             onChange={(checked) =>
@@ -120,31 +124,34 @@ export function DevelopmentSettings() {
             }
             ariaLabel={t("developmentServiceWorkerTitle")}
           />
-        </div>
+        </SettingsRow>
       </div>
 
       <div className="flex flex-col gap-[var(--space-3)] mb-[var(--space-4)]">
-        <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
-          <div className="flex flex-col gap-1">
-            <strong>{t("developmentRestartTitle")}</strong>
-            <p>
-              {t("developmentRestartDescription")}
-              {pendingReloads.backend && (
-                <span className="text-[var(--warning-color)]">
-                  {" "}
-                  {t("developmentChangesPending")}
-                </span>
-              )}
-            </p>
-            {unsafeToRestart && (
-              <p className="text-xs text-[var(--warning-color)] mt-1">
-                {t("developmentInterruptedWarning", {
-                  count: workerActivity.activeWorkers,
-                  suffix: workerActivity.activeWorkers !== 1 ? "s " : " ",
-                })}
+        <SettingsRow
+          title={t("developmentRestartTitle")}
+          description={
+            <>
+              <p>
+                {t("developmentRestartDescription")}
+                {pendingReloads.backend && (
+                  <span className="text-[var(--warning-color)]">
+                    {" "}
+                    {t("developmentChangesPending")}
+                  </span>
+                )}
               </p>
-            )}
-          </div>
+              {unsafeToRestart && (
+                <p className="text-xs text-[var(--warning-color)] mt-1">
+                  {t("developmentInterruptedWarning", {
+                    count: workerActivity.activeWorkers,
+                    suffix: workerActivity.activeWorkers !== 1 ? "s " : " ",
+                  })}
+                </p>
+              )}
+            </>
+          }
+        >
           <button
             type="button"
             className={`px-[var(--space-2)] py-[var(--space-2)] border rounded-[var(--radius-sm)] [font-size:var(--font-size-sm)] cursor-pointer transition-[background] duration-150 whitespace-nowrap ${unsafeToRestart ? "bg-[var(--error-color)] border-[var(--error-color)] text-white hover:bg-[var(--error-hover,#b91c1c)] hover:border-[var(--error-hover,#b91c1c)]" : "bg-[var(--bg-hover)] border-[var(--border-color)] text-[var(--text-primary)] hover:bg-[var(--border-color)]"}`}
@@ -157,7 +164,7 @@ export function DevelopmentSettings() {
                 ? t("developmentRestartAnyway")
                 : t("developmentRestart")}
           </button>
-        </div>
+        </SettingsRow>
       </div>
     </section>
   );

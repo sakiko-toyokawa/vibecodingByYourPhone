@@ -44,7 +44,7 @@
 
 @layer components {
   .btn-primary {
-    @apply px-4 py-2 bg-[#000000] text-[#faf9f5] rounded-md text-sm font-medium transition-opacity duration-150;
+    @apply px-4 py-2 bg-[#191919] text-[#faf9f5] rounded-md text-sm font-medium transition-opacity duration-150;
   }
 
   .btn-primary:hover:not(:disabled) {
@@ -57,6 +57,14 @@
 
   .btn-secondary:hover {
     @apply bg-[var(--border-color)];
+  }
+
+  .btn-ghost {
+    @apply cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] transition-colors duration-150 bg-transparent hover:bg-[var(--bg-hover)];
+  }
+
+  .btn-icon {
+    @apply flex cursor-pointer items-center justify-center rounded-full bg-transparent p-1 text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)];
   }
 }
 
@@ -99,6 +107,7 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
+  --radius-xl: 12px;
   --radius-full: 9999px;
 
   /* Safe Area (for mobile notch/punch-hole screens) */
@@ -232,6 +241,14 @@
 [data-theme="codex"] {
   color-scheme: dark;
 
+  /* Typography — Obsidian & Veridian uses Inter for all levels */
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+
   /* Backgrounds */
   --bg-surface: #1a1b26;
   --bg-secondary: #20212e;
@@ -362,6 +379,14 @@
 [data-theme="gemini"] {
   color-scheme: light;
 
+  /* Typography — Lumina Future uses Space Grotesk for display, Be Vietnam Pro for body */
+  --font-body: "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-display: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-sans: "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+
   /* Backgrounds */
   --bg-surface: #f8f9fa;
   --bg-secondary: #f3f4f5;
@@ -461,6 +486,9 @@
   --text-diff-removed: var(--error-color);
   --text-error: var(--error-color);
   --primary: #005bc0;
+
+  /* Radius overrides per Lumina Future spec */
+  --radius-xl: 1.5rem;
 }
 
 /* Button overrides for gemini theme */
