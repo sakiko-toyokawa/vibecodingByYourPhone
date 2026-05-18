@@ -75,18 +75,20 @@ jobs:
       - name: Generate CI keystore
         run: |
           mkdir -p packages/mobile/src-tauri/gen/android/app
-          keytool -genkey -v \
+          keytool -genkeypair -v \
             -keystore packages/mobile/src-tauri/gen/android/app/yepanywhere.keystore \
             -alias yepanywhere \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass yepanywhere -keypass yepanywhere \
             -dname "CN=YepAnywhere"
-          printf '%s\n' \
-            'storeFile=yepanywhere.keystore' \
-            'storePassword=yepanywhere' \
-            'keyAlias=yepanywhere' \
-            'keyPassword=yepanywhere' \
-            > packages/mobile/src-tauri/gen/android/app/local.properties
+          echo "storeFile=yepanywhere.keystore" > packages/mobile/src-tauri/gen/android/app/local.properties
+          echo "storePassword=yepanywhere" >> packages/mobile/src-tauri/gen/android/app/local.properties
+          echo "keyAlias=yepanywhere" >> packages/mobile/src-tauri/gen/android/app/local.properties
+          echo "keyPassword=yepanywhere" >> packages/mobile/src-tauri/gen/android/app/local.properties
+          echo "--- local.properties contents ---"
+          cat packages/mobile/src-tauri/gen/android/app/local.properties
+          echo "--- verify keystore ---"
+          keytool -list -v -keystore packages/mobile/src-tauri/gen/android/app/yepanywhere.keystore -storepass yepanywhere | head -20
 
       # --- Build Android APK ---
       - name: Build Android APK
