@@ -37,11 +37,13 @@ async function testRejectsEscapingJunctionReads(): Promise<void> {
     await mkdir(outsideDir, { recursive: true });
     await writeFile(join(outsideDir, "secret.txt"), "nope\n", "utf8");
     const linkType = process.platform === "win32" ? "junction" : "dir";
-    console.log(`[TEST] creating symlink type=${linkType} target=${outsideDir} link=${junctionPath}`);
+    console.log(
+      `[TEST] creating symlink type=${linkType} target=${outsideDir} link=${junctionPath}`,
+    );
     try {
       await symlink(outsideDir, junctionPath, linkType);
     } catch (e) {
-      console.error(`[TEST] symlink failed:`, e);
+      console.error("[TEST] symlink failed:", e);
       throw e;
     }
 
@@ -63,11 +65,13 @@ async function testRejectsEscapingJunctionWrites(): Promise<void> {
     await mkdir(projectRoot, { recursive: true });
     await mkdir(outsideDir, { recursive: true });
     const linkType = process.platform === "win32" ? "junction" : "dir";
-    console.log(`[TEST] creating symlink type=${linkType} target=${outsideDir} link=${junctionPath}`);
+    console.log(
+      `[TEST] creating symlink type=${linkType} target=${outsideDir} link=${junctionPath}`,
+    );
     try {
       await symlink(outsideDir, junctionPath, linkType);
     } catch (e) {
-      console.error(`[TEST] symlink failed:`, e);
+      console.error("[TEST] symlink failed:", e);
       throw e;
     }
 
@@ -83,7 +87,9 @@ async function testRejectsEscapingJunctionWrites(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  console.log(`[TEST] platform=${process.platform} node=${process.version} cwd=${process.cwd()}`);
+  console.log(
+    `[TEST] platform=${process.platform} node=${process.version} cwd=${process.cwd()}`,
+  );
 
   const cases: Array<[string, () => Promise<void>]> = [
     ["resolveFilePath rejects path traversal", testRejectsTraversal],

@@ -327,7 +327,7 @@ export function SessionListItem({
                       : hasUnread
                         ? "bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
                         : "text-[var(--text-primary)] hover:bg-[var(--bg-hover)]/70"
-                   }`
+                  }`
           }
         >
           {mode === "card" ? (

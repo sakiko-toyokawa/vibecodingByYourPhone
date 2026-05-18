@@ -218,12 +218,12 @@ export function Sidebar({
           }`}
         >
           {isDesktop && isCollapsed ? (
-              <button
-                type="button"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-muted)] shadow-sm transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-                onClick={onToggleExpanded}
-                title={t("actionExpandSidebar")}
-                aria-label={t("actionExpandSidebar")}
+            <button
+              type="button"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-muted)] shadow-sm transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+              onClick={onToggleExpanded}
+              title={t("actionExpandSidebar")}
+              aria-label={t("actionExpandSidebar")}
             >
               <span className="text-sm font-medium">→</span>
             </button>

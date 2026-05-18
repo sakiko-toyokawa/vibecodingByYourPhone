@@ -1159,7 +1159,7 @@ function EditToolResult({
         <div
           className={`relative ${isTruncated ? "max-h-[18rem] overflow-hidden" : ""}`}
         >
-            <div className="font-mono [font-size:var(--font-size-base)]">
+          <div className="font-mono [font-size:var(--font-size-base)]">
             {result.structuredPatch.map((hunk, i) => (
               <DiffHunk
                 key={`hunk-${hunk.oldStart}-${i}`}
