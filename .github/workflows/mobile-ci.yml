@@ -82,11 +82,11 @@ jobs:
             -storepass yepanywhere -keypass yepanywhere \
             -dname "CN=YepAnywhere"
           cat > packages/mobile/src-tauri/gen/android/app/local.properties <<'LOCAL'
-          storeFile=yepanywhere.keystore
-          storePassword=yepanywhere
-          keyAlias=yepanywhere
-          keyPassword=yepanywhere
-          LOCAL
+storeFile=yepanywhere.keystore
+storePassword=yepanywhere
+keyAlias=yepanywhere
+keyPassword=yepanywhere
+LOCAL
 
       # --- Build Android APK ---
       - name: Build Android APK
