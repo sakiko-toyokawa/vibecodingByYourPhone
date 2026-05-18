@@ -65,6 +65,10 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      # --- Build shared package (required for client type-checking) ---
+      - name: Build shared package
+        run: pnpm --filter @yep-anywhere/shared build
+
       # --- Generate temporary signing keystore ---
       # build.gradle.kts requires a keystore for release builds.
       # We generate a self-signed one in CI so the APK can be built unsigned.
