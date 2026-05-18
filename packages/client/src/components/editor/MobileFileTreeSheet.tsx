@@ -44,7 +44,7 @@ export function MobileFileTreeSheet({
   return createPortal(
     // biome-ignore lint/a11y/useKeyWithClickEvents: Escape handled globally, click is for overlay dismiss
     <div
-      className="fixed inset-0 z-[10001] flex items-end justify-center bg-black/50"
+      className="fixed inset-0 z-[10001] flex items-end justify-center bg-[var(--bg-overlay)]"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose();

@@ -13,9 +13,9 @@ export function ToastContainer({ toasts, onDismiss }: Props) {
       {toasts.map((toast) => {
         const typeClasses =
           toast.type === "error"
-            ? "bg-red-600 text-white"
+            ? "border border-[var(--error-color)]/20 bg-[var(--bg-error)] text-[var(--error-color)]"
             : toast.type === "success"
-              ? "bg-green-600 text-white"
+              ? "border border-[var(--success-color)]/20 bg-[var(--bg-success)] text-[var(--success-color)]"
               : "bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-color)]";
 
         const hasAction = !!toast.action;
@@ -32,7 +32,7 @@ export function ToastContainer({ toasts, onDismiss }: Props) {
             {toast.action && (
               <button
                 type="button"
-                className="px-2 py-1 text-xs bg-white/20 border border-white/30 rounded-sm text-inherit cursor-pointer whitespace-nowrap shrink-0 hover:bg-white/30"
+                className="shrink-0 whitespace-nowrap rounded-sm border border-current/20 bg-current/10 px-2 py-1 text-xs text-inherit hover:bg-current/15"
                 onClick={(e) => {
                   e.stopPropagation();
                   toast.action?.onClick();

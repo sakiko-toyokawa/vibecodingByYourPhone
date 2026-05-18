@@ -323,11 +323,11 @@ export function SessionListItem({
                   }`
                 : `flex flex-1 items-center justify-between overflow-hidden rounded-xl px-3 py-2.5 no-underline transition-colors ${
                     isCurrent
-                      ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm ring-1 ring-black/5"
+                      ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm ring-1 ring-[var(--border-color)]"
                       : hasUnread
-                        ? "bg-black/[0.03] text-[var(--text-primary)] hover:bg-black/[0.05]"
-                        : "text-[var(--text-primary)] hover:bg-black/[0.04]"
-                  }`
+                        ? "bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+                        : "text-[var(--text-primary)] hover:bg-[var(--bg-hover)]/70"
+                   }`
           }
         >
           {mode === "card" ? (

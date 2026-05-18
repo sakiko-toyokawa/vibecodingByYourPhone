@@ -104,7 +104,7 @@ export function SettingsSwitch({
       <span
         className={`absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full transition-all duration-200 ${
           checked
-            ? "translate-x-5 bg-white"
+            ? "translate-x-5 bg-[var(--bg-input)]"
             : "translate-x-0 bg-[var(--text-muted)]"
         }`}
       />

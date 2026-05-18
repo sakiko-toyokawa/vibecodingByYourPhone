@@ -18,7 +18,7 @@ export function ReloadBanner({
 
   return (
     <div
-      className={`fixed top-[env(safe-area-inset-top,0px)] left-0 right-0 z-[200] text-[var(--text-primary)] py-2 px-4 flex items-center gap-3 text-sm max-sm:flex-wrap max-sm:gap-2 max-sm:p-2 ${showWarning ? "bg-[var(--error-color)] text-white" : "bg-[var(--warning-color)]"}`}
+      className={`fixed left-0 right-0 top-[env(safe-area-inset-top,0px)] z-[200] flex items-center gap-3 px-4 py-2 text-sm max-sm:flex-wrap max-sm:gap-2 max-sm:p-2 ${showWarning ? "bg-[var(--bg-error)] text-[var(--error-color)]" : "bg-[var(--bg-warning)] text-[var(--warning-color)]"}`}
     >
       <span className="shrink-0">
         {label} code changed - reload to see changes
@@ -31,19 +31,19 @@ export function ReloadBanner({
       )}
       <button
         type="button"
-        className={`px-2 py-1 border border-black/30 rounded-[var(--radius-sm)] text-sm font-medium cursor-pointer transition-colors duration-150 hover:bg-white/40 ${showWarning ? "bg-black text-[var(--error-color)] border-transparent hover:bg-[#222]" : "bg-black text-[var(--warning-color)] border-transparent hover:bg-[#222]"}`}
+        className="cursor-pointer rounded-[var(--radius-sm)] border border-current/25 bg-[var(--bg-surface)] px-2 py-1 text-sm font-medium text-[var(--text-primary)] transition-colors duration-150 hover:bg-[var(--bg-hover)]"
         onClick={onReload}
       >
         {showWarning ? "Reload Anyway" : `Reload ${label}`}
       </button>
       <button
         type="button"
-        className="px-2 py-1 border border-black/30 rounded-[var(--radius-sm)] bg-white/20 text-black text-sm font-medium cursor-pointer transition-colors duration-150 hover:bg-white/40"
+        className="cursor-pointer rounded-[var(--radius-sm)] border border-current/25 bg-transparent px-2 py-1 text-sm font-medium text-inherit transition-colors duration-150 hover:bg-current/10"
         onClick={onDismiss}
       >
         Dismiss
       </button>
-      <span className="font-mono [font-size:var(--font-size-xs)] px-1.5 py-0.5 bg-black/15 rounded-[var(--radius-sm)] text-black/60 max-sm:hidden">
+      <span className="max-sm:hidden rounded-[var(--radius-sm)] bg-current/10 px-1.5 py-0.5 font-mono text-[color:currentColor] opacity-70 [font-size:var(--font-size-xs)]">
         Ctrl+Shift+R
       </span>
     </div>

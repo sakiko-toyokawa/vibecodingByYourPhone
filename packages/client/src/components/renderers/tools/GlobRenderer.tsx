@@ -115,7 +115,7 @@ function GlobToolResult({
         {displayFiles.map((file) => (
           <div
             key={file}
-            className="flex flex-col gap-0.5 rounded p-1 px-2 hover:bg-white/5"
+            className="flex flex-col gap-0.5 rounded p-1 px-2 hover:bg-[var(--bg-hover)]"
           >
             <span className="font-medium">{getFileName(file)}</span>
             <span className="[font-family:var(--font-mono)] text-sm text-[var(--text-muted)]">

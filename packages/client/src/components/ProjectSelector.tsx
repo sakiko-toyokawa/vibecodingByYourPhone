@@ -171,7 +171,7 @@ export function ProjectSelector({
       ? createPortal(
           // biome-ignore lint/a11y/useKeyWithClickEvents: Escape key handled globally
           <div
-            className="fixed inset-0 z-[1000] flex items-end justify-center bg-black/50"
+            className="fixed inset-0 z-[1000] flex items-end justify-center bg-[var(--bg-overlay)]"
             onClick={handleOverlayClick}
             onMouseDown={(e) => e.stopPropagation()}
           >

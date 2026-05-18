@@ -274,7 +274,7 @@ export function AiEditPanel({
   const panel = (
     // biome-ignore lint/a11y/useKeyWithClickEvents: Escape key handled globally
     <div
-      className="fixed inset-0 z-[1000] flex bg-black/40"
+      className="fixed inset-0 z-[1000] flex bg-[var(--bg-overlay)]"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose();

@@ -228,7 +228,7 @@ export function ModeSelector({
       ? createPortal(
           // biome-ignore lint/a11y/useKeyWithClickEvents: Escape key handled globally
           <div
-            className="fixed inset-0 bg-black/50 z-[10001] flex items-end justify-center md:hidden"
+            className="fixed inset-0 z-[10001] flex items-end justify-center bg-[var(--bg-overlay)] md:hidden"
             onClick={handleOverlayClick}
             onMouseDown={(e) => e.stopPropagation()}
           >

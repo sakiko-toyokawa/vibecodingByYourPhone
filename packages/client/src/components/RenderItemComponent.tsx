@@ -218,11 +218,11 @@ export const RenderItemComponent = memo(function RenderItemComponent({
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: debug feature, shift+click only
     <div
-      className={
-        item.isSubagent
-          ? "my-1 rounded-2xl bg-gray-50/60 p-2 backdrop-blur-sm"
-          : undefined
-      }
+        className={
+          item.isSubagent
+            ? "my-1 rounded-2xl bg-[var(--bg-secondary)]/70 p-2 backdrop-blur-sm"
+            : undefined
+        }
       data-render-type={item.type}
       data-render-id={item.id}
       onClick={handleClick}

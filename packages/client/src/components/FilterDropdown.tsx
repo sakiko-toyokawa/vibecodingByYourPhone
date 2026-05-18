@@ -177,7 +177,7 @@ export function FilterDropdown<T extends string>({
           >
             {multiSelect && (
               <span
-                className={`w-[18px] h-[18px] border-2 border-[var(--border-color)] rounded-[var(--radius-sm)] flex items-center justify-center shrink-0 transition-colors duration-150 ${isSelected ? "bg-[var(--text-primary)] border-[var(--text-primary)] text-white" : ""}`}
+                className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[var(--radius-sm)] border-2 border-[var(--border-color)] transition-colors duration-150 ${isSelected ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)]" : ""}`}
                 aria-hidden="true"
               >
                 {isSelected && <span className="text-xs">&#x2713;</span>}
@@ -219,7 +219,7 @@ export function FilterDropdown<T extends string>({
       ? createPortal(
           // biome-ignore lint/a11y/useKeyWithClickEvents: Escape key handled globally
           <div
-            className="fixed inset-0 bg-black/50 z-[10001] flex items-end justify-center md:hidden"
+            className="fixed inset-0 z-[10001] flex items-end justify-center bg-[var(--bg-overlay)] md:hidden"
             onClick={handleOverlayClick}
             onMouseDown={(e) => e.stopPropagation()}
           >

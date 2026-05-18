@@ -290,7 +290,7 @@ export function ToolApprovalPanel({
                   onClick={handleApproveAcceptEdits}
                   disabled={!armed || submitting || !onApproveAcceptEdits}
                 >
-                  <kbd className="rounded bg-white/20 px-1.5 py-0.5 text-xs font-mono">
+                  <kbd className="rounded bg-current/15 px-1.5 py-0.5 text-xs font-mono">
                     1
                   </kbd>
                   <span>{t("toolApprovalYesAuto")}</span>
@@ -326,7 +326,7 @@ export function ToolApprovalPanel({
                   onClick={handleApprove}
                   disabled={!armed || submitting}
                 >
-                  <kbd className="rounded bg-white/20 px-1.5 py-0.5 text-xs font-mono">
+                  <kbd className="rounded bg-current/15 px-1.5 py-0.5 text-xs font-mono">
                     1
                   </kbd>
                   <span>{t("toolApprovalYes")}</span>

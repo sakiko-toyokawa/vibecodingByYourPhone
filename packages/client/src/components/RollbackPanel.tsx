@@ -18,9 +18,9 @@ const CHANGE_TYPE_LABELS: Record<string, string> = {
 };
 
 const CHANGE_TYPE_COLORS: Record<string, string> = {
-  create: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-  modify: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
-  delete: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  create: "bg-[var(--bg-success)] text-[var(--success-color)]",
+  modify: "bg-[var(--bg-warning)] text-[var(--warning-color)]",
+  delete: "bg-[var(--bg-error)] text-[var(--error-color)]",
 };
 
 export function RollbackPanel({
@@ -106,7 +106,7 @@ export function RollbackPanel({
 
   if (changes.length === 0) {
     return (
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center">
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-[var(--bg-overlay)] p-4 sm:items-center">
         <div className="w-full max-w-lg rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] p-6 shadow-lg pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
           <h3 className="mb-4 text-lg font-medium text-[var(--text-primary)]">
             {t("rollbackPanelTitle")}
@@ -129,7 +129,7 @@ export function RollbackPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[var(--bg-overlay)] p-4 sm:items-center">
       <div className="flex w-full max-w-lg flex-col rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-lg max-h-[80vh] pb-[max(0px,env(safe-area-inset-bottom,0px))]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3">

@@ -40,6 +40,20 @@
   - `pnpm.cmd typecheck` still fails with the same local `EPERM` when Node tries to open `node_modules\\.pnpm\\typescript@5.9.3\\node_modules\\typescript\\bin\\tsc`
 - Next: optional follow-up pass for lower-priority hardcoded surfaces still outside the reviewed fix set
 
+### 2026-05-18 3
+
+- Completed the planned low-priority cleanup pass for the follow-up set:
+  - normalized toast and reload banner tones to theme tokens
+  - replaced sheet/modal overlay scrims with `--bg-overlay`
+  - removed remaining light-only hover/background remnants from session list rows and subagent wrappers
+  - updated `ExitPlanModeRenderer`, `GlobRenderer`, and `GrepRenderer` to stop using fixed terminal/light hover colors
+  - switched the settings toggle knob from a hardcoded white fill to the input surface token
+- Static verification:
+  - no remaining matches for the targeted fixed-color patterns from this cleanup pass
+  - no unresolved `var(--...)` references under `packages/client/src`
+- Environment status:
+  - `pnpm.cmd typecheck` still fails with the same `EPERM` reading the local TypeScript shim
+
 ## Verification Notes
 
 - `pnpm.cmd typecheck` is currently blocked by a local `EPERM` error opening the TypeScript shim under `node_modules\\.pnpm\\typescript@5.9.3\\node_modules\\typescript\\bin\\tsc`.
