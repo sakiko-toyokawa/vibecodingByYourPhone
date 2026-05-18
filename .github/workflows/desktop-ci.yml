@@ -134,12 +134,15 @@ jobs:
             echo "TAURI_SIGNING_PRIVATE_KEY=${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" >> "$GITHUB_ENV"
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
           fi
+          # Skip macOS code signing if no certificate is available (fork builds)
           if [ "${{ env.HAS_MACOS_SIGNING }}" = "true" ] && [ "${{ matrix.platform }}" = "macos-latest" ]; then
             echo "APPLE_CERTIFICATE<<CERT_EOF" >> "$GITHUB_ENV"
             echo "${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}" >> "$GITHUB_ENV"
             echo "CERT_EOF" >> "$GITHUB_ENV"
             echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.MACOS_CERTIFICATE_PASSWORD }}" >> "$GITHUB_ENV"
             echo "APPLE_SIGNING_IDENTITY=Developer ID Application: Kyle Graehl (VD7BYQ6ABM)" >> "$GITHUB_ENV"
+          else
+            echo "Skipping macOS code signing (no certificate available)"
           fi
           if [ "${{ env.HAS_MACOS_NOTARIZATION }}" = "true" ] && [ "${{ matrix.platform }}" = "macos-latest" ]; then
             echo "APPLE_API_KEY=${{ secrets.ASC_API_KEY_ID }}" >> "$GITHUB_ENV"
