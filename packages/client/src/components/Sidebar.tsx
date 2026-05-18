@@ -218,12 +218,12 @@ export function Sidebar({
           }`}
         >
           {isDesktop && isCollapsed ? (
-            <button
-              type="button"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[var(--text-muted)] shadow-sm ring-1 ring-black/5 transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-              onClick={onToggleExpanded}
-              title={t("actionExpandSidebar")}
-              aria-label={t("actionExpandSidebar")}
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-muted)] shadow-sm transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                onClick={onToggleExpanded}
+                title={t("actionExpandSidebar")}
+                aria-label={t("actionExpandSidebar")}
             >
               <span className="text-sm font-medium">→</span>
             </button>
@@ -245,7 +245,7 @@ export function Sidebar({
               {!isDesktop && (
                 <button
                   type="button"
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[var(--text-muted)] shadow-sm ring-1 ring-black/5 transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-muted)] shadow-sm transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                   onClick={onClose}
                   aria-label={t("actionCloseSidebar")}
                 >
@@ -266,7 +266,7 @@ export function Sidebar({
                   ? `${basePath}/new-session?projectId=${encodeURIComponent(newSessionProjectId)}`
                   : `${basePath}/new-session`
               }
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1b1c18] text-[#fbf9f2] transition-opacity hover:opacity-90"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--on-primary)] transition-opacity hover:opacity-90"
               onClick={onNavigate}
               title={t("sidebarNewSession")}
               aria-label={t("sidebarNewSession")}
@@ -304,7 +304,7 @@ export function Sidebar({
                   ? `${basePath}/new-session?projectId=${encodeURIComponent(newSessionProjectId)}`
                   : `${basePath}/new-session`
               }
-              className="flex items-center justify-center gap-2 rounded-md bg-[#1b1c18] py-2.5 px-4 text-sm font-medium text-[#fbf9f2] no-underline transition-opacity hover:opacity-90"
+              className="flex items-center justify-center gap-2 rounded-md bg-[var(--primary)] px-4 py-2.5 text-sm font-medium text-[var(--on-primary)] no-underline transition-opacity hover:opacity-90"
               onClick={onNavigate}
             >
               <svg
@@ -419,7 +419,7 @@ export function Sidebar({
             {remoteConnection && !isCollapsed && (
               <button
                 type="button"
-                className="mt-1 flex items-center gap-2 rounded-xl border border-[var(--border-color)]/70 bg-white px-3.5 py-2 text-left text-xs text-[var(--text-primary)] shadow-sm transition-colors hover:bg-[var(--bg-hover)]"
+                className="mt-1 flex items-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3.5 py-2 text-left text-xs text-[var(--text-primary)] shadow-sm transition-colors hover:bg-[var(--bg-hover)]"
                 onClick={handleSwitchHost}
               >
                 <span>{t("sidebarSwitchHost")}</span>

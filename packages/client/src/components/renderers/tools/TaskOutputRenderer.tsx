@@ -8,10 +8,10 @@ import type { TaskOutputInput, TaskOutputResult, ToolRenderer } from "./types";
 const MAX_LINES_COLLAPSED = 20;
 
 const terminalFrameClasses =
-  "rounded-lg border border-[var(--border-subtle)] bg-[#171717] px-4 py-3 [font-family:var(--font-mono)] text-[13px] leading-6 text-[#e8e3d8] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]";
+  "rounded-lg border border-[var(--border-color)] bg-[var(--bg-code)] px-4 py-3 [font-family:var(--font-mono)] text-[13px] leading-6 text-[var(--text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]";
 
 const subtleButtonClasses =
-  "min-h-[40px] rounded-full border border-black/10 bg-[var(--bg-surface)] px-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]";
+  "min-h-[40px] rounded-full border border-[var(--border-color)] bg-[var(--bg-surface)] px-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]";
 
 function StatusBadge({ status }: { status: string }) {
   const tone =
@@ -42,16 +42,16 @@ function TaskOutputToolUse({ input }: { input: TaskOutputInput }) {
       <span className="font-medium text-[var(--text-secondary)]">
         Polling task
       </span>
-      <code className="rounded-full border border-black/10 bg-[var(--bg-secondary)] px-2.5 py-1 [font-family:var(--font-mono)] text-[12px] text-[var(--text-secondary)]">
+      <code className="rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] px-2.5 py-1 [font-family:var(--font-mono)] text-[12px] text-[var(--text-secondary)]">
         {input.task_id}
       </code>
       {input.block !== undefined && (
-        <span className="rounded-full border border-black/10 bg-[var(--bg-surface)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+        <span className="rounded-full border border-[var(--border-color)] bg-[var(--bg-surface)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
           {input.block ? "blocking" : "non-blocking"}
         </span>
       )}
       {input.timeout !== undefined && (
-        <span className="rounded-full border border-black/10 bg-[var(--bg-surface)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+        <span className="rounded-full border border-[var(--border-color)] bg-[var(--bg-surface)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
           timeout: {input.timeout}ms
         </span>
       )}

@@ -27,14 +27,16 @@ export const ToolCallRow = memo(function ToolCallRow({
   status,
   sessionProvider,
 }: Props) {
+  const resolvedTheme = useResolvedTheme();
+  const renderTheme = resolvedTheme === "codex" ? "dark" : "light";
   const renderContext: RenderContext = useMemo(
     () => ({
       isStreaming: status === "pending",
-      theme: "dark",
+      theme: renderTheme,
       toolUseId: id,
       provider: sessionProvider,
     }),
-    [status, id, sessionProvider],
+    [status, renderTheme, id, sessionProvider],
   );
 
   const structuredResult = toolResult?.structured ?? toolResult?.content;
@@ -116,8 +118,7 @@ export const ToolCallRow = memo(function ToolCallRow({
     }
   };
 
-  const theme = useResolvedTheme();
-  const providerStyle = getProviderStyle(theme);
+  const providerStyle = getProviderStyle(sessionProvider);
 
   if (hasInlineRenderer) {
     return (
@@ -136,10 +137,10 @@ export const ToolCallRow = memo(function ToolCallRow({
 
   return (
     <div
-      className={`my-2 overflow-hidden rounded-lg border border-black/5 border-l-[3px] ${providerStyle.accent} ${providerStyle.bg} ${providerStyle.shadow} transition-all duration-150 ${isNonExpandable ? "" : "hover:border-black/10"}`}
+      className={`my-2 overflow-hidden rounded-lg border border-[var(--border-color)] border-l-[3px] ${providerStyle.accent} ${providerStyle.bg} ${providerStyle.shadow} transition-all duration-150 ${isNonExpandable ? "" : "hover:border-[var(--border-input)]"}`}
     >
       <div
-        className={`flex items-center gap-2 px-4 py-3 text-sm ${isNonExpandable ? "" : "cursor-pointer hover:bg-black/[0.02]"}`}
+        className={`flex items-center gap-2 px-4 py-3 text-sm ${isNonExpandable ? "" : "cursor-pointer hover:bg-[var(--bg-hover)]/60"}`}
         onClick={isNonExpandable ? undefined : handleToggle}
         onKeyDown={
           isNonExpandable
@@ -170,11 +171,11 @@ export const ToolCallRow = memo(function ToolCallRow({
         </span>
 
         {hasInteractiveSummary && status === "complete" ? (
-          <span className="min-w-0 flex-1 truncate text-xs text-gray-500">
+          <span className="min-w-0 flex-1 truncate text-xs text-[var(--text-muted)]">
             {interactiveSummaryContent}
           </span>
         ) : !hideSummaryWhenPreviewVisible ? (
-          <span className="min-w-0 flex-1 truncate text-xs text-gray-500">
+          <span className="min-w-0 flex-1 truncate text-xs text-[var(--text-muted)]">
             {summary}
             {status === "aborted" && (
               <span className="ml-1 text-[var(--text-muted)]">
@@ -185,7 +186,10 @@ export const ToolCallRow = memo(function ToolCallRow({
         ) : null}
 
         {!isNonExpandable && (
-          <span className="shrink-0 text-xs text-gray-400" aria-hidden="true">
+          <span
+            className="shrink-0 text-xs text-[var(--text-dimmed)]"
+            aria-hidden="true"
+          >
             {expanded ? "▾" : "▸"}
           </span>
         )}
@@ -196,7 +200,7 @@ export const ToolCallRow = memo(function ToolCallRow({
       )}
 
       {expanded && !isNonExpandable && (
-        <div className="border-t border-black/5 px-4 pb-4">
+        <div className="border-t border-[var(--border-color)] px-4 pb-4">
           {status === "pending" || status === "aborted" ? (
             <ToolUseExpanded
               toolName={toolName}
@@ -277,7 +281,9 @@ function ToolResultExpanded({
 }) {
   if (!toolResult) {
     return (
-      <div className="pt-3 text-sm italic text-gray-400">No result data</div>
+      <div className="pt-3 text-sm italic text-[var(--text-dimmed)]">
+        No result data
+      </div>
     );
   }
 

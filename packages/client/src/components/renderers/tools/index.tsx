@@ -132,7 +132,7 @@ const fallbackToolRenderer: ToolRenderer = {
   tool: "__fallback__",
   renderToolUse(input, _context) {
     return (
-      <pre className="overflow-x-auto rounded-[16px] border border-black/10 bg-[#f7f2e8]/90 p-4 [font-family:var(--font-mono)] text-[13px] leading-6 text-[#2f2923] shadow-[0_1px_0_rgba(20,20,19,0.03)]">
+      <pre className="overflow-x-auto rounded-[16px] border border-[var(--border-color)] bg-[var(--bg-code)] p-4 [font-family:var(--font-mono)] text-[13px] leading-6 text-[var(--text-primary)] shadow-[0_1px_0_rgba(20,20,19,0.03)]">
         <code>{JSON.stringify(input, null, 2)}</code>
       </pre>
     );
@@ -142,8 +142,8 @@ const fallbackToolRenderer: ToolRenderer = {
       <pre
         className={`overflow-x-auto rounded-[16px] border p-4 [font-family:var(--font-mono)] text-[13px] leading-6 shadow-[0_1px_0_rgba(20,20,19,0.03)] ${
           isError
-            ? "border-[#edd2c8] bg-[#fbefea] text-[#8e4336]"
-            : "border-black/10 bg-[#f7f2e8]/90 text-[#2f2923]"
+            ? "border-[var(--error-color)]/20 bg-[var(--bg-error)] text-[var(--error-color)]"
+            : "border-[var(--border-color)] bg-[var(--bg-code)] text-[var(--text-primary)]"
         }`}
       >
         <code>{JSON.stringify(result, null, 2)}</code>

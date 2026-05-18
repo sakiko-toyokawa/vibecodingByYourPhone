@@ -5,7 +5,6 @@ import { useSchemaValidationContext } from "../../../contexts/SchemaValidationCo
 import { useSessionMetadata } from "../../../contexts/SessionMetadataContext";
 import { useExpandedDiff } from "../../../hooks/useExpandedDiff";
 import { useRemoteBasePath } from "../../../hooks/useRemoteBasePath";
-import { useResolvedTheme } from "../../../hooks/useTheme";
 import {
   classifyToolError,
   getErrorClassSuffix,
@@ -121,11 +120,12 @@ function truncateByLines(
  */
 const DiffLines = memo(function DiffLines({
   lines,
+  provider,
 }: {
   lines: string[];
+  provider?: string;
 }) {
-  const theme = useResolvedTheme();
-  const style = getProviderStyle(theme);
+  const style = getProviderStyle(provider);
   return (
     <div className="my-2 first:mt-0 rounded overflow-hidden border border-[var(--border-color)]">
       <pre className="m-0 p-0 bg-[var(--bg-code)] overflow-x-auto tab-[var(--tab-size)]">
@@ -201,11 +201,12 @@ const HighlightedDiff = memo(function HighlightedDiff({
  */
 const DiffHunk = memo(function DiffHunk({
   hunk,
+  provider,
 }: {
   hunk: PatchHunk;
+  provider?: string;
 }) {
-  const theme = useResolvedTheme();
-  const style = getProviderStyle(theme);
+  const style = getProviderStyle(provider);
   return (
     <div className="my-2 first:mt-0 rounded overflow-hidden border border-[var(--border-color)]">
       <pre className="m-0 p-0 bg-[var(--bg-code)] overflow-x-auto tab-[var(--tab-size)]">
@@ -321,7 +322,7 @@ function EditToolUse({
               truncateLines={isTruncated ? MAX_VISIBLE_LINES : undefined}
             />
           ) : (
-            <DiffLines lines={diffLines} />
+            <DiffLines lines={diffLines} provider={provider} />
           )}
         </div>
         {isTruncated && (
@@ -448,7 +449,10 @@ function DiffModalContent({
       {displayHtml ? (
         <HighlightedDiff diffHtml={displayHtml} />
       ) : (
-        <DiffLines lines={displayPatch.flatMap((h) => h.lines)} />
+        <DiffLines
+          lines={displayPatch.flatMap((h) => h.lines)}
+          provider={provider}
+        />
       )}
     </div>
   );
@@ -1078,6 +1082,7 @@ function EditToolResult({
               oldString={inputWithAugment.old_string}
               newString={inputWithAugment.new_string}
               replaceAll={inputWithAugment.replace_all ?? false}
+              provider={provider}
             />
           </Modal>
         )}
@@ -1154,9 +1159,13 @@ function EditToolResult({
         <div
           className={`relative ${isTruncated ? "max-h-[18rem] overflow-hidden" : ""}`}
         >
-          <div className="font-mono [font-size:var(--font-size-base)]">
+            <div className="font-mono [font-size:var(--font-size-base)]">
             {result.structuredPatch.map((hunk, i) => (
-              <DiffHunk key={`hunk-${hunk.oldStart}-${i}`} hunk={hunk} />
+              <DiffHunk
+                key={`hunk-${hunk.oldStart}-${i}`}
+                hunk={hunk}
+                provider={provider}
+              />
             ))}
           </div>
           {isTruncated && (
@@ -1192,6 +1201,7 @@ function EditToolResult({
             newString={result.newString ?? input?.new_string ?? ""}
             originalFile={result.originalFile}
             replaceAll={replaceAll}
+            provider={provider}
           />
         </Modal>
       )}

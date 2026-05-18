@@ -99,6 +99,7 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
+  --radius-full: 9999px;
 
   /* Safe Area (for mobile notch/punch-hole screens) */
   --safe-area-top: env(safe-area-inset-top, 0px);
@@ -142,6 +143,7 @@
   --attention-color: #0066cc;
   --focus-border: var(--accent-rust);
   --primary-color: #2563eb;
+  --error-hover: #93000a;
 
   /* Timeline */
   --timeline-dot-default: #8a8a8a;
@@ -184,15 +186,43 @@
   --bg-active: var(--bg-hover);
   --bg-muted: var(--bg-tertiary);
   --bg-error: rgba(186, 26, 26, 0.1);
+  --bg-success: rgba(26, 127, 55, 0.15);
   --bg-warning: rgba(154, 103, 0, 0.15);
+  --bg-diff-added: var(--bg-success);
+  --bg-diff-inserted: var(--bg-success);
+  --bg-diff-deleted: var(--bg-error);
+  --bg-diff-removed: var(--bg-error);
   --border-hover: var(--border-subtle);
   --border-muted: var(--border-subtle);
   --accent-color: var(--accent-rust);
   --accent-primary: var(--accent-rust);
+  --accent-star: var(--accent-rust);
   --color-success: var(--success-color);
   --color-error: var(--error-color);
   --color-warning: var(--warning-color);
+  --text-diff-added: var(--success-color);
+  --text-diff-removed: var(--error-color);
   --text-error: var(--error-color);
+
+  /* Material-style aliases used by newer editor surfaces */
+  --surface: var(--bg-surface);
+  --surface-dim: var(--bg-secondary);
+  --surface-bright: var(--bg-surface);
+  --surface-container-lowest: var(--bg-surface);
+  --surface-container-low: var(--bg-secondary);
+  --surface-container: var(--bg-tertiary);
+  --surface-container-high: var(--bg-hover);
+  --surface-container-highest: var(--bg-hover);
+  --on-surface: var(--text-primary);
+  --on-surface-variant: var(--text-secondary);
+  --outline: var(--border-input);
+  --outline-variant: var(--border-subtle);
+  --surface-tint: #5f5e5e;
+  --primary: #000000;
+  --on-primary: #ffffff;
+  --background: var(--bg-surface);
+  --on-background: var(--text-primary);
+  --surface-variant: var(--bg-hover);
 }
 
 /* ============================================================================
@@ -283,15 +313,26 @@
   --bg-active: var(--bg-hover);
   --bg-muted: var(--bg-tertiary);
   --bg-error: rgba(255, 180, 171, 0.12);
+  --bg-success: rgba(152, 212, 172, 0.12);
   --bg-warning: rgba(251, 188, 4, 0.12);
+  --bg-diff-added: var(--bg-success);
+  --bg-diff-inserted: var(--bg-success);
+  --bg-diff-deleted: var(--bg-error);
+  --bg-diff-removed: var(--bg-error);
   --border-hover: var(--border-subtle);
   --border-muted: var(--border-subtle);
   --accent-color: var(--accent-rust);
   --accent-primary: var(--accent-rust);
+  --accent-star: var(--accent-rust);
   --color-success: var(--success-color);
   --color-error: var(--error-color);
   --color-warning: var(--warning-color);
+  --text-diff-added: var(--success-color);
+  --text-diff-removed: var(--error-color);
   --text-error: var(--error-color);
+  --error-hover: #ff8a80;
+  --primary: #98d4ac;
+  --on-primary: #1a1b26;
 }
 
 /* Button overrides for codex theme */
@@ -402,15 +443,24 @@
   --bg-active: var(--bg-hover);
   --bg-muted: var(--bg-tertiary);
   --bg-error: rgba(186, 26, 26, 0.1);
+  --bg-success: rgba(26, 127, 55, 0.15);
   --bg-warning: rgba(154, 103, 0, 0.15);
+  --bg-diff-added: var(--bg-success);
+  --bg-diff-inserted: var(--bg-success);
+  --bg-diff-deleted: var(--bg-error);
+  --bg-diff-removed: var(--bg-error);
   --border-hover: var(--border-subtle);
   --border-muted: var(--border-subtle);
   --accent-color: var(--accent-rust);
   --accent-primary: var(--accent-rust);
+  --accent-star: var(--accent-rust);
   --color-success: var(--success-color);
   --color-error: var(--error-color);
   --color-warning: var(--warning-color);
+  --text-diff-added: var(--success-color);
+  --text-diff-removed: var(--error-color);
   --text-error: var(--error-color);
+  --primary: #005bc0;
 }
 
 /* Button overrides for gemini theme */

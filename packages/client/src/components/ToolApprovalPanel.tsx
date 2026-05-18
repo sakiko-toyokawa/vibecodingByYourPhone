@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useToolApprovalFeedbackDraft } from "../hooks/useDrafts";
+import { useResolvedTheme } from "../hooks/useTheme";
 import { useI18n } from "../i18n";
 import type { InputRequest } from "../types";
 import { toolRegistry } from "./renderers/tools";
@@ -41,6 +42,8 @@ export function ToolApprovalPanel({
   onCollapsedChange,
 }: Props) {
   const { t } = useI18n();
+  const resolvedTheme = useResolvedTheme();
+  const renderTheme = resolvedTheme === "codex" ? "dark" : "light";
   const [submitting, setSubmitting] = useState(false);
   // Prevent accidental clicks by disabling buttons briefly when panel appears
   const [armed, setArmed] = useState(false);
@@ -202,18 +205,18 @@ export function ToolApprovalPanel({
   const renderContext: RenderContext = useMemo(
     () => ({
       isStreaming: true,
-      theme: "dark",
+      theme: renderTheme,
       toolUseId: request.id,
     }),
-    [request.id],
+    [request.id, renderTheme],
   );
 
   return (
-    <div className="my-2 rounded-lg border border-gray-200/60 overflow-hidden bg-white shadow-sm">
+    <div className="my-2 overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-[0_1px_0_rgba(20,20,19,0.03)]">
       {/* Floating toggle button */}
       <button
         type="button"
-        className={`flex items-center justify-center w-full py-1.5 bg-gray-50 border-b border-gray-100 text-gray-400 cursor-pointer transition-colors duration-150 hover:bg-gray-100 hover:text-gray-600 ${collapsed ? "border-amber-300 bg-amber-50/50" : ""}`}
+        className={`flex w-full items-center justify-center border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)] py-1.5 text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)] ${collapsed ? "border-[var(--warning-color)]/30 bg-[var(--bg-warning)] text-[var(--warning-color)]" : ""}`}
         onClick={() => onCollapsedChange?.(!collapsed)}
         aria-label={
           collapsed ? t("toolApprovalExpand") : t("toolApprovalCollapse")
@@ -232,17 +235,17 @@ export function ToolApprovalPanel({
           <div className="flex flex-col gap-1 mb-3">
             {isExitPlanMode(request.toolName) ? (
               <>
-                <span className="font-semibold text-sm text-gray-800">
+                <span className="text-sm font-semibold text-[var(--text-primary)]">
                   {t("toolApprovalPlanTitle")}
                 </span>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-[var(--text-muted)]">
                   {t("toolApprovalPlanSubtitle")}
                 </span>
               </>
             ) : (
               <>
                 <div className="flex items-start gap-2 flex-wrap">
-                  <span className="text-sm text-gray-700 flex-1 min-w-0">
+                  <span className="min-w-0 flex-1 text-sm text-[var(--text-secondary)]">
                     {t("toolApprovalAllow", {
                       tool: request.toolName ?? "",
                       summary: summary ?? "",
@@ -251,7 +254,7 @@ export function ToolApprovalPanel({
                   {showViewDetails && (
                     <button
                       type="button"
-                      className="shrink-0 text-xs text-blue-500 hover:text-blue-600 underline cursor-pointer bg-transparent border-none p-0"
+                      className="shrink-0 cursor-pointer border-none bg-transparent p-0 text-xs text-[var(--link-color)] underline hover:text-[var(--accent-primary)]"
                       onClick={() => setShowPreviewModal(true)}
                     >
                       {t("toolApprovalViewDetails")}
@@ -283,33 +286,33 @@ export function ToolApprovalPanel({
               <>
                 <button
                   type="button"
-                  className="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--accent-rust)] text-white text-sm font-medium cursor-pointer transition-opacity duration-150 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 rounded-md bg-[var(--primary)] px-3 py-2 text-sm font-medium text-[var(--on-primary)] transition-opacity duration-150 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={handleApproveAcceptEdits}
                   disabled={!armed || submitting || !onApproveAcceptEdits}
                 >
-                  <kbd className="px-1.5 py-0.5 bg-white/20 rounded text-xs font-mono">
+                  <kbd className="rounded bg-white/20 px-1.5 py-0.5 text-xs font-mono">
                     1
                   </kbd>
                   <span>{t("toolApprovalYesAuto")}</span>
                 </button>
                 <button
                   type="button"
-                  className="flex items-center gap-2 px-3 py-2 rounded-md bg-gray-100 text-gray-700 text-sm cursor-pointer transition-colors duration-150 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={handleApprove}
                   disabled={!armed || submitting}
                 >
-                  <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs font-mono text-gray-600">
+                  <kbd className="rounded bg-[var(--bg-hover)] px-1.5 py-0.5 text-xs font-mono text-[var(--text-muted)]">
                     2
                   </kbd>
                   <span>{t("toolApprovalYesManual")}</span>
                 </button>
                 <button
                   type="button"
-                  className="flex items-center gap-2 px-3 py-2 rounded-md bg-gray-100 text-gray-700 text-sm cursor-pointer transition-colors duration-150 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={handleDeny}
                   disabled={!armed || submitting}
                 >
-                  <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs font-mono text-gray-600">
+                  <kbd className="rounded bg-[var(--bg-hover)] px-1.5 py-0.5 text-xs font-mono text-[var(--text-muted)]">
                     3
                   </kbd>
                   <span>{t("toolApprovalNoKeepPlanning")}</span>
@@ -319,11 +322,11 @@ export function ToolApprovalPanel({
               <>
                 <button
                   type="button"
-                  className="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--accent-rust)] text-white text-sm font-medium cursor-pointer transition-opacity duration-150 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 rounded-md bg-[var(--primary)] px-3 py-2 text-sm font-medium text-[var(--on-primary)] transition-opacity duration-150 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={handleApprove}
                   disabled={!armed || submitting}
                 >
-                  <kbd className="px-1.5 py-0.5 bg-white/20 rounded text-xs font-mono">
+                  <kbd className="rounded bg-white/20 px-1.5 py-0.5 text-xs font-mono">
                     1
                   </kbd>
                   <span>{t("toolApprovalYes")}</span>
@@ -332,11 +335,11 @@ export function ToolApprovalPanel({
                 {isEditTool && onApproveAcceptEdits && (
                   <button
                     type="button"
-                    className="flex items-center gap-2 px-3 py-2 rounded-md bg-gray-100 text-gray-700 text-sm cursor-pointer transition-colors duration-150 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={handleApproveAcceptEdits}
                     disabled={!armed || submitting}
                   >
-                    <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs font-mono text-gray-600">
+                    <kbd className="rounded bg-[var(--bg-hover)] px-1.5 py-0.5 text-xs font-mono text-[var(--text-muted)]">
                       2
                     </kbd>
                     <span>{t("toolApprovalYesDontAsk")}</span>
@@ -345,11 +348,11 @@ export function ToolApprovalPanel({
 
                 <button
                   type="button"
-                  className="flex items-center gap-2 px-3 py-2 rounded-md bg-gray-100 text-gray-700 text-sm cursor-pointer transition-colors duration-150 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={handleDeny}
                   disabled={!armed || submitting}
                 >
-                  <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs font-mono text-gray-600">
+                  <kbd className="rounded bg-[var(--bg-hover)] px-1.5 py-0.5 text-xs font-mono text-[var(--text-muted)]">
                     {isEditTool && onApproveAcceptEdits ? "3" : "2"}
                   </kbd>
                   <span>{t("toolApprovalNo")}</span>
@@ -360,7 +363,7 @@ export function ToolApprovalPanel({
             {onDenyWithFeedback && !showFeedback && (
               <button
                 type="button"
-                className="px-3 py-2 rounded-md bg-transparent text-gray-500 text-sm cursor-pointer transition-colors duration-150 hover:bg-gray-50 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-left"
+                className="rounded-md bg-transparent px-3 py-2 text-left text-sm text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => setShowFeedback(true)}
                 disabled={!armed || submitting}
               >
@@ -377,11 +380,11 @@ export function ToolApprovalPanel({
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
                   disabled={!armed || submitting}
-                  className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-700 outline-none focus:border-gray-400"
+                  className="flex-1 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-border)]"
                 />
                 <button
                   type="button"
-                  className="px-4 py-2 rounded-md bg-gray-800 text-white text-sm font-medium cursor-pointer transition-opacity duration-150 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                  className="shrink-0 rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-medium text-[var(--on-primary)] transition-opacity duration-150 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   onClick={handleDenyWithFeedback}
                   disabled={!armed || submitting || !feedback.trim()}
                 >

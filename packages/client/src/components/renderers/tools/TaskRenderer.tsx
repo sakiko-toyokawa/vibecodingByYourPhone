@@ -10,6 +10,7 @@ import type { ZodError } from "zod";
 import { AgentContentContext } from "../../../contexts/AgentContentContext";
 import { useSchemaValidationContext } from "../../../contexts/SchemaValidationContext";
 import { useSessionMetadata } from "../../../contexts/SessionMetadataContext";
+import { useResolvedTheme } from "../../../hooks/useTheme";
 import { classifyToolError } from "../../../lib/classifyToolError";
 import { preprocessMessages } from "../../../lib/preprocessMessages";
 import { validateToolResult } from "../../../lib/validateToolResult";
@@ -53,7 +54,7 @@ function getTaskStatusStyles(status: string) {
       };
     default:
       return {
-        container: "border-[var(--border-color)] bg-[rgba(255,255,255,0.72)]",
+        container: "border-[var(--border-color)] bg-[var(--bg-surface)]",
         badge: "bg-[var(--bg-tertiary)] text-[var(--text-muted)]",
       };
   }
@@ -193,6 +194,8 @@ function TaskInline({
   status: "pending" | "complete" | "error" | "aborted";
   toolUseId?: string;
 }) {
+  const resolvedTheme = useResolvedTheme();
+  const renderTheme = resolvedTheme === "codex" ? "dark" : "light";
   const { projectId, sessionId } = useSessionMetadata();
   const context = useContext(AgentContentContext);
   const {
@@ -433,7 +436,7 @@ function TaskInline({
       </button>
 
       {isLoadingContent && (
-        <div className="flex items-center gap-2 border-t border-[rgba(15,23,42,0.08)] px-4 py-3 text-sm text-[var(--text-muted)]">
+        <div className="flex items-center gap-2 border-t border-[var(--border-color)] px-4 py-3 text-sm text-[var(--text-muted)]">
           <Spinner /> Loading agent content...
         </div>
       )}
@@ -445,7 +448,7 @@ function TaskInline({
         >
           {errorInfo && (
             <div className="p-4">
-              <pre className="m-0 whitespace-pre-wrap break-words rounded-xl border-l-4 border-[var(--error-color)] bg-[rgba(254,242,242,0.96)] p-4 text-sm leading-6 text-[var(--text-primary)]">
+              <pre className="m-0 whitespace-pre-wrap break-words rounded-xl border-l-4 border-[var(--error-color)] bg-[var(--bg-error)] p-4 text-sm leading-6 text-[var(--text-primary)]">
                 {errorInfo.raw}
               </pre>
             </div>
@@ -464,7 +467,7 @@ function TaskInline({
                     `${agentId}-${block.type}-${block.text?.slice(0, 20) ?? ""}`
                   }
                   block={block}
-                  context={{ isStreaming: false, theme: "dark" }}
+                  context={{ isStreaming: false, theme: renderTheme }}
                 />
               ))}
             </div>
@@ -511,7 +514,7 @@ function TaskToolResult({
 
   if (isError) {
     return (
-      <div className="rounded-xl border border-[rgba(239,68,68,0.18)] bg-[rgba(254,242,242,0.84)] px-4 py-3 text-[var(--error-color)]">
+      <div className="rounded-xl border border-[var(--error-color)]/20 bg-[var(--bg-error)] px-4 py-3 text-[var(--error-color)]">
         {typeof result === "object" && "content" in result
           ? String(result.content)
           : "Task failed"}
@@ -527,10 +530,10 @@ function TaskToolResult({
 
   const statusClass =
     result.status === "completed"
-      ? "bg-[rgba(34,197,94,0.12)] text-[var(--success-color)]"
+      ? "bg-[var(--bg-success)] text-[var(--success-color)]"
       : result.status === "failed"
-        ? "bg-[rgba(239,68,68,0.12)] text-[var(--error-color)]"
-        : "bg-[rgba(234,179,8,0.14)] text-[var(--warning-color)]";
+        ? "bg-[var(--bg-error)] text-[var(--error-color)]"
+        : "bg-[var(--bg-warning)] text-[var(--warning-color)]";
 
   return (
     <div className="flex flex-col gap-3">
@@ -557,7 +560,7 @@ function TaskToolResult({
             <ContentBlockRenderer
               key={`${result.agentId}-${i}`}
               block={block}
-              context={{ isStreaming: false, theme: "dark" }}
+              context={{ isStreaming: false, theme: renderTheme }}
             />
           ))}
         </div>
