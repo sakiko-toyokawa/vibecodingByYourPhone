@@ -215,6 +215,8 @@ jobs:
       - name: Build Linux AppImage
         if: runner.os == 'Linux'
         shell: bash
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
         run: |
           cd packages/desktop
           PROJECT_DIR="$(pwd)"
@@ -224,6 +226,15 @@ jobs:
           # Save real bun and replace with tiny dummy ELF
           cp "$BUN_BIN" /tmp/bun-real
           cp /usr/bin/true "$BUN_BIN"
+
+          # Pre-download linuxdeploy to avoid Tauri's download failing
+          # github.com/tauri-apps/tauri/issues/14796
+          mkdir -p ~/.cache/tauri
+          LINUXDEPLOY_URL="https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
+          curl -fsSL "$LINUXDEPLOY_URL" -o ~/.cache/tauri/linuxdeploy-x86_64.AppImage
+          chmod +x ~/.cache/tauri/linuxdeploy-x86_64.AppImage
+          # Extract linuxdeploy so it doesn't need FUSE
+          ~/.cache/tauri/linuxdeploy-x86_64.AppImage --appimage-extract >/dev/null 2>&1 || true
 
           # Build AppImage with dummy (Rust binary is cached from deb/rpm build above)
           pnpm tauri build --bundles appimage
