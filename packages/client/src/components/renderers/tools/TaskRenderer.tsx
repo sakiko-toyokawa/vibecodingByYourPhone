@@ -510,6 +510,8 @@ function TaskToolResult({
   result: TaskResult;
   isError: boolean;
 }) {
+  const resolvedTheme = useResolvedTheme();
+  const renderTheme = resolvedTheme === "codex" ? "dark" : "light";
   const [isExpanded, setIsExpanded] = useState(true);
 
   if (isError) {
