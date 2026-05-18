@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { SettingsTextarea } from "../../components/settings/SettingsFormControls";
 import { useServerSettings } from "../../hooks/useServerSettings";
 import { useI18n } from "../../i18n";
 
@@ -75,8 +76,8 @@ export function AgentContextSettings() {
             <strong>{t("agentContextGlobalInstructions")}</strong>
             <p>{t("agentContextGlobalInstructionsDescription")}</p>
           </div>
-          <textarea
-            className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)] resize-y"
+          <SettingsTextarea
+            className="mt-[var(--space-3)] min-h-[220px] w-full"
             value={instructions}
             onChange={(e) => {
               const value = e.target.value.slice(0, MAX_LENGTH);

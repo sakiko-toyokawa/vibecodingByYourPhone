@@ -17,6 +17,7 @@
     "build:stable": "pnpm --filter client build:stable",
     "typecheck": "pnpm --filter shared build && pnpm -r --filter \"!@yep-anywhere/mobile\" exec tsc --noEmit",
     "lint": "biome check .",
+    "test": "pnpm --filter @yep-anywhere/server test",
     "format": "biome format --write .",
     "prepare": "husky",
     "site:dev": "cd site && npm run dev",

@@ -193,7 +193,7 @@ export function FilterDropdown<T extends string>({
             )}
 
             <span className="flex-1 flex flex-col gap-0.5 min-w-0">
-              <span className="[font-size:var(--font-size-base)]">
+              <span className="[font-size:var(--font-size-base)] text-[var(--text-primary)]">
                 {option.label}
               </span>
               {option.description && (
@@ -254,17 +254,19 @@ export function FilterDropdown<T extends string>({
     ) : null;
 
   return (
-    <div className="relative inline-block">
+    <div className="relative inline-block max-w-full">
       <button
         ref={buttonRef}
         type="button"
-        className={`flex items-center gap-2 px-4 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg [font-size:var(--font-size-sm)] text-[var(--text-primary)] cursor-pointer transition-colors duration-150 hover:border-[var(--border-color)] hover:bg-[var(--bg-secondary)] ${selected.length > 0 ? "border-[var(--text-primary)]/30 text-[var(--text-primary)] bg-[var(--bg-secondary)]" : ""}`}
+        className={`flex w-full min-w-0 items-center gap-2 px-4 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg [font-size:var(--font-size-sm)] text-[var(--text-primary)] cursor-pointer transition-colors duration-150 hover:border-[var(--border-color)] hover:bg-[var(--bg-secondary)] ${selected.length > 0 ? "border-[var(--text-primary)]/30 text-[var(--text-primary)] bg-[var(--bg-secondary)]" : ""}`}
         onClick={handleButtonClick}
         title={t("filterByLabel", { label })}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        {displayText}
+        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
+          {displayText}
+        </span>
         <svg
           className={`shrink-0 text-[var(--text-muted)] transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
           width="12"

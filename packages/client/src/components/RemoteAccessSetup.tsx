@@ -9,6 +9,11 @@ import { type RelayStatus, useRemoteAccess } from "../hooks/useRemoteAccess";
 import { useI18n } from "../i18n";
 import { parseUserAgent } from "../lib/deviceDetection";
 import { QRCode } from "./QRCode";
+import {
+  SettingsSelect,
+  SettingsSwitch,
+  SettingsTextInput,
+} from "./settings/SettingsFormControls";
 
 const DEFAULT_RELAY_URL = "wss://relay.yepanywhere.com/ws";
 const CONNECT_URL = "https://yepanywhere.com/remote/login/relay";
@@ -155,6 +160,16 @@ export function RemoteAccessSetup({
   // Password for QR code generation (kept in memory after successful save)
   const [savedPassword, setSavedPassword] = useState<string | null>(null);
   const [showQRCode, setShowQRCode] = useState(false);
+  const relayOptions = [
+    {
+      value: "default" as const,
+      label: t("remoteSetupRelayDefault" as never),
+    },
+    {
+      value: "custom" as const,
+      label: t("remoteSetupRelayCustom" as never),
+    },
+  ];
 
   // Initialize form from existing config
   useEffect(() => {
@@ -372,6 +387,19 @@ export function RemoteAccessSetup({
 
   // Can toggle on if: has credentials OR has filled in required fields
   const canToggleOn = hasCredentials || (username && password);
+  const actionBar = (
+    <div className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] pt-3">
+      <button
+        type="submit"
+        className="rounded-md border border-[var(--border-color)] bg-transparent px-4 py-2 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
+        disabled={isSaving || !hasChanges}
+      >
+        {isSaving
+          ? t("remoteSetupSaving" as never)
+          : t("remoteSetupSave" as never)}
+      </button>
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -380,16 +408,14 @@ export function RemoteAccessSetup({
           <h3>{title}</h3>
           <p>{description}</p>
         </div>
-        <label className="relative inline-block w-11 h-6 shrink-0 cursor-pointer">
-          <input
-            type="checkbox"
-            className="peer opacity-0 w-0 h-0"
-            checked={isEnabled}
-            onChange={(e) => handleToggle(e.target.checked)}
-            disabled={isSaving || (!isEnabled && !canToggleOn)}
-          />
-          <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-colors duration-200 rounded-full peer-checked:bg-[var(--accent-color,#3b82f6)] peer-checked:border-[var(--accent-color,#3b82f6)] before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-0.5 before:bottom-0.5 before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full peer-checked:before:translate-x-5 peer-checked:before:bg-white" />
-        </label>
+        <SettingsSwitch
+          checked={isEnabled}
+          onChange={(checked) => {
+            void handleToggle(checked);
+          }}
+          disabled={isSaving || (!isEnabled && !canToggleOn)}
+          ariaLabel={title}
+        />
       </div>
 
       <form onSubmit={handleSave} className="flex flex-col gap-4">
@@ -397,7 +423,7 @@ export function RemoteAccessSetup({
           <label htmlFor="remote-username">
             {t("remoteSetupUsername" as never)}
           </label>
-          <input
+          <SettingsTextInput
             id="remote-username"
             type="text"
             value={username}
@@ -418,7 +444,7 @@ export function RemoteAccessSetup({
               ? t("remoteSetupNewPassword" as never)
               : t("remoteSetupPassword" as never)}
           </label>
-          <input
+          <SettingsTextInput
             id="remote-password"
             type="password"
             value={password}
@@ -435,7 +461,7 @@ export function RemoteAccessSetup({
             <label htmlFor="remote-confirm">
               {t("remoteSetupConfirmPassword" as never)}
             </label>
-            <input
+            <SettingsTextInput
               id="remote-confirm"
               type="password"
               value={confirmPassword}
@@ -447,24 +473,23 @@ export function RemoteAccessSetup({
           </div>
         )}
 
+        {hasCredentials && actionBar}
+
         <div className="flex flex-col gap-1">
-          <label htmlFor="relay-select">
-            {t("remoteSetupRelayServer" as never)}
-          </label>
-          <select
-            id="relay-select"
-            value={relayOption}
-            onChange={(e) => setRelayOption(e.target.value as RelayOption)}
-            disabled={isSaving}
-            className="cursor-pointer rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <option value="default">
-              {t("remoteSetupRelayDefault" as never)}
-            </option>
-            <option value="custom">
-              {t("remoteSetupRelayCustom" as never)}
-            </option>
-          </select>
+          <span>{t("remoteSetupRelayServer" as never)}</span>
+          <SettingsSelect
+            label={t("remoteSetupRelayServer" as never)}
+            options={relayOptions}
+            selected={[relayOption]}
+            onChange={(selected) => {
+              const next = selected[0];
+              if (next) {
+                setRelayOption(next as RelayOption);
+              }
+            }}
+            align="left"
+            className="w-full self-start sm:w-auto"
+          />
         </div>
 
         {relayOption === "custom" && (
@@ -472,7 +497,7 @@ export function RemoteAccessSetup({
             <label htmlFor="custom-relay-url">
               {t("remoteSetupCustomRelayUrl" as never)}
             </label>
-            <input
+            <SettingsTextInput
               id="custom-relay-url"
               type="text"
               value={customRelayUrl}
@@ -640,17 +665,7 @@ export function RemoteAccessSetup({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <button
-            type="submit"
-            className="rounded-md border border-[var(--border-color)] bg-transparent px-4 py-2 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
-            disabled={isSaving || !hasChanges}
-          >
-            {isSaving
-              ? t("remoteSetupSaving" as never)
-              : t("remoteSetupSave" as never)}
-          </button>
-        </div>
+        {!hasCredentials && actionBar}
       </form>
     </div>
   );

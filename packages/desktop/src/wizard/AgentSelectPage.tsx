@@ -34,7 +34,7 @@ export function AgentSelectPage({ agents, onAgentsChange, onNext }: Props) {
   return (
     <div className="w-full max-w-[400px]">
       <h2 className="mb-2 text-[22px] font-semibold">Choose your agents</h2>
-      <p className="mb-6 text-sm text-[var(--text-secondary)]">
+      <p className="mb-6 text-sm text-[var(--wizard-text-secondary)]">
         Select which AI coding agents you want to use. You can change this
         later.
       </p>
@@ -52,7 +52,7 @@ export function AgentSelectPage({ agents, onAgentsChange, onNext }: Props) {
             />
             <div>
               <div className="font-medium">{agent.name}</div>
-              <div className="text-[13px] text-[var(--text-secondary)]">
+              <div className="text-[13px] text-[var(--wizard-text-secondary)]">
                 {agent.description}
               </div>
             </div>

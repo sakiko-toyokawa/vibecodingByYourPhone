@@ -149,7 +149,7 @@ export function AuthPage({ agents, onNext }: Props) {
   return (
     <div className="w-full max-w-[700px]">
       <h2 className="mb-2 text-[22px] font-semibold">Sign in to your agents</h2>
-      <p className="mb-4 text-sm text-[var(--text-secondary)]">
+      <p className="mb-4 text-sm text-[var(--wizard-text-secondary)]">
         {statusText}
       </p>
 
@@ -164,8 +164,8 @@ export function AuthPage({ agents, onNext }: Props) {
               <span
                 className={
                   authStatus[agent]
-                    ? "text-[var(--success)]"
-                    : "text-[var(--text-secondary)]"
+                    ? "text-[var(--wizard-success)]"
+                    : "text-[var(--wizard-text-secondary)]"
                 }
               >
                 {authStatus[agent] ? "●" : "○"}
@@ -183,7 +183,7 @@ export function AuthPage({ agents, onNext }: Props) {
         <>
           <div
             ref={termRef}
-            className="mb-4 h-[400px] overflow-hidden rounded-lg border border-[var(--border)]"
+            className="mb-4 h-[400px] overflow-hidden rounded-lg border border-[var(--wizard-border)]"
           />
 
           {!started && (

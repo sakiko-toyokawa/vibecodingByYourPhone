@@ -102,6 +102,34 @@ export interface ProjectOption {
   name: string;
 }
 
+export interface EditorTreeEntry {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  size: number;
+  mtime: string;
+}
+
+export interface EditorTreeResponse {
+  path: string;
+  entries: EditorTreeEntry[];
+}
+
+export interface AiEditResponse {
+  path: string;
+  provider: ProviderName;
+  model?: string;
+  content: string;
+  structuredPatch: Array<{
+    oldStart: number;
+    oldLines: number;
+    newStart: number;
+    newLines: number;
+    lines: string[];
+  }>;
+  diffHtml: string;
+}
+
 /**
  * Response from the global sessions API.
  */
@@ -746,9 +774,15 @@ export const api = {
     }),
 
   // File API
-  getFile: (projectId: string, path: string, highlight = false) => {
+  getFile: (
+    projectId: string,
+    path: string,
+    highlight = false,
+    includeContent = false,
+  ) => {
     const params = new URLSearchParams({ path });
     if (highlight) params.set("highlight", "true");
+    if (includeContent) params.set("includeContent", "true");
     return fetchJSON<FileContentResponse>(
       `/projects/${projectId}/files?${params.toString()}`,
     );
@@ -759,6 +793,40 @@ export const api = {
     if (download) params.set("download", "true");
     return `/api/projects/${projectId}/files/raw?${params.toString()}`;
   },
+
+  getEditorTree: (projectId: string, path = "") => {
+    const params = new URLSearchParams();
+    if (path) params.set("path", path);
+    const query = params.toString();
+    return fetchJSON<EditorTreeResponse>(
+      `/projects/${projectId}/tree${query ? `?${query}` : ""}`,
+    );
+  },
+
+  writeProjectFile: (projectId: string, path: string, content: string) =>
+    fetchJSON<{ path: string; saved: boolean }>(
+      `/projects/${projectId}/files/write`,
+      {
+        method: "POST",
+        body: JSON.stringify({ path, content }),
+      },
+    ),
+
+  requestAiEdit: (
+    projectId: string,
+    options: {
+      path: string;
+      instruction: string;
+      content?: string;
+      selectedText?: string;
+      provider?: ProviderName;
+      model?: string;
+    },
+  ) =>
+    fetchJSON<AiEditResponse>(`/projects/${projectId}/ai-edit`, {
+      method: "POST",
+      body: JSON.stringify(options),
+    }),
 
   /**
    * Expand diff context to show full file.

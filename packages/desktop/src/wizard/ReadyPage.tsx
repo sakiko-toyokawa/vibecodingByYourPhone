@@ -46,13 +46,13 @@ export function ReadyPage({
       <h2 className="mb-3 text-[28px] font-semibold">
         You're all set!
       </h2>
-      <p className="mb-8 text-[15px] leading-relaxed text-[var(--text-secondary)]">
+      <p className="mb-8 text-[15px] leading-relaxed text-[var(--wizard-text-secondary)]">
         Yep Anywhere is ready to go. Click below to start the server and open
         your dashboard.
       </p>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-[var(--error)] bg-[rgba(239,68,68,0.1)] p-3 text-[13px] text-[var(--error)]">
+        <div className="mb-4 rounded-lg border border-[var(--wizard-error)] bg-[rgba(239,68,68,0.1)] p-3 text-[13px] text-[var(--wizard-error)]">
           {error}
         </div>
       )}

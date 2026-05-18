@@ -110,13 +110,13 @@ export function InstallPage({ agents, onNext }: Props) {
   const statusColor = (status: TaskStatus["status"]) => {
     switch (status) {
       case "pending":
-        return "text-[var(--text-secondary)]";
+        return "text-[var(--wizard-text-secondary)]";
       case "installing":
-        return "text-[var(--accent)]";
+        return "text-[var(--wizard-accent)]";
       case "done":
-        return "text-[var(--success)]";
+        return "text-[var(--wizard-success)]";
       case "error":
-        return "text-[var(--error)]";
+        return "text-[var(--wizard-error)]";
     }
   };
 
@@ -125,7 +125,7 @@ export function InstallPage({ agents, onNext }: Props) {
       <h2 className="mb-2 text-[22px] font-semibold">
         Setting things up
       </h2>
-      <p className="mb-6 text-sm text-[var(--text-secondary)]">
+      <p className="mb-6 text-sm text-[var(--wizard-text-secondary)]">
         Installing your selected agents. This may take a minute.
       </p>
 
@@ -140,7 +140,7 @@ export function InstallPage({ agents, onNext }: Props) {
             <div>
               <div className="font-medium">{task.label}</div>
               {task.message && (
-                <div className="text-xs text-[var(--text-secondary)]">
+                <div className="text-xs text-[var(--wizard-text-secondary)]">
                   {task.message}
                 </div>
               )}
@@ -150,7 +150,7 @@ export function InstallPage({ agents, onNext }: Props) {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-[var(--error)] bg-[rgba(239,68,68,0.1)] p-3 text-[13px] text-[var(--error)]">
+        <div className="mb-4 rounded-lg border border-[var(--wizard-error)] bg-[rgba(239,68,68,0.1)] p-3 text-[13px] text-[var(--wizard-error)]">
           {error}
         </div>
       )}

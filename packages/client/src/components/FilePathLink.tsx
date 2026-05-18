@@ -1,5 +1,12 @@
 import { memo, useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
+import { useOptionalSessionMetadata } from "../contexts/SessionMetadataContext";
+import { useRemoteBasePath } from "../hooks/useRemoteBasePath";
+import {
+  FilePathLinkModalFooter,
+  getFilePathLinkEditorPath,
+} from "./FilePathLink.shared";
 import { FileViewer } from "./FileViewer";
 
 interface FilePathLinkProps {
@@ -15,6 +22,8 @@ interface FilePathLinkProps {
   displayText?: string;
   /** Whether to show full path or just filename */
   showFullPath?: boolean;
+  /** Optional session ID to prefer when opening session editor */
+  sessionId?: string;
 }
 
 /**
@@ -35,7 +44,10 @@ export const FilePathLink = memo(function FilePathLink({
   columnNumber,
   displayText,
   showFullPath = false,
+  sessionId,
 }: FilePathLinkProps) {
+  const basePath = useRemoteBasePath();
+  const sessionMetadata = useOptionalSessionMetadata();
   const [showModal, setShowModal] = useState(false);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
@@ -52,11 +64,13 @@ export const FilePathLink = memo(function FilePathLink({
     (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      const url = `/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`;
+      const url = `${basePath}/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`;
       window.open(url, "_blank");
     },
-    [projectId, filePath],
+    [basePath, projectId, filePath],
   );
+
+  const editorSessionId = sessionId ?? sessionMetadata?.sessionId;
 
   // Format the display text
   const fileName = showFullPath ? filePath : getFileName(filePath);
@@ -93,6 +107,7 @@ export const FilePathLink = memo(function FilePathLink({
             projectId={projectId}
             filePath={filePath}
             lineNumber={lineNumber}
+            sessionId={editorSessionId}
             onClose={handleClose}
           />,
           document.body,
@@ -108,13 +123,17 @@ function FileViewerModal({
   projectId,
   filePath,
   lineNumber,
+  sessionId,
   onClose,
 }: {
   projectId: string;
   filePath: string;
   lineNumber?: number;
+  sessionId?: string;
   onClose: () => void;
 }) {
+  const navigate = useNavigate();
+  const basePath = useRemoteBasePath();
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
       onClose();
@@ -142,6 +161,13 @@ function FileViewerModal({
     };
   }, []);
 
+  const editorPath = getFilePathLinkEditorPath({
+    basePath,
+    projectId,
+    sessionId,
+    filePath,
+  });
+
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: Escape key handled in useEffect, click is for overlay dismiss
     <div
@@ -160,6 +186,14 @@ function FileViewerModal({
           filePath={filePath}
           lineNumber={lineNumber}
           onClose={onClose}
+        />
+        <FilePathLinkModalFooter
+          editorPath={editorPath}
+          onOpen={() => {
+            if (!editorPath) return;
+            onClose();
+            navigate(editorPath);
+          }}
         />
       </dialog>
     </div>

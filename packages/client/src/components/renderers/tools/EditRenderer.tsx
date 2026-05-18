@@ -1,14 +1,17 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { ZodError } from "zod";
 import { useSchemaValidationContext } from "../../../contexts/SchemaValidationContext";
 import { useSessionMetadata } from "../../../contexts/SessionMetadataContext";
 import { useExpandedDiff } from "../../../hooks/useExpandedDiff";
+import { useRemoteBasePath } from "../../../hooks/useRemoteBasePath";
 import { useResolvedTheme } from "../../../hooks/useTheme";
 import {
   classifyToolError,
   getErrorClassSuffix,
   isUserRejection,
 } from "../../../lib/classifyToolError";
+import { buildEditorPath } from "../../../lib/editorNavigation";
 import { getProviderStyle } from "../../../lib/providerStyle";
 import { validateToolResult } from "../../../lib/validateToolResult";
 import { SchemaWarning } from "../../SchemaWarning";
@@ -302,7 +305,7 @@ function EditToolUse({
   const isTruncated = diffLines.length > MAX_VISIBLE_LINES;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 px-3 py-2">
       {changeSummary && (
         <div className="text-[var(--text-muted,#888)] [font-size:var(--font-size-base)]">
           {changeSummary}
@@ -467,6 +470,9 @@ function EditCollapsedPreview({
   isError: boolean;
   provider?: string;
 }) {
+  const navigate = useNavigate();
+  const basePath = useRemoteBasePath();
+  const { projectId, sessionId } = useSessionMetadata();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { enabled, reportValidationError, isToolIgnored } =
     useSchemaValidationContext();
@@ -507,6 +513,12 @@ function EditCollapsedPreview({
   // Use result data if available, fall back to input
   const filePath = getEditFilePath(input, result);
   const fileName = getFileName(filePath);
+  const editorPath = buildEditorPath({
+    basePath,
+    projectId,
+    sessionId,
+    filePath,
+  });
   const oldString = result?.oldString ?? input.old_string;
   const newString = result?.newString ?? input.new_string;
   const originalFile = result?.originalFile;
@@ -699,15 +711,31 @@ function EditCollapsedPreview({
 
   return (
     <>
-      <div className="flex flex-col gap-2">
-        {result?.userModified && (
-          <span className="inline-block px-2 py-0.5 rounded [font-size:var(--font-size-sm)] font-medium align-middle bg-[var(--bg-secondary)] text-[var(--link-color)]">
-            User modified
-          </span>
-        )}
-        {showValidationWarning && validationErrors && (
-          <SchemaWarning toolName="Edit" errors={validationErrors} />
-        )}
+      <div className="flex flex-col gap-3 px-3 py-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {result?.userModified && (
+              <span className="inline-block rounded bg-[var(--bg-secondary)] px-2 py-0.5 align-middle [font-size:var(--font-size-sm)] font-medium text-[var(--link-color)]">
+                User modified
+              </span>
+            )}
+            {showValidationWarning && validationErrors && (
+              <SchemaWarning toolName="Edit" errors={validationErrors} />
+            )}
+          </div>
+          {editorPath && (
+            <button
+              type="button"
+              className="inline-flex shrink-0 items-center rounded-sm border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--on-surface)] transition-colors hover:bg-[var(--surface-container-high)]"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(editorPath);
+              }}
+            >
+              Open in Editor
+            </button>
+          )}
+        </div>
         <div
           className={`relative ${isTruncated ? "max-h-[18rem] overflow-hidden" : ""}`}
         >

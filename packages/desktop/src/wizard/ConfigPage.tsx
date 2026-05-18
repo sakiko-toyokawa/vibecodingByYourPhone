@@ -16,7 +16,7 @@ export function ConfigPage({
   return (
     <div className="w-full max-w-[400px]">
       <h2 className="mb-2 text-[22px] font-semibold">Settings</h2>
-      <p className="mb-6 text-sm text-[var(--text-secondary)]">
+      <p className="mb-6 text-sm text-[var(--wizard-text-secondary)]">
         Configure how Yep Anywhere runs. You can change these later.
       </p>
 

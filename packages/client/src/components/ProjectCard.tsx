@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
+import { buildEditorPath } from "../lib/editorNavigation";
 import { shortenPath } from "../lib/text";
 import type { Project } from "../types";
 import { ThinkingIndicator } from "./ThinkingIndicator";
@@ -49,6 +50,17 @@ export function ProjectCard({
     navigate(`${basePath}/new-session?projectId=${project.id}`);
   };
 
+  const handleOpenEditor = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigate(
+      buildEditorPath({
+        basePath,
+        projectId: project.id,
+      }) ?? `${basePath}/projects`,
+    );
+  };
+
   return (
     <li className="project-card">
       <Link
@@ -67,14 +79,24 @@ export function ProjectCard({
             )}
             {project.name}
           </h3>
-          <button
-            type="button"
-            className="flex items-center justify-center w-8 h-8 p-0 bg-transparent border border-[var(--border-color)] rounded-full text-[var(--text-muted)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-            onClick={handleNewSession}
-            title="New session"
-          >
-            <span className="text-sm font-bold">+</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded-full border border-[var(--border-color)] bg-transparent px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+              onClick={handleOpenEditor}
+              title="Open editor"
+            >
+              Editor
+            </button>
+            <button
+              type="button"
+              className="flex items-center justify-center w-8 h-8 p-0 bg-transparent border border-[var(--border-color)] rounded-full text-[var(--text-muted)] cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+              onClick={handleNewSession}
+              title="New session"
+            >
+              <span className="text-sm font-bold">+</span>
+            </button>
+          </div>
         </div>
         <div className="flex flex-col gap-1.5">
           <span

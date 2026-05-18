@@ -10,7 +10,7 @@ import type { ProjectScanner } from "../projects/scanner.js";
 import type { ServerSettingsService } from "../services/ServerSettingsService.js";
 import { AiEditService } from "../services/ai-edit-service.js";
 import type { IEventBus } from "../watcher/IEventBus.js";
-import { resolveFilePath } from "./files.js";
+import { resolveProjectPath } from "./files.js";
 
 interface EditorRoutesDeps {
   scanner: ProjectScanner;
@@ -70,7 +70,7 @@ export function createEditorRoutes(deps: EditorRoutesDeps): Hono {
       return c.json({ error: "Project not found" }, 404);
     }
 
-    const directoryPath = resolveFilePath(project.path, relativePath);
+    const directoryPath = await resolveProjectPath(project.path, relativePath);
     if (!directoryPath) {
       return c.json({ error: "Invalid directory path" }, 400);
     }
@@ -88,25 +88,35 @@ export function createEditorRoutes(deps: EditorRoutesDeps): Hono {
 
     const entries = await readdir(directoryPath, { withFileTypes: true });
     const treeEntries = await Promise.all(
-      entries.map(async (entry): Promise<EditorTreeEntry> => {
+      entries.map(async (entry): Promise<EditorTreeEntry | null> => {
         const entryRelativePath = joinRelativePath(relativePath, entry.name);
-        const entryPath = resolveFilePath(project.path, entryRelativePath);
+        const entryPath = await resolveProjectPath(
+          project.path,
+          entryRelativePath,
+        );
         if (!entryPath) {
-          throw new Error(`Failed to resolve entry path for ${entry.name}`);
+          return null;
         }
 
-        const entryStats = await stat(entryPath);
-        return {
-          name: entry.name,
-          path: entryRelativePath,
-          type: entry.isDirectory() ? "directory" : "file",
-          size: entryStats.size,
-          mtime: entryStats.mtime.toISOString(),
-        };
+        try {
+          const entryStats = await stat(entryPath);
+          return {
+            name: entry.name,
+            path: entryRelativePath,
+            type: entry.isDirectory() ? "directory" : "file",
+            size: entryStats.size,
+            mtime: entryStats.mtime.toISOString(),
+          };
+        } catch {
+          return null;
+        }
       }),
     );
+    const visibleEntries = treeEntries.filter(
+      (entry): entry is EditorTreeEntry => entry !== null,
+    );
 
-    treeEntries.sort((a, b) => {
+    visibleEntries.sort((a, b) => {
       if (a.type !== b.type) {
         return a.type === "directory" ? -1 : 1;
       }
@@ -115,7 +125,7 @@ export function createEditorRoutes(deps: EditorRoutesDeps): Hono {
 
     return c.json({
       path: normalizeRelativePath(relativePath),
-      entries: treeEntries,
+      entries: visibleEntries,
     });
   });
 
@@ -143,7 +153,7 @@ export function createEditorRoutes(deps: EditorRoutesDeps): Hono {
     }
 
     const normalizedPath = normalizeRelativePath(body.path);
-    const filePath = resolveFilePath(project.path, normalizedPath);
+    const filePath = await resolveProjectPath(project.path, normalizedPath);
     if (!filePath) {
       return c.json({ error: "Invalid file path" }, 400);
     }
@@ -202,7 +212,7 @@ export function createEditorRoutes(deps: EditorRoutesDeps): Hono {
     }
 
     const normalizedPath = normalizeRelativePath(body.path);
-    const filePath = resolveFilePath(project.path, normalizedPath);
+    const filePath = await resolveProjectPath(project.path, normalizedPath);
     if (!filePath) {
       return c.json({ error: "Invalid file path" }, 400);
     }

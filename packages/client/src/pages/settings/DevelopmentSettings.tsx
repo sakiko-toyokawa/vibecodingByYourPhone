@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { SettingsSwitch } from "../../components/settings/SettingsFormControls";
 import { useSchemaValidationContext } from "../../contexts/SchemaValidationContext";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { useReloadNotifications } from "../../hooks/useReloadNotifications";
 import { useSchemaValidation } from "../../hooks/useSchemaValidation";
 import { useServerSettings } from "../../hooks/useServerSettings";
 import { useI18n } from "../../i18n";
+import { isDesktopTauriApp, restartDesktopServer } from "../../lib/desktopRuntime";
 
 export function DevelopmentSettings() {
   const { t } = useI18n();
@@ -33,6 +35,14 @@ export function DevelopmentSettings() {
 
   const handleRestartServer = async () => {
     setRestarting(true);
+    if (isDesktopTauriApp()) {
+      try {
+        await restartDesktopServer();
+      } catch {
+        setRestarting(false);
+      }
+      return;
+    }
     await reloadBackend();
   };
 
@@ -56,15 +66,11 @@ export function DevelopmentSettings() {
             <strong>{t("developmentSchemaTitle")}</strong>
             <p>{t("developmentSchemaDescription")}</p>
           </div>
-          <label className="relative inline-block w-[44px] h-[24px] shrink-0">
-            <input
-              type="checkbox"
-              className="opacity-0 w-0 h-0"
-              checked={validationSettings.enabled}
-              onChange={(e) => setValidationEnabled(e.target.checked)}
-            />
-            <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
-          </label>
+          <SettingsSwitch
+            checked={validationSettings.enabled}
+            onChange={setValidationEnabled}
+            ariaLabel={t("developmentSchemaTitle")}
+          />
         </div>
         {ignoredTools.length > 0 && (
           <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
@@ -96,32 +102,24 @@ export function DevelopmentSettings() {
             <strong>{t("developmentHoldModeTitle")}</strong>
             <p>{t("developmentHoldModeDescription")}</p>
           </div>
-          <label className="relative inline-block w-[44px] h-[24px] shrink-0">
-            <input
-              type="checkbox"
-              className="opacity-0 w-0 h-0"
-              checked={holdModeEnabled}
-              onChange={(e) => setHoldModeEnabled(e.target.checked)}
-            />
-            <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
-          </label>
+          <SettingsSwitch
+            checked={holdModeEnabled}
+            onChange={setHoldModeEnabled}
+            ariaLabel={t("developmentHoldModeTitle")}
+          />
         </div>
         <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
           <div className="flex flex-col gap-1">
             <strong>{t("developmentServiceWorkerTitle")}</strong>
             <p>{t("developmentServiceWorkerDescription")}</p>
           </div>
-          <label className="relative inline-block w-[44px] h-[24px] shrink-0">
-            <input
-              type="checkbox"
-              className="opacity-0 w-0 h-0"
-              checked={serverSettings?.serviceWorkerEnabled ?? true}
-              onChange={(e) =>
-                updateServerSetting("serviceWorkerEnabled", e.target.checked)
-              }
-            />
-            <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
-          </label>
+          <SettingsSwitch
+            checked={serverSettings?.serviceWorkerEnabled ?? true}
+            onChange={(checked) =>
+              updateServerSetting("serviceWorkerEnabled", checked)
+            }
+            ariaLabel={t("developmentServiceWorkerTitle")}
+          />
         </div>
       </div>
 

@@ -81,21 +81,59 @@ export function ProjectsPage() {
     }
   };
 
-  if (loading)
-    return (
-      <div className="text-[var(--text-muted)] italic">
-        {t("projectsLoading")}
+  const isEmpty = !loading && !error && projects.length === 0;
+  let content: React.ReactNode;
+
+  if (loading) {
+    content = (
+      <div className="flex min-h-[50vh] items-center justify-center px-4 py-12 text-center text-[var(--text-muted)]">
+        <p className="m-0 text-base italic">{t("projectsLoading")}</p>
       </div>
     );
-  if (error) {
-    return (
-      <div className="text-[var(--error-color)] p-2 bg-[var(--bg-error,rgba(207,34,46,0.1))] rounded">
-        {t("projectsErrorPrefix")} {error.message}
+  } else if (error) {
+    content = (
+      <div className="px-4 py-8">
+        <div className="rounded bg-[var(--bg-error,rgba(207,34,46,0.1))] p-2 text-[var(--error-color)]">
+          {t("projectsErrorPrefix")} {error.message}
+        </div>
       </div>
+    );
+  } else if (isEmpty) {
+    content = (
+      <div className="flex flex-col items-center justify-center px-4 py-24 text-center text-[var(--text-muted)]">
+        <span
+          className="text-5xl mb-6"
+          aria-hidden="true"
+          style={{ color: "var(--text-muted)" }}
+        >
+          &#128193;
+        </span>
+        <h3
+          className="text-2xl text-[var(--text-primary)] mb-3"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          {t("projectsEmptyTitle")}
+        </h3>
+        <p className="m-0 text-base leading-relaxed">
+          {t("projectsEmptyDescription")}
+        </p>
+      </div>
+    );
+  } else {
+    content = (
+      <ul className="list-none m-0 p-0 flex flex-col gap-4">
+        {sortedProjects.map((project) => (
+          <ProjectCard
+            key={project.id}
+            project={project}
+            needsAttentionCount={attentionByProject.get(project.id) ?? 0}
+            thinkingCount={thinkingByProject.get(project.id) ?? 0}
+            basePath={basePath}
+          />
+        ))}
+      </ul>
     );
   }
-
-  const isEmpty = projects.length === 0;
 
   return (
     <div
@@ -176,40 +214,7 @@ export function ProjectsPage() {
               )}
             </div>
 
-            {isEmpty ? (
-              <div className="flex flex-col items-center justify-center px-4 py-24 text-center text-[var(--text-muted)]">
-                <span
-                  className="text-5xl mb-6"
-                  aria-hidden="true"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  &#128193;
-                </span>
-                <h3
-                  className="text-2xl text-[var(--text-primary)] mb-3"
-                  style={{ fontFamily: "var(--font-display)" }}
-                >
-                  {t("projectsEmptyTitle")}
-                </h3>
-                <p className="m-0 text-base leading-relaxed">
-                  {t("projectsEmptyDescription")}
-                </p>
-              </div>
-            ) : (
-              <ul className="list-none m-0 p-0 flex flex-col gap-4">
-                {sortedProjects.map((project) => (
-                  <ProjectCard
-                    key={project.id}
-                    project={project}
-                    needsAttentionCount={
-                      attentionByProject.get(project.id) ?? 0
-                    }
-                    thinkingCount={thinkingByProject.get(project.id) ?? 0}
-                    basePath={basePath}
-                  />
-                ))}
-              </ul>
-            )}
+            {content}
           </div>
         </main>
       </div>

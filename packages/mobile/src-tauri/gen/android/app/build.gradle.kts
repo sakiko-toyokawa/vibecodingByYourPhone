@@ -83,4 +83,28 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")
 }
 
+tasks.register("patchWebViewViewport") {
+    doLast {
+        val file = file("src/main/java/com/yepanywhere/mobile/generated/RustWebView.kt")
+        if (file.exists()) {
+            var content = file.readText()
+            // Remove loadWithOverviewMode if present (causes 980px desktop viewport)
+            content = content.replace("\n        settings.loadWithOverviewMode = true", "")
+            // Add useWideViewPort if not present
+            if (!content.contains("useWideViewPort")) {
+                content = content.replace(
+                    "settings.javaScriptCanOpenWindowsAutomatically = true",
+                    "settings.javaScriptCanOpenWindowsAutomatically = true\n        settings.useWideViewPort = true"
+                )
+            }
+            file.writeText(content)
+            println("Patched RustWebView.kt: useWideViewPort enabled, loadWithOverviewMode removed")
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn("patchWebViewViewport")
+}
+
 apply(from = "tauri.build.gradle.kts")

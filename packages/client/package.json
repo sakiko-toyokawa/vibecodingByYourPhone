@@ -9,7 +9,8 @@
     "build": "tsc && vite build",
     "build:stable": "tsc && vite build --base /_stable/ --outDir dist-stable",
     "build:remote": "tsc && vite build --config vite.config.remote.ts",
-    "preview:remote": "vite preview --config vite.config.remote.ts"
+    "preview:remote": "vite preview --config vite.config.remote.ts",
+    "test": "node -e \"require('fs').rmSync('.test-dist', { recursive: true, force: true })\" && tsc -p tsconfig.test.json && node --experimental-specifier-resolution=node .test-dist/pages/relayConnectAttempt.test.js && node --experimental-specifier-resolution=node .test-dist/components/FilePathLink.test.js && node -e \"require('fs').rmSync('.test-dist', { recursive: true, force: true })\""
   },
   "dependencies": {
     "@codemirror/commands": "^6.8.1",
@@ -22,6 +23,7 @@
     "@codemirror/language": "^6.11.3",
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.38.6",
+    "@lezer/highlight": "^1.0.0",
     "@uiw/codemirror-themes": "^4.25.2",
     "@uiw/react-codemirror": "^4.25.2",
     "@yep-anywhere/shared": "workspace:*",

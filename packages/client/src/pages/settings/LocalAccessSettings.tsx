@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { api } from "../../api/client";
 import { FilterDropdown } from "../../components/FilterDropdown";
+import {
+  SettingsSwitch,
+  SettingsTextInput,
+} from "../../components/settings/SettingsFormControls";
 import { useOptionalAuth } from "../../contexts/AuthContext";
 import { useOptionalRemoteConnection } from "../../contexts/RemoteConnectionContext";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
@@ -359,9 +363,9 @@ export function LocalAccessSettings() {
                 </span>
               </span>
             ) : (
-              <input
+              <SettingsTextInput
                 type="number"
-                className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)] w-24"
+                className="w-24"
                 value={localhostPort}
                 onChange={(e) => {
                   setLocalhostPort(e.target.value);
@@ -387,19 +391,14 @@ export function LocalAccessSettings() {
                 </span>
               </span>
             ) : (
-              <label className="relative inline-block h-6 w-11 shrink-0 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="peer sr-only"
-                  checked={networkEnabled}
-                  onChange={(e) => {
-                    setNetworkEnabled(e.target.checked);
-                    updateHasChanges({ networkEnabled: e.target.checked });
-                  }}
-                />
-                <span className="absolute inset-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-hover)] transition-all duration-200 peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:bg-[var(--accent-color,#3b82f6)]" />
-                <span className="absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-[var(--text-muted)] transition-all duration-200 peer-checked:translate-x-5 peer-checked:bg-white" />
-              </label>
+              <SettingsSwitch
+                checked={networkEnabled}
+                onChange={(checked) => {
+                  setNetworkEnabled(checked);
+                  updateHasChanges({ networkEnabled: checked });
+                }}
+                ariaLabel={t("localAccessNetworkTitle")}
+              />
             )}
           </div>
 
@@ -443,9 +442,8 @@ export function LocalAccessSettings() {
                   <strong>{t("localAccessCustomIpTitle")}</strong>
                   <p>{t("localAccessCustomIpDescription")}</p>
                 </div>
-                <input
+                <SettingsTextInput
                   type="text"
-                  className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
                   placeholder="192.168.1.100"
                   value={customIp}
                   onChange={(e) => setCustomIp(e.target.value)}
@@ -459,19 +457,14 @@ export function LocalAccessSettings() {
               <strong>{t("localAccessAllowAllHostsTitle")}</strong>
               <p>{t("localAccessAllowAllHostsDescription")}</p>
             </div>
-            <label className="relative inline-block h-6 w-11 shrink-0 cursor-pointer">
-              <input
-                type="checkbox"
-                className="peer sr-only"
-                checked={allowAllHostsToggle}
-                onChange={(e) => {
-                  setAllowAllHostsToggle(e.target.checked);
-                  updateHasChanges({ allowAll: e.target.checked });
-                }}
-              />
-              <span className="absolute inset-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-hover)] transition-all duration-200 peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:bg-[var(--accent-color,#3b82f6)]" />
-              <span className="absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-[var(--text-muted)] transition-all duration-200 peer-checked:translate-x-5 peer-checked:bg-white" />
-            </label>
+            <SettingsSwitch
+              checked={allowAllHostsToggle}
+              onChange={(checked) => {
+                setAllowAllHostsToggle(checked);
+                updateHasChanges({ allowAll: checked });
+              }}
+              ariaLabel={t("localAccessAllowAllHostsTitle")}
+            />
           </div>
           {!allowAllHostsToggle && (
             <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
@@ -479,9 +472,9 @@ export function LocalAccessSettings() {
                 <strong>{t("localAccessAllowedHostsTitle")}</strong>
                 <p>{t("localAccessAllowedHostsDescription")}</p>
               </div>
-              <input
+              <SettingsTextInput
                 type="text"
-                className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
+                className="min-w-[260px]"
                 placeholder={t("localAccessAllowedHostsPlaceholder")}
                 value={allowedHostsText}
                 onChange={(e) => {
@@ -502,19 +495,14 @@ export function LocalAccessSettings() {
                 <strong>{t("localAccessRequirePasswordTitle")}</strong>
                 <p>{t("localAccessRequirePasswordDescription")}</p>
               </div>
-              <label className="relative inline-block h-6 w-11 shrink-0 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="peer sr-only"
-                  checked={requirePassword}
-                  onChange={(e) => {
-                    setRequirePassword(e.target.checked);
-                    updateHasChanges({ requirePw: e.target.checked });
-                  }}
-                />
-                <span className="absolute inset-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-hover)] transition-all duration-200 peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:bg-[var(--accent-color,#3b82f6)]" />
-                <span className="absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-[var(--text-muted)] transition-all duration-200 peer-checked:translate-x-5 peer-checked:bg-white" />
-              </label>
+              <SettingsSwitch
+                checked={requirePassword}
+                onChange={(checked) => {
+                  setRequirePassword(checked);
+                  updateHasChanges({ requirePw: checked });
+                }}
+                ariaLabel={t("localAccessRequirePasswordTitle")}
+              />
             </div>
           )}
 
@@ -542,9 +530,9 @@ export function LocalAccessSettings() {
                       : t("localAccessPasswordMinLength")}
                   </p>
                 </div>
-                <input
+                <SettingsTextInput
                   type="password"
-                  className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
+                  className="min-w-[220px]"
                   value={authPassword}
                   onChange={(e) => {
                     setAuthPassword(e.target.value);
@@ -563,9 +551,9 @@ export function LocalAccessSettings() {
                   <div className="flex flex-col gap-1">
                     <strong>{t("localAccessConfirmPasswordTitle")}</strong>
                   </div>
-                  <input
+                  <SettingsTextInput
                     type="password"
-                    className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
+                    className="min-w-[220px]"
                     value={authPasswordConfirm}
                     onChange={(e) => setAuthPasswordConfirm(e.target.value)}
                     autoComplete="new-password"
@@ -590,19 +578,14 @@ export function LocalAccessSettings() {
                   <strong>{t("localAccessLocalhostOpenTitle")}</strong>
                   <p>{t("localAccessLocalhostOpenDescription")}</p>
                 </div>
-                <label className="relative inline-block h-6 w-11 shrink-0 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="peer sr-only"
-                    checked={localhostOpenToggle}
-                    onChange={(e) => {
-                      setLocalhostOpenToggle(e.target.checked);
-                      updateHasChanges({ localhostOpen: e.target.checked });
-                    }}
-                  />
-                  <span className="absolute inset-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-hover)] transition-all duration-200 peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:bg-[var(--accent-color,#3b82f6)]" />
-                  <span className="absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-[var(--text-muted)] transition-all duration-200 peer-checked:translate-x-5 peer-checked:bg-white" />
-                </label>
+                <SettingsSwitch
+                  checked={localhostOpenToggle}
+                  onChange={(checked) => {
+                    setLocalhostOpenToggle(checked);
+                    updateHasChanges({ localhostOpen: checked });
+                  }}
+                  ariaLabel={t("localAccessLocalhostOpenTitle")}
+                />
               </div>
             )}
 
@@ -685,16 +668,11 @@ export function LocalAccessSettings() {
               <strong>{t("localAccessRelayDebugTitle")}</strong>
               <p>{t("localAccessRelayDebugDescription")}</p>
             </div>
-            <label className="relative inline-block h-6 w-11 shrink-0 cursor-pointer">
-              <input
-                type="checkbox"
-                className="peer sr-only"
-                checked={relayDebugEnabled}
-                onChange={(e) => setRelayDebugEnabled(e.target.checked)}
-              />
-              <span className="absolute inset-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-hover)] transition-all duration-200 peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:bg-[var(--accent-color,#3b82f6)]" />
-              <span className="absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-[var(--text-muted)] transition-all duration-200 peer-checked:translate-x-5 peer-checked:bg-white" />
-            </label>
+            <SettingsSwitch
+              checked={relayDebugEnabled}
+              onChange={setRelayDebugEnabled}
+              ariaLabel={t("localAccessRelayDebugTitle")}
+            />
           </div>
         </div>
       </section>

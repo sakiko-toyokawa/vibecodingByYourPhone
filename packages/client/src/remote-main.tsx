@@ -33,6 +33,7 @@ import { I18nProvider } from "./i18n";
 import { NavigationLayout } from "./layouts";
 import { ActivityPage } from "./pages/ActivityPage";
 import { AgentsPage } from "./pages/AgentsPage";
+import { CodeEditorPage } from "./pages/CodeEditorPage";
 import { DirectLoginPage } from "./pages/DirectLoginPage";
 import { EmulatorPage } from "./pages/EmulatorPage";
 import { FilePage } from "./pages/FilePage";
@@ -46,6 +47,7 @@ import { ProjectsPage } from "./pages/ProjectsPage";
 import { RecentSessionsPage } from "./pages/RecentSessionsPage";
 import { RelayConnectionGate } from "./pages/RelayConnectionGate";
 import { RelayLoginPage } from "./pages/RelayLoginPage";
+import { SessionEditorPage } from "./pages/SessionEditorPage";
 import { SessionPage } from "./pages/SessionPage";
 import { SettingsLayout } from "./pages/settings";
 import "./styles/index.css";
@@ -102,6 +104,11 @@ const APP_ROUTES = (
       <Route path="settings" element={<SettingsLayout />} />
       <Route path="settings/:category" element={<SettingsLayout />} />
       <Route path="new-session" element={<NewSessionPage />} />
+      <Route path="projects/:projectId/editor" element={<CodeEditorPage />} />
+      <Route
+        path="projects/:projectId/sessions/:sessionId/editor"
+        element={<SessionEditorPage />}
+      />
       <Route
         path="projects/:projectId/sessions/:sessionId"
         element={<SessionPage />}

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNotifyInApp } from "../hooks/useNotifyInApp";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import { useI18n } from "../i18n";
+import { SettingsSwitch } from "./settings/SettingsFormControls";
 
 export type TestNotificationUrgency = "normal" | "persistent" | "silent";
 
@@ -96,16 +97,14 @@ export function PushNotificationToggle() {
             </p>
           )}
         </div>
-        <label className="relative inline-block w-11 h-6 shrink-0">
-          <input
-            type="checkbox"
-            className="peer opacity-0 w-0 h-0"
-            checked={isSubscribed}
-            onChange={handleToggle}
-            disabled={isLoading}
-          />
-          <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-colors duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-0.5 before:bottom-0.5 before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full peer-checked:bg-[var(--accent-color,#3b82f6)] peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:before:translate-x-5 peer-checked:before:bg-white" />
-        </label>
+        <SettingsSwitch
+          checked={isSubscribed}
+          onChange={() => {
+            void handleToggle();
+          }}
+          disabled={isLoading}
+          ariaLabel={t("pushToggleTitle")}
+        />
       </div>
 
       {isSubscribed && (
@@ -119,15 +118,11 @@ export function PushNotificationToggle() {
                 {t("pushToggleNotifyInAppDescription")}
               </p>
             </div>
-            <label className="relative inline-block w-11 h-6 shrink-0">
-              <input
-                type="checkbox"
-                className="peer opacity-0 w-0 h-0"
-                checked={notifyInApp}
-                onChange={(e) => setNotifyInApp(e.target.checked)}
-              />
-              <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-colors duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-0.5 before:bottom-0.5 before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full peer-checked:bg-[var(--accent-color,#3b82f6)] peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:before:translate-x-5 peer-checked:before:bg-white" />
-            </label>
+            <SettingsSwitch
+              checked={notifyInApp}
+              onChange={setNotifyInApp}
+              ariaLabel={t("pushToggleNotifyInAppTitle")}
+            />
           </div>
           <div className="flex items-center justify-between gap-4 p-3 bg-[var(--bg-code)] rounded-[var(--radius-md)]">
             <div className="flex-1 min-w-0">

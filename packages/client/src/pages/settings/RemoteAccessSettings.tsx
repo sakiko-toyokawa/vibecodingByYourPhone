@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { RemoteAccessSetup } from "../../components/RemoteAccessSetup";
+import { SettingsSwitch } from "../../components/settings/SettingsFormControls";
 import { useOptionalRemoteConnection } from "../../contexts/RemoteConnectionContext";
 import { useServerSettings } from "../../hooks/useServerSettings";
 import { useI18n } from "../../i18n";
@@ -29,22 +30,14 @@ export function RemoteAccessSettings() {
               {t("developmentPersistRemoteDescriptionSuffix")}
             </p>
           </div>
-          <label className="relative inline-block h-6 w-11 shrink-0 cursor-pointer">
-            <input
-              type="checkbox"
-              className="peer sr-only"
-              checked={settings?.persistRemoteSessionsToDisk ?? false}
-              disabled={isLoading}
-              onChange={(e) =>
-                void updateSetting(
-                  "persistRemoteSessionsToDisk",
-                  e.target.checked,
-                )
-              }
-            />
-            <span className="absolute inset-0 rounded-full border border-[var(--border-color)] bg-[var(--bg-hover)] transition-all duration-200 peer-checked:border-[var(--accent-color,#3b82f6)] peer-checked:bg-[var(--accent-color,#3b82f6)]" />
-            <span className="absolute bottom-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-[var(--text-muted)] transition-all duration-200 peer-checked:translate-x-5 peer-checked:bg-white" />
-          </label>
+          <SettingsSwitch
+            checked={settings?.persistRemoteSessionsToDisk ?? false}
+            disabled={isLoading}
+            onChange={(checked) =>
+              void updateSetting("persistRemoteSessionsToDisk", checked)
+            }
+            ariaLabel={t("developmentPersistRemoteTitle")}
+          />
         </div>
       </div>
 

@@ -26,6 +26,8 @@ class RustWebView(context: Context, val initScripts: Array<String>, val id: Stri
         settings.databaseEnabled = true
         settings.mediaPlaybackRequiresUserGesture = false
         settings.javaScriptCanOpenWindowsAutomatically = true
+        settings.useWideViewPort = true
+        settings.loadWithOverviewMode = true
 
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             isDocumentStartScriptEnabled = true

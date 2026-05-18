@@ -17,6 +17,10 @@ import { useSyncNotifyInAppSetting } from "./hooks/useNotifyInApp";
 import { useOnboarding } from "./hooks/useOnboarding";
 import { useReloadNotifications } from "./hooks/useReloadNotifications";
 import { I18nProvider } from "./i18n";
+import {
+  isDesktopTauriApp,
+  listenDesktopServerRestartFinished,
+} from "./lib/desktopRuntime";
 import { initClientLogCollection } from "./lib/diagnostics";
 
 interface Props {
@@ -40,6 +44,23 @@ function AppContent({ children }: Props) {
 
   // Client-side log collection for connection diagnostics
   useEffect(() => initClientLogCollection(), []);
+
+  useEffect(() => {
+    if (!isDesktopTauriApp()) return;
+
+    let cleanup: (() => void) | undefined;
+    void listenDesktopServerRestartFinished((error) => {
+      if (!error) {
+        window.location.reload();
+      }
+    }).then((unlisten) => {
+      cleanup = unlisten;
+    });
+
+    return () => {
+      cleanup?.();
+    };
+  }, []);
 
   // Sync notifyInApp setting to service worker on app startup and SW restarts
   useSyncNotifyInAppSetting();

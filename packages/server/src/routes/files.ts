@@ -1,6 +1,6 @@
 import type { Stats } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
-import { extname, normalize, resolve, sep } from "node:path";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { dirname, extname, normalize, resolve, sep } from "node:path";
 import {
   type FileContentResponse,
   type FileMetadata,
@@ -308,6 +308,65 @@ export function resolveFilePath(
   return resolved;
 }
 
+function isPathInsideRoot(rootPath: string, targetPath: string): boolean {
+  return targetPath === rootPath || targetPath.startsWith(`${rootPath}${sep}`);
+}
+
+function isNodeErrorWithCode(
+  error: unknown,
+  code: string,
+): error is NodeJS.ErrnoException {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === code
+  );
+}
+
+/**
+ * Resolve a project-relative path and verify that its real filesystem location
+ * stays within the project's real root, even when symlinks are involved.
+ *
+ * For paths that do not exist yet, validates the nearest existing ancestor.
+ */
+export async function resolveProjectPath(
+  projectRoot: string,
+  relativePath: string,
+): Promise<string | null> {
+  const resolvedPath = resolveFilePath(projectRoot, relativePath);
+  if (!resolvedPath) {
+    return null;
+  }
+
+  let realProjectRoot: string;
+  try {
+    realProjectRoot = await realpath(projectRoot);
+  } catch {
+    return null;
+  }
+
+  let currentPath = resolvedPath;
+  while (true) {
+    try {
+      const realCurrentPath = await realpath(currentPath);
+      return isPathInsideRoot(realProjectRoot, realCurrentPath)
+        ? resolvedPath
+        : null;
+    } catch (error) {
+      if (!isNodeErrorWithCode(error, "ENOENT")) {
+        return null;
+      }
+
+      const parentPath = dirname(currentPath);
+      if (parentPath === currentPath) {
+        return null;
+      }
+      currentPath = parentPath;
+    }
+  }
+}
+
 function isPatchHunk(value: unknown): value is PatchHunk {
   if (!value || typeof value !== "object") return false;
   const hunk = value as Partial<PatchHunk>;
@@ -423,6 +482,7 @@ export function createFilesRoutes(deps: FilesDeps): Hono {
     const projectId = c.req.param("projectId");
     const relativePath = c.req.query("path");
     const highlight = c.req.query("highlight") === "true";
+    const includeContent = c.req.query("includeContent") === "true";
 
     // Validate project ID format
     if (!isUrlProjectId(projectId)) {
@@ -444,7 +504,7 @@ export function createFilesRoutes(deps: FilesDeps): Hono {
     const projectRoot = project.path;
 
     // Resolve and validate file path
-    const filePath = resolveFilePath(projectRoot, relativePath);
+    const filePath = await resolveProjectPath(projectRoot, relativePath);
     if (!filePath) {
       return c.json({ error: "Invalid file path" }, 400);
     }
@@ -480,8 +540,8 @@ export function createFilesRoutes(deps: FilesDeps): Hono {
       rawUrl,
     };
 
-    // For text files under size limit, include content
-    if (isText && stats.size <= MAX_INLINE_SIZE) {
+    // Allow editor flows to opt into full text content for read-only large files.
+    if (isText && (stats.size <= MAX_INLINE_SIZE || includeContent)) {
       try {
         const content = await readFile(filePath, "utf-8");
         response.content = content;
@@ -546,7 +606,7 @@ export function createFilesRoutes(deps: FilesDeps): Hono {
     const projectRoot = project.path;
 
     // Resolve and validate file path
-    const filePath = resolveFilePath(projectRoot, relativePath);
+    const filePath = await resolveProjectPath(projectRoot, relativePath);
     if (!filePath) {
       return c.json({ error: "Invalid file path" }, 400);
     }

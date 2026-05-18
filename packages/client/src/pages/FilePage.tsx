@@ -1,6 +1,13 @@
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { FileViewer } from "../components/FileViewer";
+import { useRemoteBasePath } from "../hooks/useRemoteBasePath";
 import { useI18n } from "../i18n";
+import { buildEditorPath } from "../lib/editorNavigation";
 
 /**
  * FilePage - Standalone page for viewing files.
@@ -8,6 +15,8 @@ import { useI18n } from "../i18n";
  */
 export function FilePage() {
   const { t } = useI18n();
+  const navigate = useNavigate();
+  const basePath = useRemoteBasePath();
   const { projectId } = useParams<{ projectId: string }>();
   const [searchParams] = useSearchParams();
   const filePath = searchParams.get("path");
@@ -21,7 +30,7 @@ export function FilePage() {
           </h1>
           <p>{t("fileMissingProjectId" as never)}</p>
           <Link
-            to="/projects"
+            to={`${basePath}/projects`}
             className="inline-flex items-center gap-2 rounded p-1 [font-size:var(--font-size-base)] text-[var(--link-color)] no-underline transition-colors hover:bg-[var(--bg-hover)]"
           >
             {t("fileGoToProjects" as never)}
@@ -40,7 +49,7 @@ export function FilePage() {
           </h1>
           <p>{t("fileMissingPath" as never)}</p>
           <Link
-            to={`/projects/${projectId}`}
+            to={`${basePath}/projects/${projectId}`}
             className="inline-flex items-center gap-2 rounded p-1 [font-size:var(--font-size-base)] text-[var(--link-color)] no-underline transition-colors hover:bg-[var(--bg-hover)]"
           >
             {t("fileGoToProject" as never)}
@@ -50,17 +59,32 @@ export function FilePage() {
     );
   }
 
+  const editorPath = buildEditorPath({
+    basePath,
+    projectId,
+    filePath,
+  });
+
   return (
     <div className="flex flex-col h-screen bg-[var(--bg-surface)]">
-      <div className="flex items-center border-b border-[var(--border-color)] bg-[var(--bg-secondary)] px-6 py-4">
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] px-6 py-4">
         <Link
-          to={`/projects/${projectId}`}
+          to={`${basePath}/projects/${projectId}`}
           className="inline-flex items-center gap-2 rounded p-1 [font-size:var(--font-size-base)] text-[var(--link-color)] no-underline transition-colors hover:bg-[var(--bg-hover)]"
           title={t("fileBackToProject" as never)}
         >
           <BackIcon />
           <span>{t("fileBackToProject" as never)}</span>
         </Link>
+        {editorPath && (
+          <button
+            type="button"
+            className="inline-flex items-center rounded-sm border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-surface)] transition-colors hover:bg-[var(--surface-container-high)]"
+            onClick={() => navigate(editorPath)}
+          >
+            Open in Editor
+          </button>
+        )}
       </div>
       <div className="flex-1 overflow-hidden">
         <FileViewer projectId={projectId} filePath={filePath} standalone />

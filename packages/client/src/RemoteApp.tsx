@@ -177,9 +177,13 @@ export function ConnectionGate() {
   // This preserves the current URL so we stay on the same page after successful resume
   if (isAutoResuming) {
     return (
-      <div className="auto-resume-loading">
-        <div className="loading-spinner" />
-        <p>Reconnecting...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-surface)] p-4">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--border-muted)] border-t-[var(--accent-rust)]" />
+          <p className="m-0 text-sm text-[var(--text-muted)]">
+            Reconnecting...
+          </p>
+        </div>
       </div>
     );
   }

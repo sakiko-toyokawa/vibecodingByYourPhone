@@ -63,10 +63,12 @@ pub fn run() {
             get_data_dir,
             is_dev_mode,
             server::start_server,
+            server::restart_server,
             server::stop_server,
             server::get_server_status,
             server::get_desktop_token,
             server::get_server_port,
+            server::get_server_error,
             installer::install_yep_server,
             installer::install_claude,
             installer::install_codex,
@@ -93,7 +95,9 @@ pub fn run() {
             if cfg.setup_complete {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    let _ = server::start_server(handle).await;
+                    if let Err(error) = server::start_server(handle).await {
+                        eprintln!("[Desktop] Auto-start failed: {error}");
+                    }
                 });
             }
 

@@ -30,6 +30,10 @@ export async function startServer(): Promise<void> {
   return invoke("start_server");
 }
 
+export async function restartServer(): Promise<void> {
+  return invoke("restart_server");
+}
+
 export async function stopServer(): Promise<void> {
   return invoke("stop_server");
 }
@@ -44,6 +48,10 @@ export async function getDesktopToken(): Promise<string | null> {
 
 export async function getServerPort(): Promise<number | null> {
   return invoke("get_server_port");
+}
+
+export async function getServerError(): Promise<string | null> {
+  return invoke("get_server_error");
 }
 
 export async function installYepServer(): Promise<void> {
@@ -115,4 +123,16 @@ export function onPtyOutput(callback: (data: string) => void) {
 
 export function onPtyExit(callback: () => void) {
   return listen("pty-exit", () => callback());
+}
+
+export function onDesktopServerRestartStarted(callback: () => void) {
+  return listen("desktop://server-restart-started", () => callback());
+}
+
+export function onDesktopServerRestartFinished(
+  callback: (error: string | null) => void,
+) {
+  return listen<string>("desktop://server-restart-finished", (event) =>
+    callback(event.payload || null),
+  );
 }

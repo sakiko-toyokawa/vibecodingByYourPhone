@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import {
+  SettingsTextInput,
+  SettingsTextarea,
+} from "../../components/settings/SettingsFormControls";
 import { useProviders } from "../../hooks/useProviders";
 import { useServerSettings } from "../../hooks/useServerSettings";
 import { useI18n } from "../../i18n";
@@ -37,9 +41,9 @@ function OllamaUrlInput() {
   return (
     <div className="mt-[var(--space-2)] w-full">
       <div className="flex items-center gap-[var(--space-2)]">
-        <input
+        <SettingsTextInput
           type="text"
-          className="flex-1 px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)]"
+          className="flex-1"
           value={url}
           onChange={(e) => {
             setUrl(e.target.value);
@@ -114,8 +118,8 @@ function OllamaSystemPromptInput() {
 
   return (
     <div className="mt-[var(--space-2)] w-full">
-      <textarea
-        className="w-full px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] outline-none focus:border-[var(--focus-border)] resize-y"
+      <SettingsTextarea
+        className="w-full"
         value={prompt}
         onChange={(e) => {
           setPrompt(e.target.value);
@@ -187,7 +191,7 @@ export function ProvidersSettings() {
         {providerDisplayList.map((provider) => (
           <div
             key={provider.id}
-            className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]"
+            className="py-5 border-b border-[var(--border-subtle)]"
           >
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-[var(--space-2)] mb-[var(--space-1)]">
@@ -217,16 +221,6 @@ export function ProvidersSettings() {
               )}
               {provider.id === "claude-ollama" && <OllamaSettings />}
             </div>
-            {provider.metadata.website && (
-              <a
-                href={provider.metadata.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[var(--link-color)] no-underline hover:underline"
-              >
-                {t("providersWebsite")}
-              </a>
-            )}
           </div>
         ))}
       </div>

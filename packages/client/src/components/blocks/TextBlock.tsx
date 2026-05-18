@@ -78,11 +78,11 @@ export const TextBlock = memo(function TextBlock({
         <div style={showStreamingContent ? undefined : { display: "none" }}>
           <div
             ref={streamingMarkdown.containerRef}
-            className={markdownContentClasses}
+            className={`${markdownContentClasses} overflow-x-auto`}
           />
           <span
             ref={streamingMarkdown.pendingRef}
-            className={`${markdownContentClasses} opacity-70`}
+            className={`${markdownContentClasses} opacity-70 overflow-x-auto`}
           />
           {showStreamingContent && (
             <span className="ml-0.5 inline-block h-4 w-px align-middle animate-[blink_0.8s_ease-in-out_infinite] bg-[var(--text-primary)]" />
@@ -93,12 +93,12 @@ export const TextBlock = memo(function TextBlock({
       {!showStreamingContent &&
         (augmentHtml ? (
           <div
-            className={markdownContentClasses}
+            className={`${markdownContentClasses} overflow-x-auto`}
             // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
             dangerouslySetInnerHTML={{ __html: augmentHtml }}
           />
         ) : (
-          <div className={markdownContentClasses}>
+          <div className={`${markdownContentClasses} overflow-x-auto`}>
             <p>{text}</p>
           </div>
         ))}

@@ -3,8 +3,8 @@
 ## Setup
 
 ```bash
-git clone https://github.com/kzahel/yepanywhere.git
-cd yepanywhere
+git clone https://github.com/sakiko-toyokawa/vibeanywhere.git
+cd vibeanywhere
 pnpm install
 pnpm dev
 ```

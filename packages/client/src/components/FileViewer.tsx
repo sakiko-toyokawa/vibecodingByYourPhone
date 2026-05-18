@@ -1,6 +1,7 @@
 import type { FileContentResponse } from "@yep-anywhere/shared";
 import { memo, useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
+import { useRemoteBasePath } from "../hooks/useRemoteBasePath";
 import { useI18n } from "../i18n";
 
 interface FileViewerProps {
@@ -99,6 +100,7 @@ export const FileViewer = memo(function FileViewer({
   lineEnd,
 }: FileViewerProps) {
   const { t } = useI18n();
+  const basePath = useRemoteBasePath();
   const [fileData, setFileData] = useState<FileContentResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -176,9 +178,9 @@ export const FileViewer = memo(function FileViewer({
   }, [projectId, filePath]);
 
   const handleOpenInNewTab = useCallback(() => {
-    const url = `/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`;
+    const url = `${basePath}/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`;
     window.open(url, "_blank");
-  }, [projectId, filePath]);
+  }, [basePath, projectId, filePath]);
 
   const fileName = getFileName(filePath);
   const language = getLanguageFromPath(filePath);

@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { NavigationLayout } from "./layouts";
 import { ActivityPage } from "./pages/ActivityPage";
 import { AgentsPage } from "./pages/AgentsPage";
+import { CodeEditorPage } from "./pages/CodeEditorPage";
 import { EmulatorPage } from "./pages/EmulatorPage";
 import { FilePage } from "./pages/FilePage";
 import { GitStatusPage } from "./pages/GitStatusPage";
@@ -12,6 +13,7 @@ import { NewSessionPage } from "./pages/NewSessionPage";
 import { OlderSessionsPage } from "./pages/OlderSessionsPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { RecentSessionsPage } from "./pages/RecentSessionsPage";
+import { SessionEditorPage } from "./pages/SessionEditorPage";
 import { SessionPage } from "./pages/SessionPage";
 import { SettingsLayout } from "./pages/settings";
 
@@ -43,6 +45,14 @@ export function AppRoutes() {
         <Route path="/devices" element={<EmulatorPage />} />
         <Route path="/devices/:deviceId" element={<EmulatorPage />} />
         <Route path="/new-session" element={<NewSessionPage />} />
+        <Route
+          path="/projects/:projectId/editor"
+          element={<CodeEditorPage />}
+        />
+        <Route
+          path="/projects/:projectId/sessions/:sessionId/editor"
+          element={<SessionEditorPage />}
+        />
         <Route
           path="/projects/:projectId/sessions/:sessionId"
           element={<SessionPage />}

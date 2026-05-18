@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { ZodError } from "zod";
 import { useSchemaValidationContext } from "../../../contexts/SchemaValidationContext";
+import { useOptionalSessionMetadata } from "../../../contexts/SessionMetadataContext";
+import { useRemoteBasePath } from "../../../hooks/useRemoteBasePath";
+import { buildEditorPath } from "../../../lib/editorNavigation";
 import { validateToolResult } from "../../../lib/validateToolResult";
 import { SchemaWarning } from "../../SchemaWarning";
 import { Modal } from "../../ui/Modal";
@@ -208,9 +212,18 @@ function TextFileResult({
   renderedMarkdownHtml?: string;
   isPtyHandoff?: boolean;
 }) {
+  const navigate = useNavigate();
+  const basePath = useRemoteBasePath();
+  const sessionMetadata = useOptionalSessionMetadata();
   const [showModal, setShowModal] = useState(false);
   const fileName = getFileName(file.filePath);
   const showRange = file.startLine > 1 || file.numLines < file.totalLines;
+  const editorPath = buildEditorPath({
+    basePath,
+    projectId: sessionMetadata?.projectId,
+    sessionId: sessionMetadata?.sessionId,
+    filePath: file.filePath,
+  });
 
   if (isPtyHandoff) {
     return (
@@ -244,6 +257,15 @@ function TextFileResult({
             {file.numLines} lines
           </span>
         </button>
+        {editorPath && (
+          <button
+            type="button"
+            className="inline-flex w-fit items-center rounded-sm border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--on-surface)] transition-colors hover:bg-[var(--surface-container-high)]"
+            onClick={() => navigate(editorPath)}
+          >
+            Open in Editor
+          </button>
+        )}
       </div>
       {showModal && (
         <Modal

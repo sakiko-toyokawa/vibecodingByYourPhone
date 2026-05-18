@@ -15,8 +15,8 @@ export function App() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-[var(--text-secondary)]">Loading...</div>
+      <div className="desktop-wizard flex h-screen items-center justify-center">
+        <div className="text-[var(--wizard-text-secondary)]">Loading...</div>
       </div>
     );
   }
@@ -26,10 +26,12 @@ export function App() {
   }
 
   return (
-    <WizardLayout
-      onComplete={(newConfig) => {
-        setConfig(newConfig);
-      }}
-    />
+    <div className="desktop-wizard h-screen">
+      <WizardLayout
+        onComplete={(newConfig) => {
+          setConfig(newConfig);
+        }}
+      />
+    </div>
   );
 }

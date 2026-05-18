@@ -1,23 +1,21 @@
 import type { AgentActivity } from "@yep-anywhere/shared";
 import { useCallback, useEffect, useRef } from "react";
 import { type ProcessStateEvent, activityBus } from "../lib/activityBus";
+import { isDesktopTauriApp } from "../lib/desktopRuntime";
 import { UI_KEYS } from "../lib/storageKeys";
 
 /**
  * Check if running inside the Tauri desktop app.
  */
 function isDesktopApp(): boolean {
-  const token =
-    typeof window !== "undefined"
-      ? (window as Window & { __DESKTOP_TOKEN__?: string }).__DESKTOP_TOKEN__
-      : undefined;
+  const result = isDesktopTauriApp();
   console.log(
     "[DesktopNotify] isDesktopApp:",
     typeof window !== "undefined",
-    "token:",
-    !!token,
+    "result:",
+    result,
   );
-  return typeof window !== "undefined" && token !== undefined;
+  return result;
 }
 
 /**

@@ -7,6 +7,7 @@
 
 import { execSync } from "node:child_process";
 import { resolve } from "node:path";
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { type Plugin, defineConfig } from "vite";
 import { cspPlugin } from "./vite-plugin-csp";
@@ -64,7 +65,12 @@ function serveRemoteHtml(): Plugin {
 
 export default defineConfig({
   clearScreen: false,
-  plugins: [serveRemoteHtml(), react(), cspPlugin({ isRemote: true })],
+  plugins: [
+    serveRemoteHtml(),
+    react(),
+    tailwindcss(),
+    cspPlugin({ isRemote: true }),
+  ],
   resolve: {
     conditions: ["source"],
   },

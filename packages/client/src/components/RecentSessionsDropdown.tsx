@@ -21,6 +21,8 @@ interface RecentSessionsDropdownProps {
   triggerRef: React.RefObject<HTMLElement | null>;
   /** Base path prefix for relay mode (e.g., "/remote/my-server") */
   basePath?: string;
+  /** Optional path builder for alternate session routes such as editor mode */
+  getSessionPath?: (projectId: string, sessionId: string) => string;
 }
 
 /** Format time as "Xm ago" style */
@@ -85,6 +87,7 @@ export function RecentSessionsDropdown({
   onNavigate,
   triggerRef,
   basePath = "",
+  getSessionPath,
 }: RecentSessionsDropdownProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -169,7 +172,11 @@ export function RecentSessionsDropdown({
           {recentSessions.map((session) => (
             <Link
               key={session.id}
-              to={`${basePath}/projects/${session.projectId}/sessions/${session.id}`}
+              to={
+                getSessionPath
+                  ? getSessionPath(session.projectId, session.id)
+                  : `${basePath}/projects/${session.projectId}/sessions/${session.id}`
+              }
               className={`flex items-center justify-between gap-3 px-3 py-2.5 no-underline text-[var(--text-primary)] border-b border-[var(--border-subtle)] transition-colors duration-100 hover:bg-[var(--bg-hover)] active:bg-[var(--bg-active)] ${session.hasUnread ? "unread" : ""}`}
               onClick={() => {
                 onNavigate(session.id, session.projectId);

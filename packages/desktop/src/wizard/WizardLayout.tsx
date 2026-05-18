@@ -77,7 +77,7 @@ export function WizardLayout({ onComplete }: Props) {
             key={i}
             className="h-2 w-2 rounded-full transition-colors duration-200"
             style={{
-              background: i <= step ? "var(--accent)" : "var(--border)",
+              background: i <= step ? "var(--wizard-accent)" : "var(--wizard-border)",
             }}
           />
         ))}

@@ -34,6 +34,12 @@ export interface SessionMenuProps {
   useFixedPositioning?: boolean;
   /** Inline styles for the wrapper */
   style?: React.CSSProperties;
+  /** Called to open editor mode (shown on narrow screens) */
+  onOpenEditor?: () => void;
+  /** Called to toggle split view (shown on narrow screens) */
+  onToggleSplitView?: () => void;
+  /** Whether split view is currently active */
+  isSplitActive?: boolean;
 }
 
 export function SessionMenu({
@@ -56,6 +62,9 @@ export function SessionMenu({
   className = "",
   useFixedPositioning = false,
   style,
+  onOpenEditor,
+  onToggleSplitView,
+  isSplitActive,
 }: SessionMenuProps) {
   const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
@@ -227,6 +236,45 @@ export function SessionMenu({
       className={`${useFixedPositioning ? "" : "absolute right-0"} top-full z-[10000] mt-1 min-w-[140px] overflow-hidden rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-lg`}
       style={dropdownStyle}
     >
+      {onOpenEditor && (
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 bg-transparent px-3 py-2 text-left text-xs text-[var(--text-primary)] transition-colors duration-150 hover:bg-[var(--bg-hover)]"
+          onClick={() => handleAction(onOpenEditor)}
+        >
+          <span className="shrink-0 text-[var(--text-muted)]">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M8 2L2 8l6 6" />
+              <path d="M2 8h12" />
+            </svg>
+          </span>
+          {t("sessionMenuEditor")}
+        </button>
+      )}
+      {onToggleSplitView && (
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 bg-transparent px-3 py-2 text-left text-xs text-[var(--text-primary)] transition-colors duration-150 hover:bg-[var(--bg-hover)]"
+          onClick={() => handleAction(onToggleSplitView)}
+        >
+          <span className="shrink-0 text-[var(--text-muted)]">
+            {isSplitActive ? "❌" : "◫"}
+          </span>
+          {isSplitActive
+            ? t("sessionMenuCloseSplit")
+            : t("sessionMenuSplitView")}
+        </button>
+      )}
       <button
         type="button"
         className="flex w-full items-center gap-2 bg-transparent px-3 py-2 text-left text-xs text-[var(--text-primary)] transition-colors duration-150 hover:bg-[var(--bg-hover)]"

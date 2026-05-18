@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, fetchJSON } from "../../api/client";
+import { SettingsSwitch } from "../../components/settings/SettingsFormControls";
 import { useOptionalRemoteConnection } from "../../contexts/RemoteConnectionContext";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { useOnboarding } from "../../hooks/useOnboarding";
@@ -7,9 +8,12 @@ import { usePwaInstall } from "../../hooks/usePwaInstall";
 import { useVersion } from "../../hooks/useVersion";
 import { useI18n } from "../../i18n";
 import { activityBus } from "../../lib/activityBus";
+import { isDesktopTauriApp, restartDesktopServer } from "../../lib/desktopRuntime";
 
 export function AboutSettings() {
   const { t } = useI18n();
+  const clientVersion =
+    typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";
   const { canInstall, isInstalled, install } = usePwaInstall();
   const {
     version: versionInfo,
@@ -51,9 +55,14 @@ export function AboutSettings() {
   const handleRestart = useCallback(async () => {
     setRestarting(true);
     try {
-      await api.restartServer();
+      if (isDesktopTauriApp()) {
+        await restartDesktopServer();
+      } else {
+        await api.restartServer();
+      }
     } catch {
-      // Expected - server drops connection during restart
+      // Expected for HTTP restart - server drops connection during restart.
+      // Desktop restart reports success/failure via Tauri events.
     }
   }, []);
 
@@ -119,7 +128,7 @@ export function AboutSettings() {
               )}
             </p>
             <p>
-              {t("aboutClientVersion")} v{__APP_VERSION__}
+              {t("aboutClientVersion")} v{clientVersion}
             </p>
             {versionError && (
               <p className="text-xs text-[var(--warning-color)] mt-1">
@@ -204,15 +213,11 @@ export function AboutSettings() {
             <strong>{t("aboutDiagnosticsTitle")}</strong>
             <p>{t("aboutDiagnosticsDescription")}</p>
           </div>
-          <label className="relative inline-block w-[44px] h-[24px] shrink-0">
-            <input
-              type="checkbox"
-              className="opacity-0 w-0 h-0"
-              checked={remoteLogCollectionEnabled}
-              onChange={(e) => setRemoteLogCollectionEnabled(e.target.checked)}
-            />
-            <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
-          </label>
+          <SettingsSwitch
+            checked={remoteLogCollectionEnabled}
+            onChange={setRemoteLogCollectionEnabled}
+            ariaLabel={t("aboutDiagnosticsTitle")}
+          />
         </div>
       </div>
     </section>

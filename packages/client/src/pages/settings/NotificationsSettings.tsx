@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { BrowserNotificationToggle } from "../../components/BrowserNotificationToggle";
 import { PushNotificationToggle } from "../../components/PushNotificationToggle";
+import { SettingsSwitch } from "../../components/settings/SettingsFormControls";
 import { useBrowserNotifications } from "../../hooks/useBrowserNotifications";
 import { useConnectedDevices } from "../../hooks/useConnectedDevices";
 import { useNotificationSettings } from "../../hooks/useNotificationSettings";
@@ -10,6 +11,7 @@ import {
   useSubscribedDevices,
 } from "../../hooks/useSubscribedDevices";
 import { useI18n } from "../../i18n";
+import { hasTauriInternals, isDesktopTauriApp } from "../../lib/desktopRuntime";
 import { UI_KEYS } from "../../lib/storageKeys";
 
 /**
@@ -185,14 +187,9 @@ export function NotificationsSettings() {
   const isLoading = devicesLoading || connectionsLoading;
 
   // Tauri native notification setting (shared between desktop and mobile)
-  const isDesktopTauri =
-    typeof window !== "undefined" &&
-    (window as Window & { __DESKTOP_TOKEN__?: string }).__DESKTOP_TOKEN__ !==
-      undefined;
+  const isDesktopTauri = isDesktopTauriApp();
   const isMobileTauri =
-    typeof window !== "undefined" &&
-    (window as Window & { __TAURI_INTERNALS__?: unknown })
-      .__TAURI_INTERNALS__ !== undefined &&
+    hasTauriInternals() &&
     (window as Window & { __DESKTOP_TOKEN__?: string }).__DESKTOP_TOKEN__ ===
       undefined;
   const [desktopNotifyEnabled, setDesktopNotifyEnabled] = useState(() => {
@@ -240,18 +237,12 @@ export function NotificationsSettings() {
               <strong>{t("notificationsToolApprovalsTitle")}</strong>
               <p>{t("notificationsToolApprovalsDescription")}</p>
             </div>
-            <label className="relative inline-block w-[44px] h-[24px] shrink-0">
-              <input
-                type="checkbox"
-                className="opacity-0 w-0 h-0"
-                checked={settings?.toolApproval ?? true}
-                onChange={(e) =>
-                  updateSetting("toolApproval", e.target.checked)
-                }
-                disabled={settingsLoading || !hasSubscriptions}
-              />
-              <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
-            </label>
+            <SettingsSwitch
+              checked={settings?.toolApproval ?? true}
+              onChange={(checked) => updateSetting("toolApproval", checked)}
+              disabled={settingsLoading || !hasSubscriptions}
+              ariaLabel={t("notificationsToolApprovalsTitle")}
+            />
           </div>
 
           <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
@@ -259,18 +250,12 @@ export function NotificationsSettings() {
               <strong>{t("notificationsQuestionsTitle")}</strong>
               <p>{t("notificationsQuestionsDescription")}</p>
             </div>
-            <label className="relative inline-block w-[44px] h-[24px] shrink-0">
-              <input
-                type="checkbox"
-                className="opacity-0 w-0 h-0"
-                checked={settings?.userQuestion ?? true}
-                onChange={(e) =>
-                  updateSetting("userQuestion", e.target.checked)
-                }
-                disabled={settingsLoading || !hasSubscriptions}
-              />
-              <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
-            </label>
+            <SettingsSwitch
+              checked={settings?.userQuestion ?? true}
+              onChange={(checked) => updateSetting("userQuestion", checked)}
+              disabled={settingsLoading || !hasSubscriptions}
+              ariaLabel={t("notificationsQuestionsTitle")}
+            />
           </div>
 
           <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
@@ -278,18 +263,12 @@ export function NotificationsSettings() {
               <strong>{t("notificationsSessionHaltedTitle")}</strong>
               <p>{t("notificationsSessionHaltedDescription")}</p>
             </div>
-            <label className="relative inline-block w-[44px] h-[24px] shrink-0">
-              <input
-                type="checkbox"
-                className="opacity-0 w-0 h-0"
-                checked={settings?.sessionHalted ?? true}
-                onChange={(e) =>
-                  updateSetting("sessionHalted", e.target.checked)
-                }
-                disabled={settingsLoading || !hasSubscriptions}
-              />
-              <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
-            </label>
+            <SettingsSwitch
+              checked={settings?.sessionHalted ?? true}
+              onChange={(checked) => updateSetting("sessionHalted", checked)}
+              disabled={settingsLoading || !hasSubscriptions}
+              ariaLabel={t("notificationsSessionHaltedTitle")}
+            />
           </div>
 
           {!hasSubscriptions && !devicesLoading && (
@@ -320,15 +299,11 @@ export function NotificationsSettings() {
                   <strong>{t("desktopNativeNotifyTitle")}</strong>
                   <p>{t("desktopNativeNotifyDescription")}</p>
                 </div>
-                <label className="relative inline-block w-[44px] h-[24px] shrink-0">
-                  <input
-                    type="checkbox"
-                    className="opacity-0 w-0 h-0"
-                    checked={desktopNotifyEnabled}
-                    onChange={toggleDesktopNotify}
-                  />
-                  <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
-                </label>
+                <SettingsSwitch
+                  checked={desktopNotifyEnabled}
+                  onChange={toggleDesktopNotify}
+                  ariaLabel={t("desktopNativeNotifyTitle")}
+                />
               </div>
             )}
           </div>
@@ -353,15 +328,11 @@ export function NotificationsSettings() {
                 <strong>{t("mobileNativeNotifyTitle")}</strong>
                 <p>{t("mobileNativeNotifyDescription")}</p>
               </div>
-              <label className="relative inline-block w-[44px] h-[24px] shrink-0">
-                <input
-                  type="checkbox"
-                  className="opacity-0 w-0 h-0"
-                  checked={desktopNotifyEnabled}
-                  onChange={toggleDesktopNotify}
-                />
-                <span className="absolute cursor-pointer inset-0 bg-[var(--bg-hover)] border border-[var(--border-color)] transition-[background-color,border-color] duration-200 rounded-full before:absolute before:content-[''] before:h-[18px] before:w-[18px] before:left-[2px] before:bottom-[2px] before:bg-[var(--text-muted)] before:transition-transform before:duration-200 before:rounded-full" />
-              </label>
+              <SettingsSwitch
+                checked={desktopNotifyEnabled}
+                onChange={toggleDesktopNotify}
+                ariaLabel={t("mobileNativeNotifyTitle")}
+              />
             </div>
           </div>
         </section>

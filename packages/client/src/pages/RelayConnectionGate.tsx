@@ -10,7 +10,7 @@
  * - Once connected, renders ConnectedAppContent + child routes via Outlet
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, Outlet, useParams } from "react-router-dom";
 import { ConnectedAppContent } from "../RemoteApp";
 import { HostOfflineModal } from "../components/HostOfflineModal";
@@ -23,6 +23,11 @@ import {
   getHostByRelayUsername,
   getRelayHost,
 } from "../lib/hostStorage";
+import {
+  buildRelayConnectKey,
+  finishRelayConnectAttempt,
+  tryBeginRelayConnectAttempt,
+} from "./relayConnectAttempt";
 
 type ConnectionState =
   | "checking"
@@ -96,6 +101,7 @@ export function RelayConnectionGate() {
 
   const [state, setState] = useState<ConnectionState>("checking");
   const [error, setError] = useState<AutoResumeError | null>(null);
+  const activeConnectKeyRef = useRef<string | null>(null);
 
   // Attempt to connect when username changes
   useEffect(() => {
@@ -194,10 +200,17 @@ export function RelayConnectionGate() {
       return;
     }
 
+    const connectKey = buildRelayConnectKey(host.id, host.session.sessionId);
+    if (!tryBeginRelayConnectAttempt(activeConnectKeyRef.current, connectKey)) {
+      console.log(
+        `[RelayConnectionGate] Connection already in progress for "${relayUsername}"`,
+      );
+      return;
+    }
+
     // Attempt to connect using saved session
     setState("connecting");
-    // Set host ID before auth so session refresh callbacks can sync hostStorage.
-    setCurrentHostId(host.id);
+    activeConnectKeyRef.current = connectKey;
 
     connectViaRelay({
       relayUrl: host.relayUrl,
@@ -209,9 +222,18 @@ export function RelayConnectionGate() {
       session: host.session,
     })
       .then(() => {
+        activeConnectKeyRef.current = finishRelayConnectAttempt(
+          activeConnectKeyRef.current,
+          connectKey,
+        );
+        setCurrentHostId(host.id);
         setState("connected");
       })
       .catch((err) => {
+        activeConnectKeyRef.current = finishRelayConnectAttempt(
+          activeConnectKeyRef.current,
+          connectKey,
+        );
         setError(
           createAutoResumeError(
             err,
@@ -232,13 +254,23 @@ export function RelayConnectionGate() {
     disconnect,
   ]);
 
+  useEffect(() => {
+    if (connection) {
+      activeConnectKeyRef.current = null;
+    }
+  }, [connection]);
+
   switch (state) {
     case "checking":
     case "connecting":
       return (
-        <div className="auto-resume-loading">
-          <div className="loading-spinner" />
-          <p>Connecting to {relayUsername}...</p>
+        <div className="flex min-h-screen items-center justify-center bg-[var(--bg-surface)] p-4">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--border-muted)] border-t-[var(--accent-rust)]" />
+            <p className="m-0 text-sm text-[var(--text-muted)]">
+              Connecting to {relayUsername}...
+            </p>
+          </div>
         </div>
       );
 
@@ -273,6 +305,19 @@ export function RelayConnectionGate() {
                 ? getRelayHost(currentHost.relayUrl, relayUsername ?? "")
                 : getHostByRelayUsername(relayUsername ?? "");
             if (host?.relayUrl && host.relayUsername && host.session) {
+              const connectKey = buildRelayConnectKey(
+                host.id,
+                host.session.sessionId,
+              );
+              if (
+                !tryBeginRelayConnectAttempt(
+                  activeConnectKeyRef.current,
+                  connectKey,
+                )
+              ) {
+                return;
+              }
+              activeConnectKeyRef.current = connectKey;
               connectViaRelay({
                 relayUrl: host.relayUrl,
                 relayUsername: host.relayUsername,
@@ -283,10 +328,18 @@ export function RelayConnectionGate() {
                 session: host.session,
               })
                 .then(() => {
+                  activeConnectKeyRef.current = finishRelayConnectAttempt(
+                    activeConnectKeyRef.current,
+                    connectKey,
+                  );
                   setCurrentHostId(host.id);
                   setState("connected");
                 })
                 .catch((err) => {
+                  activeConnectKeyRef.current = finishRelayConnectAttempt(
+                    activeConnectKeyRef.current,
+                    connectKey,
+                  );
                   setError(
                     createAutoResumeError(
                       err,

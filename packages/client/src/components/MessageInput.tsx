@@ -37,9 +37,9 @@ function formatSize(bytes: number): string {
 }
 
 interface Props {
-  onSend: (text: string) => void;
+  onSend: (text: string) => void | Promise<void>;
   /** Queue a deferred message (sent when agent's turn ends). Only provided when agent is running. */
-  onQueue?: (text: string) => void;
+  onQueue?: (text: string) => void | Promise<void>;
   disabled?: boolean;
   placeholder?: string;
   mode?: PermissionMode;
@@ -164,7 +164,7 @@ export function MessageInput({
       // Clear input state but keep localStorage for failure recovery
       controls.clearInput();
       setInterimTranscript("");
-      onSend(message);
+      void Promise.resolve(onSend(message)).catch(() => {});
       // Refocus the textarea so user can continue typing
       textareaRef.current?.focus();
     }
@@ -184,7 +184,7 @@ export function MessageInput({
       const message = finalText.trim();
       controls.clearInput();
       setInterimTranscript("");
-      onQueue(message);
+      void Promise.resolve(onQueue(message)).catch(() => {});
       textareaRef.current?.focus();
     }
   }, [text, disabled, controls, onQueue, attachments.length]);

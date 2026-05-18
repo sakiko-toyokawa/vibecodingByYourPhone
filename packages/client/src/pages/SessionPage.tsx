@@ -18,6 +18,7 @@ import { QuestionAnswerPanel } from "../components/QuestionAnswerPanel";
 import { RecentSessionsDropdown } from "../components/RecentSessionsDropdown";
 import { RollbackPanel } from "../components/RollbackPanel";
 import { SessionMenu } from "../components/SessionMenu";
+import { SplitSessionPicker } from "../components/SplitSessionPicker";
 import { SplitSessionView } from "../components/SplitSessionView";
 import { SplitViewButton } from "../components/SplitViewButton";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -47,9 +48,25 @@ import {
 import { useI18n } from "../i18n";
 import { useNavigationLayout } from "../layouts";
 import { type FileChangeEvent, activityBus } from "../lib/activityBus";
+import { buildEditorPath } from "../lib/editorNavigation";
 import { preprocessMessages } from "../lib/preprocessMessages";
 import { generateUUID } from "../lib/uuid";
 import { getSessionDisplayTitle } from "../utils";
+
+type SessionPathBuilder = (projectId: string, sessionId: string) => string;
+
+interface SessionPageContentProps {
+  projectId: string;
+  sessionId: string;
+  isSecondaryPane?: boolean;
+  layout?: "page" | "embedded";
+  sessionPathBuilder?: SessionPathBuilder;
+  onSendMessageReady?:
+    | ((sendMessage: SessionMessageSender | null) => void)
+    | null;
+}
+
+export type SessionMessageSender = (text: string) => Promise<void>;
 
 export function SessionPage() {
   const { projectId, sessionId } = useParams<{
@@ -101,11 +118,10 @@ export function SessionPageContent({
   projectId,
   sessionId,
   isSecondaryPane = false,
-}: {
-  projectId: string;
-  sessionId: string;
-  isSecondaryPane?: boolean;
-}) {
+  layout = "page",
+  sessionPathBuilder,
+  onSendMessageReady = null,
+}: SessionPageContentProps) {
   const { t } = useI18n();
   const { openSidebar, isWideScreen, toggleSidebar, isSidebarCollapsed } =
     useNavigationLayout();
@@ -113,6 +129,16 @@ export function SessionPageContent({
   const { project } = useProject(projectId);
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isEmbedded = layout === "embedded";
+  const isEmbeddedMobile = isEmbedded && !isWideScreen;
+  const buildSessionPath = useCallback<SessionPathBuilder>(
+    (targetProjectId, targetSessionId) =>
+      sessionPathBuilder
+        ? sessionPathBuilder(targetProjectId, targetSessionId)
+        : `${basePath}/projects/${targetProjectId}/sessions/${targetSessionId}`,
+    [basePath, sessionPathBuilder],
+  );
   // Get initial status and title from navigation state (passed by NewSessionPage)
   // This allows SSE to connect immediately and show optimistic title without waiting for getSession
   // Also get model/provider so ProviderBadge can render immediately
@@ -262,6 +288,18 @@ export function SessionPageContent({
   const [showRecentSessions, setShowRecentSessions] = useState(false);
   const titleButtonRef = useRef<HTMLButtonElement>(null);
 
+  // Split view picker state (mobile: triggered from SessionMenu)
+  const [showSplitPicker, setShowSplitPicker] = useState(false);
+  const splitSessionId = searchParams.get("splitSession");
+  const isSplitActive = !!splitSessionId;
+
+  const handleCloseSplit = useCallback(() => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete("splitSession");
+    newParams.delete("splitProject");
+    setSearchParams(newParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   // Local metadata state (for optimistic updates)
   // Reset when session changes to avoid showing stale data from previous session
   const [localCustomTitle, setLocalCustomTitle] = useState<string | undefined>(
@@ -299,7 +337,10 @@ export function SessionPageContent({
     if (actualSessionId && actualSessionId !== sessionId) {
       // Use replace to avoid creating a history entry for the temp ID
       navigate(
-        `${basePath}/projects/${projectId}/sessions/${actualSessionId}`,
+        {
+          pathname: buildSessionPath(projectId, actualSessionId),
+          search: location.search,
+        },
         {
           replace: true,
           state: location.state, // Preserve initial state for seamless transition
@@ -312,7 +353,8 @@ export function SessionPageContent({
     projectId,
     navigate,
     location.state,
-    basePath,
+    location.search,
+    buildSessionPath,
     isSecondaryPane,
   ]);
 
@@ -439,90 +481,44 @@ export function SessionPageContent({
     enabled: status.owner !== "external",
   });
 
-  const handleSend = async (text: string) => {
-    // Add to pending queue and get tempId to pass to server
-    const tempId = addPendingMessage(text);
-    setProcessState("in-turn"); // Optimistic: show processing indicator immediately
-    setScrollTrigger((prev) => prev + 1); // Force scroll to bottom
+  const handleSend = useCallback<SessionMessageSender>(
+    async (text: string) => {
+      // Add to pending queue and get tempId to pass to server
+      const tempId = addPendingMessage(text);
+      setProcessState("in-turn"); // Optimistic: show processing indicator immediately
+      setScrollTrigger((prev) => prev + 1); // Force scroll to bottom
 
-    // Capture already-completed attachments
-    const currentAttachments = [...attachments];
+      // Capture already-completed attachments
+      const currentAttachments = [...attachments];
 
-    // Wait for any in-flight uploads to complete before sending
-    const pendingAtSendTime = [...pendingUploadsRef.current.values()];
-    if (pendingAtSendTime.length > 0) {
-      updatePendingMessage(tempId, { status: t("sessionUploading") });
-      setAttachments([]); // Clear input area immediately
-      const results = await Promise.all(pendingAtSendTime);
-      for (const result of results) {
-        if (result) currentAttachments.push(result);
-      }
-      // Remove uploaded files that handleAttach added to state during the wait
-      // (they're already captured in currentAttachments). Preserve any new uploads
-      // started after send was clicked.
-      const sentIds = new Set(currentAttachments.map((a) => a.id));
-      setAttachments((prev) => prev.filter((a) => !sentIds.has(a.id)));
-      updatePendingMessage(tempId, { status: undefined });
-    } else {
-      setAttachments([]);
-    }
-
-    try {
-      if (status.owner === "none") {
-        // Resume the session with current permission mode and model settings
-        // Use session's existing model if available (important for non-Claude providers),
-        // otherwise fall back to user's model preference for new Claude sessions
-        const model = session?.model ?? getModelSetting();
-        const thinking = getThinkingSetting();
-        // Use effectiveProvider to ensure correct provider even if session data hasn't loaded
-        // effectiveProvider = session?.provider ?? initialProvider (from navigation state)
-        const result = await api.resumeSession(
-          projectId,
-          sessionId,
-          text,
-          {
-            mode: permissionMode,
-            model,
-            thinking,
-            provider: effectiveProvider,
-            executor: session?.executor,
-          },
-          currentAttachments.length > 0 ? currentAttachments : undefined,
-          tempId,
-        );
-        // Update status to trigger SSE connection
-        setStatus({ owner: "self", processId: result.processId });
-      } else {
-        // Queue to existing process with current permission mode and thinking setting
-        const thinking = getThinkingSetting();
-        const result = await api.queueMessage(
-          sessionId,
-          text,
-          permissionMode,
-          currentAttachments.length > 0 ? currentAttachments : undefined,
-          tempId,
-          thinking,
-        );
-        // If process was restarted due to thinking mode change, reconnect stream
-        if (result.restarted && result.processId) {
-          setStatus({ owner: "self", processId: result.processId });
-          reconnectStream();
+      // Wait for any in-flight uploads to complete before sending
+      const pendingAtSendTime = [...pendingUploadsRef.current.values()];
+      if (pendingAtSendTime.length > 0) {
+        updatePendingMessage(tempId, { status: t("sessionUploading") });
+        setAttachments([]); // Clear input area immediately
+        const results = await Promise.all(pendingAtSendTime);
+        for (const result of results) {
+          if (result) currentAttachments.push(result);
         }
+        // Remove uploaded files that handleAttach added to state during the wait
+        // (they're already captured in currentAttachments). Preserve any new uploads
+        // started after send was clicked.
+        const sentIds = new Set(currentAttachments.map((a) => a.id));
+        setAttachments((prev) => prev.filter((a) => !sentIds.has(a.id)));
+        updatePendingMessage(tempId, { status: undefined });
+      } else {
+        setAttachments([]);
       }
-      // Success - clear the draft from localStorage
-      draftControlsRef.current?.clearDraft();
-    } catch (err) {
-      console.error("Failed to send:", err);
 
-      // Check if process is dead (404) - auto-retry with resumeSession
-      const is404 =
-        err instanceof Error &&
-        (err.message.includes("404") ||
-          err.message.includes("No active process"));
-      if (is404) {
-        try {
+      try {
+        if (status.owner === "none") {
+          // Resume the session with current permission mode and model settings
+          // Use session's existing model if available (important for non-Claude providers),
+          // otherwise fall back to user's model preference for new Claude sessions
           const model = session?.model ?? getModelSetting();
           const thinking = getThinkingSetting();
+          // Use effectiveProvider to ensure correct provider even if session data hasn't loaded
+          // effectiveProvider = session?.provider ?? initialProvider (from navigation state)
           const result = await api.resumeSession(
             projectId,
             sessionId,
@@ -537,24 +533,98 @@ export function SessionPageContent({
             currentAttachments.length > 0 ? currentAttachments : undefined,
             tempId,
           );
+          // Update status to trigger SSE connection
           setStatus({ owner: "self", processId: result.processId });
-          draftControlsRef.current?.clearDraft();
-          return;
-        } catch (retryErr) {
-          console.error("Failed to resume session:", retryErr);
-          // Fall through to error handling below
+        } else {
+          // Queue to existing process with current permission mode and thinking setting
+          const thinking = getThinkingSetting();
+          const result = await api.queueMessage(
+            sessionId,
+            text,
+            permissionMode,
+            currentAttachments.length > 0 ? currentAttachments : undefined,
+            tempId,
+            thinking,
+          );
+          // If process was restarted due to thinking mode change, reconnect stream
+          if (result.restarted && result.processId) {
+            setStatus({ owner: "self", processId: result.processId });
+            reconnectStream();
+          }
         }
-      }
+        // Success - clear the draft from localStorage
+        draftControlsRef.current?.clearDraft();
+      } catch (err) {
+        console.error("Failed to send:", err);
 
-      // Remove from pending queue and restore draft on error
-      removePendingMessage(tempId);
-      draftControlsRef.current?.restoreFromStorage();
-      setAttachments(currentAttachments); // Restore attachments on error
-      setProcessState("idle");
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showToast(t("sessionSendFailed", { message: errorMsg }), "error");
-    }
-  };
+        // Check if process is dead (404) - auto-retry with resumeSession
+        const is404 =
+          err instanceof Error &&
+          (err.message.includes("404") ||
+            err.message.includes("No active process"));
+        if (is404) {
+          try {
+            const model = session?.model ?? getModelSetting();
+            const thinking = getThinkingSetting();
+            const result = await api.resumeSession(
+              projectId,
+              sessionId,
+              text,
+              {
+                mode: permissionMode,
+                model,
+                thinking,
+                provider: effectiveProvider,
+                executor: session?.executor,
+              },
+              currentAttachments.length > 0 ? currentAttachments : undefined,
+              tempId,
+            );
+            setStatus({ owner: "self", processId: result.processId });
+            draftControlsRef.current?.clearDraft();
+            return;
+          } catch (retryErr) {
+            console.error("Failed to resume session:", retryErr);
+            // Fall through to error handling below
+          }
+        }
+
+        // Remove from pending queue and restore draft on error
+        removePendingMessage(tempId);
+        draftControlsRef.current?.restoreFromStorage();
+        setAttachments(currentAttachments); // Restore attachments on error
+        setProcessState("idle");
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        showToast(t("sessionSendFailed", { message: errorMsg }), "error");
+        throw err instanceof Error ? err : new Error(errorMsg);
+      }
+    },
+    [
+      addPendingMessage,
+      attachments,
+      effectiveProvider,
+      permissionMode,
+      projectId,
+      reconnectStream,
+      removePendingMessage,
+      session?.executor,
+      session?.model,
+      sessionId,
+      setProcessState,
+      setStatus,
+      showToast,
+      status.owner,
+      t,
+      updatePendingMessage,
+    ],
+  );
+
+  useEffect(() => {
+    onSendMessageReady?.(handleSend);
+    return () => {
+      onSendMessageReady?.(null);
+    };
+  }, [handleSend, onSendMessageReady]);
 
   const handleQueue = async (text: string) => {
     const tempId = addPendingMessage(text);
@@ -976,26 +1046,40 @@ export function SessionPageContent({
   return (
     <div
       className={
-        isWideScreen
-          ? "flex min-w-0 justify-center overflow-hidden bg-[var(--bg-surface)]"
-          : "flex flex-1 flex-col overflow-hidden bg-[var(--bg-surface)]"
+        isEmbedded
+          ? isEmbeddedMobile
+            ? "flex h-full min-h-0 min-w-0 flex-1 overflow-visible bg-[var(--bg-surface)]"
+            : "flex h-full min-h-0 min-w-0 flex-1 overflow-hidden bg-[var(--bg-surface)]"
+          : isWideScreen
+            ? "flex min-w-0 justify-center overflow-hidden bg-[var(--bg-surface)]"
+            : "flex flex-1 flex-col overflow-hidden bg-[var(--bg-surface)]"
       }
-      style={isWideScreen ? { height: "100dvh" } : undefined}
+      style={
+        isEmbedded
+          ? { height: "100%" }
+          : isWideScreen && !isEmbedded
+            ? { height: "100dvh" }
+            : undefined
+      }
     >
       <div
         className={
-          isWideScreen
-            ? "flex w-full flex-col overflow-hidden"
-            : "flex flex-1 flex-col overflow-hidden"
+          isEmbedded
+            ? isEmbeddedMobile
+              ? "flex min-h-0 w-full flex-1 flex-col overflow-visible"
+              : "flex min-h-0 w-full flex-1 flex-col overflow-hidden"
+            : isWideScreen
+              ? "flex w-full flex-col overflow-hidden"
+              : "flex flex-1 flex-col overflow-hidden"
         }
-        style={isWideScreen ? { height: "100dvh" } : undefined}
+        style={isWideScreen && !isEmbedded ? { height: "100dvh" } : undefined}
       >
-        <header className="relative z-10 shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+        <header className="relative z-10 shrink-0 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] pt-[env(safe-area-inset-top,0px)]">
           <div className="flex min-h-[56px] items-center justify-between px-6 py-4">
             <div className="flex min-w-0 flex-1 items-center gap-3">
               {/* Sidebar toggle - on mobile: opens sidebar, on desktop: collapses/expands */}
               {/* Hide on desktop when collapsed (sidebar has its own toggle) */}
-              {!(isWideScreen && isSidebarCollapsed) && (
+              {!isEmbedded && !(isWideScreen && isSidebarCollapsed) && (
                 <button
                   type="button"
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent p-1 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
@@ -1018,7 +1102,13 @@ export function SessionPageContent({
               {project?.name && (
                 <Link
                   to={`${basePath}/sessions?project=${projectId}`}
-                  className="shrink-0 whitespace-nowrap px-0 py-1 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
+                  className={`shrink-0 whitespace-nowrap px-0 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)] ${
+                    isEmbedded
+                      ? isWideScreen
+                        ? "inline-flex h-5 items-center py-0 leading-none"
+                        : "relative z-[1] inline-flex min-h-[16px] items-center py-px leading-[1.25]"
+                      : "py-1"
+                  }`}
                   title={project.name}
                 >
                   {project.name.length > 12
@@ -1029,7 +1119,11 @@ export function SessionPageContent({
               <div className="flex min-w-0 flex-1 items-center gap-1">
                 {isStarred && (
                   <span
-                    className="mr-1 shrink-0 text-amber-500 text-xs"
+                    className={`shrink-0 text-amber-500 ${
+                      isEmbedded
+                        ? "mr-0.5 self-center text-[10px] leading-none"
+                        : "mr-1 text-xs"
+                    }`}
                     aria-label={t("sessionStarredLabel")}
                     title={t("sessionStarredLabel")}
                   >
@@ -1055,11 +1149,25 @@ export function SessionPageContent({
                     <button
                       ref={titleButtonRef}
                       type="button"
-                      className="inline-flex max-w-[calc(100vw-150px)] items-center gap-1 overflow-hidden bg-transparent p-0 text-left text-sm font-medium text-[var(--text-primary)] hover:text-[var(--text-secondary)]"
+                      className={`inline-flex max-w-[calc(100vw-150px)] bg-transparent p-0 text-left text-sm font-medium text-[var(--text-primary)] hover:text-[var(--text-secondary)] ${
+                        isEmbedded
+                          ? isWideScreen
+                            ? "h-5 items-center gap-0.5 overflow-hidden py-0"
+                            : "min-h-[22px] items-start gap-0.5 overflow-visible py-px"
+                          : "items-center gap-1 overflow-hidden"
+                      }`}
                       onClick={() => setShowRecentSessions(!showRecentSessions)}
                       title={session?.fullTitle ?? displayTitle}
                     >
-                      <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap [font-family:var(--font-display)] text-[1.05rem] leading-none">
+                      <span
+                        className={`min-w-0 overflow-hidden text-ellipsis whitespace-nowrap ${
+                          isEmbedded
+                            ? isWideScreen
+                              ? "[font-family:var(--font-display)] text-sm leading-[1.2]"
+                              : "[font-family:var(--font-body)] text-sm leading-[1.3]"
+                            : "[font-family:var(--font-display)] text-[1.05rem] leading-none"
+                        }`}
+                      >
                         {displayTitle}
                       </span>
                       <span className="shrink-0 text-xs opacity-60">▼</span>
@@ -1071,11 +1179,18 @@ export function SessionPageContent({
                       onNavigate={() => setShowRecentSessions(false)}
                       triggerRef={titleButtonRef}
                       basePath={basePath}
+                      getSessionPath={buildSessionPath}
                     />
                   </>
                 )}
                 {!loading && isArchived && (
-                  <span className="ml-1 shrink-0 whitespace-nowrap rounded bg-[var(--bg-secondary)] px-1.5 py-0.5 text-[10px] text-[var(--text-dimmed)]">
+                  <span
+                    className={`ml-1 shrink-0 whitespace-nowrap rounded bg-[var(--bg-secondary)] px-1.5 text-[10px] text-[var(--text-dimmed)] ${
+                      isEmbedded
+                        ? "inline-flex h-5 items-center py-0 leading-none"
+                        : "py-0.5"
+                    }`}
+                  >
                     {t("sessionArchivedBadge")}
                   </span>
                 )}
@@ -1099,21 +1214,60 @@ export function SessionPageContent({
                         showToast(t("sessionCloneInSplitNotSupported"), "info");
                         return;
                       }
-                      navigate(
-                        `${basePath}/projects/${projectId}/sessions/${newSessionId}`,
-                      );
+                      navigate(buildSessionPath(projectId, newSessionId));
                     }}
                     onTerminate={handleTerminate}
                     sharingConfigured={sharingConfigured}
                     onShare={handleShare}
+                    className={isEmbedded && isWideScreen ? "self-center" : ""}
                     useFixedPositioning
                     useEllipsisIcon
+                    onOpenEditor={
+                      !isWideScreen && !isSecondaryPane && !isEmbedded
+                        ? () =>
+                            navigate(
+                              buildEditorPath({
+                                basePath,
+                                projectId,
+                                sessionId,
+                              }) ?? `${basePath}/projects`,
+                            )
+                        : undefined
+                    }
+                    isSplitActive={isSplitActive}
+                    onToggleSplitView={
+                      !isWideScreen && !isSecondaryPane && !isEmbedded
+                        ? () => {
+                            if (isSplitActive) {
+                              handleCloseSplit();
+                            } else {
+                              setShowSplitPicker(true);
+                            }
+                          }
+                        : undefined
+                    }
                   />
                 )}
               </div>
             </div>
             <div className="ml-0.5 flex shrink-0 items-center gap-2">
-              {!isSecondaryPane && (
+              {isWideScreen && !isSecondaryPane && !isEmbedded && (
+                <Link
+                  to={
+                    buildEditorPath({
+                      basePath,
+                      projectId,
+                      sessionId,
+                    }) ?? `${basePath}/projects`
+                  }
+                  className="inline-flex items-center rounded-sm border border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-[var(--on-surface)] transition-colors hover:bg-[var(--surface-container-high)]"
+                  title="Editor"
+                  aria-label="Editor"
+                >
+                  Editor
+                </Link>
+              )}
+              {isWideScreen && !isSecondaryPane && !isEmbedded && (
                 <SplitViewButton currentSessionId={sessionId} />
               )}
               <ThemeToggle />
@@ -1134,6 +1288,21 @@ export function SessionPageContent({
             </div>
           </div>
         </header>
+
+        {/* Mobile split view picker (triggered from SessionMenu) */}
+        {showSplitPicker && (
+          <SplitSessionPicker
+            currentSessionId={sessionId}
+            onSelect={(sid: string, pid: string) => {
+              const newParams = new URLSearchParams(searchParams);
+              newParams.set("splitSession", sid);
+              newParams.set("splitProject", pid);
+              setSearchParams(newParams, { replace: true });
+              setShowSplitPicker(false);
+            }}
+            onClose={() => setShowSplitPicker(false)}
+          />
+        )}
 
         {/* Process Info Modal */}
         {showProcessInfoModal && session && (
@@ -1182,7 +1351,12 @@ export function SessionPageContent({
 
         <main
           data-session-messages
-          className="min-h-0 flex-1 overflow-y-auto px-6 py-8 md:px-10 md:py-10"
+          className={
+            isEmbedded
+              ? "min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4"
+              : "min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-8 md:px-10 md:py-10"
+          }
+          style={isEmbedded ? { scrollbarWidth: "none" } : undefined}
         >
           {loading ? (
             <div className="flex h-full items-center justify-center text-sm text-[var(--text-muted)]">
@@ -1201,7 +1375,11 @@ export function SessionPageContent({
                 projectId={projectId}
                 sessionId={sessionId}
               >
-                <div className="mx-auto max-w-[52rem]">
+                <div
+                  className={
+                    isEmbedded ? "w-full min-w-0" : "mx-auto max-w-[52rem]"
+                  }
+                >
                   <MessageList
                     messages={messages}
                     provider={session?.provider}
@@ -1239,7 +1417,9 @@ export function SessionPageContent({
                     : "bg-[var(--border-subtle)]"
             }`}
           />
-          <div className="mx-auto max-w-[52rem]">
+          <div
+            className={isEmbedded ? "w-full min-w-0" : "mx-auto max-w-[52rem]"}
+          >
             {/* User question panel */}
             {pendingInputRequest &&
               pendingInputRequest.sessionId === actualSessionId &&

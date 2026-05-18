@@ -65,8 +65,8 @@ No database, no cloud, no accounts. 100% open source (MIT).
 If you can install Claude Code or Codex, you can run Yep Anywhere locally with minimal dependencies.
 
 ```bash
-git clone https://github.com/kzahel/yepanywhere.git
-cd yepanywhere
+git clone https://github.com/sakiko-toyokawa/vibeanywhere.git
+cd vibeanywhere
 pnpm install
 pnpm build
 pnpm start
@@ -115,11 +115,11 @@ Read more: [How we use the SDK](https://yepanywhere.com/tos-compliance.html) | [
 
 ## Star History
 
-<a href="https://www.star-history.com/#kzahel/yepanywhere&type=date&legend=top-left">
+<a href="https://www.star-history.com/#sakiko-toyokawa/vibeanywhere&type=date&legend=top-left">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=kzahel/yepanywhere&type=date&legend=top-left&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=kzahel/yepanywhere&type=date&legend=top-left" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=kzahel/yepanywhere&type=date&legend=top-left" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=sakiko-toyokawa/vibeanywhere&type=date&legend=top-left&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=sakiko-toyokawa/vibeanywhere&type=date&legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=sakiko-toyokawa/vibeanywhere&type=date&legend=top-left" />
   </picture>
 </a>
 

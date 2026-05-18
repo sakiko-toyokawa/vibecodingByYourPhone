@@ -1,3 +1,5 @@
+import type { FilterOption } from "../../components/FilterDropdown";
+import { SettingsSelect } from "../../components/settings/SettingsFormControls";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import { FONT_SIZES, useFontSize } from "../../hooks/useFontSize";
 import { useFunPhrases } from "../../hooks/useFunPhrases";
@@ -18,6 +20,11 @@ export function AppearanceSettings() {
   const { funPhrasesEnabled, setFunPhrasesEnabled } = useFunPhrases();
   const { showConnectionBars, setShowConnectionBars } = useDeveloperMode();
   const translate = (key: string) => t(key as never);
+  const localeOptions: FilterOption<(typeof SUPPORTED_LOCALES)[number]>[] =
+    SUPPORTED_LOCALES.map((value) => ({
+      value,
+      label: getLocaleLabel(value, translate),
+    }));
 
   return (
     <section className="flex flex-col gap-8 mb-12">
@@ -33,20 +40,17 @@ export function AppearanceSettings() {
             <strong>{t("appearanceLanguageTitle")}</strong>
             <p>{t("appearanceLanguageDescription")}</p>
           </div>
-          <select
-            className="px-3 py-2 rounded-md border border-[var(--border-input)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] cursor-pointer"
-            value={locale}
-            onChange={(e) =>
-              setLocale(e.target.value as (typeof SUPPORTED_LOCALES)[number])
-            }
-            aria-label={t("appearanceLanguageTitle")}
-          >
-            {SUPPORTED_LOCALES.map((value) => (
-              <option key={value} value={value}>
-                {getLocaleLabel(value, translate)}
-              </option>
-            ))}
-          </select>
+          <SettingsSelect
+            label={t("appearanceLanguageTitle")}
+            options={localeOptions}
+            selected={[locale]}
+            onChange={(selected) => {
+              const nextLocale = selected[0];
+              if (nextLocale) {
+                setLocale(nextLocale);
+              }
+            }}
+          />
         </div>
         <div className="flex items-center justify-between py-5 border-b border-[var(--border-subtle)]">
           <div className="flex flex-col gap-1">
