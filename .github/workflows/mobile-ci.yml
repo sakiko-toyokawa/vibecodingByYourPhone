@@ -71,7 +71,10 @@ jobs:
 
       # --- Generate temporary signing keystore ---
       # build.gradle.kts requires a keystore for release builds.
-      # We generate a self-signed one in CI so the APK can be built unsigned.
+      # We generate a self-signed one in CI so the APK can be built.
+      # NOTE: local.properties MUST be at the Android project root (gen/android/),
+      #       not in the app/ subdirectory, because build.gradle.kts uses
+      #       rootProject.file("local.properties").
       - name: Generate CI keystore
         run: |
           mkdir -p packages/mobile/src-tauri/gen/android/app
@@ -81,12 +84,14 @@ jobs:
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass yepanywhere -keypass yepanywhere \
             -dname "CN=YepAnywhere"
-          echo "storeFile=yepanywhere.keystore" > packages/mobile/src-tauri/gen/android/app/local.properties
-          echo "storePassword=yepanywhere" >> packages/mobile/src-tauri/gen/android/app/local.properties
-          echo "keyAlias=yepanywhere" >> packages/mobile/src-tauri/gen/android/app/local.properties
-          echo "keyPassword=yepanywhere" >> packages/mobile/src-tauri/gen/android/app/local.properties
+          cat > packages/mobile/src-tauri/gen/android/local.properties << 'EOF'
+          storeFile=app/yepanywhere.keystore
+          storePassword=yepanywhere
+          keyAlias=yepanywhere
+          keyPassword=yepanywhere
+          EOF
           echo "--- local.properties contents ---"
-          cat packages/mobile/src-tauri/gen/android/app/local.properties
+          cat packages/mobile/src-tauri/gen/android/local.properties
           echo "--- verify keystore ---"
           keytool -list -v -keystore packages/mobile/src-tauri/gen/android/app/yepanywhere.keystore -storepass yepanywhere | head -20
 
