@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.3] - 2026-05-19
+
+### Changed
+- Bump desktop and mobile versions to 0.2.3
+
 ## [0.1.0] - Unreleased
 
 ### Added

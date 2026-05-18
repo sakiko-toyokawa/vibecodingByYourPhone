@@ -1,6 +1,6 @@
 [package]
 name = "yep-anywhere-mobile"
-version = "0.1.0"
+version = "0.2.3"
 description = "Yep Anywhere Mobile"
 edition = "2021"
 
