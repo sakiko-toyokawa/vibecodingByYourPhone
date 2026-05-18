@@ -34,7 +34,8 @@ async function testRejectsEscapingJunctionReads(): Promise<void> {
     await mkdir(projectRoot, { recursive: true });
     await mkdir(outsideDir, { recursive: true });
     await writeFile(join(outsideDir, "secret.txt"), "nope\n", "utf8");
-    await symlink(outsideDir, junctionPath, "junction");
+    const linkType = process.platform === "win32" ? "junction" : "dir";
+    await symlink(outsideDir, junctionPath, linkType);
 
     const resolved = await resolveProjectPath(projectRoot, "escape/secret.txt");
     assert.equal(resolved, null);
@@ -52,7 +53,8 @@ async function testRejectsEscapingJunctionWrites(): Promise<void> {
   try {
     await mkdir(projectRoot, { recursive: true });
     await mkdir(outsideDir, { recursive: true });
-    await symlink(outsideDir, junctionPath, "junction");
+    const linkType = process.platform === "win32" ? "junction" : "dir";
+    await symlink(outsideDir, junctionPath, linkType);
 
     const resolved = await resolveProjectPath(
       projectRoot,
