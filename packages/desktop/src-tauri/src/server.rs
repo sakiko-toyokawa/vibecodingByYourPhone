@@ -20,6 +20,10 @@ pub struct ServerState {
     /// The port the server is actually running on (auto-picked or user-specified).
     pub port: Mutex<Option<u16>>,
     pub last_error: Mutex<Option<String>>,
+    /// Last known PID of the server child process. Used as a fallback by
+    /// kill_sync when the Child handle has already been taken (e.g. after
+    /// stop_server timed out) so we can still force-terminate the orphan.
+    pub last_pid: Mutex<Option<u32>>,
 }
 
 impl ServerState {
@@ -31,14 +35,18 @@ impl ServerState {
             desktop_token: Mutex::new(None),
             port: Mutex::new(None),
             last_error: Mutex::new(None),
+            last_pid: Mutex::new(None),
         }
     }
 
     /// Synchronously kill the server process and its entire process group.
     /// Called during app exit when the async runtime may not be available.
     pub fn kill_sync(&self) {
+        // 1. Try to terminate via the active Child handle.
+        let mut child_handle_existed = false;
         if let Ok(mut lock) = self.child.lock() {
             if let Some(ref mut child) = *lock {
+                child_handle_existed = true;
                 eprintln!("[Desktop] kill_sync: terminating server process");
                 #[cfg(unix)]
                 if let Some(pid) = child.id() {
@@ -69,7 +77,26 @@ impl ServerState {
                 }
             }
             *lock = None;
+        } else {
+            // Could not acquire child lock — the async runtime may have poisoned it.
+            // Fall back to last_pid below.
+            eprintln!("[Desktop] kill_sync: child lock poisoned, will fallback to last_pid");
         }
+
+        // 2. Fallback: if the Child handle was already taken (e.g. by stop_server
+        // which then timed out), use the last known PID to force-kill the orphan.
+        #[cfg(not(unix))]
+        if !child_handle_existed {
+            if let Ok(lock) = self.last_pid.lock() {
+                if let Some(pid) = *lock {
+                    eprintln!("[Desktop] kill_sync: child handle gone, force-killing orphan PID {pid}");
+                    let _ = std::process::Command::new("taskkill")
+                        .args(["/PID", &pid.to_string(), "/T", "/F"])
+                        .status();
+                }
+            }
+        }
+
         // Reset all runtime flags so the next app launch starts fresh.
         if let Ok(mut lock) = self.starting.lock() {
             *lock = false;
@@ -84,6 +111,9 @@ impl ServerState {
             *lock = None;
         }
         if let Ok(mut lock) = self.last_error.lock() {
+            *lock = None;
+        }
+        if let Ok(mut lock) = self.last_pid.lock() {
             *lock = None;
         }
     }
@@ -203,8 +233,10 @@ fn collect_paths_sorted(root: &Path) -> Result<Vec<PathBuf>, String> {
 }
 
 fn hash_directory_contents(root: &Path) -> Result<String, String> {
+    let start = std::time::Instant::now();
     let mut hasher = Sha256::new();
     let entries = collect_paths_sorted(root)?;
+    let entry_count = entries.len();
 
     for relative in entries {
         let full_path = root.join(&relative);
@@ -234,7 +266,13 @@ fn hash_directory_contents(root: &Path) -> Result<String, String> {
         }
     }
 
-    Ok(format!("{:x}", hasher.finalize()))
+    let hash = format!("{:x}", hasher.finalize());
+    eprintln!(
+        "[Desktop] hash_directory_contents: {} entries hashed in {:?}",
+        entry_count,
+        start.elapsed()
+    );
+    Ok(hash)
 }
 
 fn unique_staging_dir(base_dir: &Path, hash: &str) -> PathBuf {
@@ -700,9 +738,15 @@ pub async fn start_server(app: AppHandle) -> Result<(), String> {
             });
         }
 
+        let spawned_pid = child.id();
         {
             let mut child_lock = state.child.lock().map_err(|e| e.to_string())?;
             *child_lock = Some(child);
+        }
+        if let Some(pid) = spawned_pid {
+            if let Ok(mut lock) = state.last_pid.lock() {
+                *lock = Some(pid);
+            }
         }
 
         ensure_start_epoch_active(&state, start_epoch)?;
@@ -731,7 +775,9 @@ pub async fn start_server(app: AppHandle) -> Result<(), String> {
                     stderr_msg
                 ));
             }
-            Ok(None) => {}
+            Ok(None) => {
+                eprintln!("[Desktop] start_server: process still running after 800ms check");
+            }
             Err(e) => {
                 return Err(format!("Failed to check server process status: {e}"));
             }
@@ -748,10 +794,14 @@ pub async fn start_server(app: AppHandle) -> Result<(), String> {
             let port_str = loop {
                 ensure_start_epoch_active(&state, start_epoch)?;
                 if waited >= max_wait {
+                    eprintln!("[Desktop] start_server: port_file wait timed out after {waited}ms");
                     return Err("Server did not write its port file in time".to_string());
                 }
                 tokio::time::sleep(tokio::time::Duration::from_millis(interval)).await;
                 waited += interval;
+                if waited % 1000 == 0 {
+                    eprintln!("[Desktop] start_server: still waiting for port_file ({waited}ms / {max_wait}ms)");
+                }
                 ensure_start_epoch_active(&state, start_epoch)?;
                 match {
                     let mut child_lock = state.child.lock().map_err(|e| e.to_string())?;
@@ -781,7 +831,10 @@ pub async fn start_server(app: AppHandle) -> Result<(), String> {
                 }
                 match fs::read_to_string(&port_file) {
                     Ok(s) if s.trim().is_empty() => continue,
-                    Ok(s) => break s,
+                    Ok(s) => {
+                        eprintln!("[Desktop] start_server: port_file found after {waited}ms: {s}",);
+                        break s;
+                    }
                     Err(_) => continue,
                 }
             };
@@ -880,7 +933,23 @@ pub async fn stop_server(app: AppHandle) -> Result<(), String> {
     set_last_error(&state, None)?;
 
     if let Some(child) = child {
-        stop_child_process(child).await?;
+        if let Err(e) = stop_child_process(child).await {
+            eprintln!("[Desktop] stop_server: graceful stop failed ({e}), attempting force kill via last_pid");
+            // Fallback: use the last known PID to force-kill the orphan.
+            // This handles the case where stop_child_process timed out but
+            // the process is still running.
+            if let Ok(lock) = state.last_pid.lock() {
+                if let Some(pid) = *lock {
+                    let status = std::process::Command::new("taskkill")
+                        .args(["/PID", &pid.to_string(), "/T", "/F"])
+                        .status();
+                    match status {
+                        Ok(s) => eprintln!("[Desktop] stop_server: fallback taskkill exited with {s}"),
+                        Err(err) => eprintln!("[Desktop] stop_server: fallback taskkill failed: {err}"),
+                    }
+                }
+            }
+        }
     } else {
         eprintln!("[Desktop] stop_server: no running child process");
     }

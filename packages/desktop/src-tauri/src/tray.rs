@@ -31,7 +31,25 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             "quit" => {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    let _ = crate::server::stop_server(app.clone()).await;
+                    // Cap graceful shutdown at 10s. If stop_server hangs (e.g.
+                    // taskkill blocked by Defender), force exit and let
+                    // RunEvent::Exit -> kill_sync handle the orphan.
+                    let shutdown = tokio::time::timeout(
+                        tokio::time::Duration::from_secs(10),
+                        crate::server::stop_server(app.clone()),
+                    )
+                    .await;
+                    match shutdown {
+                        Ok(Ok(())) => {
+                            eprintln!("[Desktop] Graceful shutdown completed");
+                        }
+                        Ok(Err(e)) => {
+                            eprintln!("[Desktop] Graceful shutdown failed: {e}");
+                        }
+                        Err(_) => {
+                            eprintln!("[Desktop] Graceful shutdown timed out, forcing exit");
+                        }
+                    }
                     app.exit(0);
                 });
             }

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.4] - 2026-05-21
+
+### Fixed
+- Fix race condition where Node.js server process was left behind after quit, causing next launch to hang on "Starting server..."
+- Add `last_pid` fallback in `kill_sync` so force-kill works even when child handle was already consumed by `stop_server`
+- Add force-kill fallback in `stop_server` when graceful shutdown times out
+- Add 10-second timeout protection to tray quit handler
+- Add diagnostic logging to server startup for easier future debugging
+
 ## [0.2.3] - 2026-05-19
 
 ### Changed
