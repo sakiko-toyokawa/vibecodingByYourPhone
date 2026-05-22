@@ -67,6 +67,7 @@ function getNextPort(): number {
 export class OpenCodeProvider implements AgentProvider {
   readonly name = "opencode" as const;
   readonly displayName = "OpenCode";
+  readonly supportedPermissionModes = [] as const;
   readonly supportsPermissionMode = false; // OpenCode has its own permission model
   readonly supportsThinkingToggle = false;
   readonly supportsSlashCommands = false;

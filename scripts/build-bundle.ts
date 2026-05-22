@@ -428,10 +428,14 @@ step("Install runtime dependencies", () => {
   // On Windows, pnpm deploy often crashes with status 3221226505 (access violation).
   // Fall back to copying from the server package node_modules.
   if (process.platform === "win32") {
-    log("Windows detected: using server package node_modules copy instead of pnpm deploy");
+    log(
+      "Windows detected: using server package node_modules copy instead of pnpm deploy",
+    );
     const serverNodeModules = path.join(SERVER_PACKAGE, "node_modules");
     if (!fs.existsSync(serverNodeModules)) {
-      throw new Error("Server package node_modules not found at " + serverNodeModules);
+      throw new Error(
+        `Server package node_modules not found at ${serverNodeModules}`,
+      );
     }
 
     log("Copying server node_modules to staging (dereferencing symlinks)...");

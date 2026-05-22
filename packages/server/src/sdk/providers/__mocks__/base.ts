@@ -30,6 +30,12 @@ export abstract class BaseMockProvider implements MockAgentProvider {
   abstract readonly name: ProviderName;
   abstract readonly displayName: string;
   // Mock providers default to Claude-like behavior (supports all)
+  readonly supportedPermissionModes = [
+    "default",
+    "acceptEdits",
+    "plan",
+    "bypassPermissions",
+  ] as const;
   readonly supportsPermissionMode = true;
   readonly supportsThinkingToggle = true;
   readonly supportsSlashCommands = true;

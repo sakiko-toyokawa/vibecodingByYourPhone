@@ -83,6 +83,8 @@ export interface ProviderInfo {
   user?: { email?: string; name?: string };
   /** Available models for this provider */
   models?: ModelInfo[];
+  /** Specific permission modes this provider supports. Omit when unsupported or unknown. */
+  supportedPermissionModes?: PermissionMode[];
   /** Whether this provider supports permission modes (default: true for backward compat) */
   supportsPermissionMode?: boolean;
   /** Whether this provider supports extended thinking toggle (default: true for backward compat) */

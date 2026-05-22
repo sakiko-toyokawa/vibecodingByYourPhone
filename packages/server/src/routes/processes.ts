@@ -198,7 +198,16 @@ export function createProcessesRoutes(deps: ProcessesDeps): Hono {
       return c.json({ error: "Process not found" }, 404);
     }
 
-    const commands = await process.supportedCommands();
+    let commands: Awaited<ReturnType<typeof process.supportedCommands>>;
+    try {
+      commands = await process.supportedCommands();
+    } catch (error) {
+      console.warn(
+        `[processes] Failed to load slash commands for process ${processId}:`,
+        error,
+      );
+      commands = null;
+    }
     if (commands === null) {
       // Process doesn't support dynamic command listing
       return c.json(

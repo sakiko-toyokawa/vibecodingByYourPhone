@@ -50,9 +50,8 @@ export const DEFAULT_SERVER_SETTINGS: ServerSettings = {
   serviceWorkerEnabled: true,
   persistRemoteSessionsToDisk: false,
   newSessionDefaults: {
-    provider: "codex",
-    model: "gpt-5.4",
-    permissionMode: "bypassPermissions",
+    provider: "claude",
+    permissionMode: "default",
   },
   lifecycleWebhooksEnabled: false,
   lifecycleWebhookDryRun: true,

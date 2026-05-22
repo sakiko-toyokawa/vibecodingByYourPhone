@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.5] - 2026-05-23
+
+### Fixed
+- Restore desktop voice input availability when Web Speech API is supported.
+- Expose all Codex permission modes in session controls.
+- Stop mixing local session actions into provider slash commands.
+- Keep session loading resilient when dynamic slash command discovery fails.
+
 ## [0.2.4] - 2026-05-21
 
 ### Fixed

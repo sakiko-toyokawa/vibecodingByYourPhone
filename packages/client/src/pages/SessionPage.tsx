@@ -1,4 +1,8 @@
-import type { ProviderName, UploadedFile } from "@yep-anywhere/shared";
+import {
+  ALL_PERMISSION_MODES,
+  type ProviderName,
+  type UploadedFile,
+} from "@yep-anywhere/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Link,
@@ -253,25 +257,17 @@ export function SessionPageContent({
   // Connection for uploads (uses WebSocket when enabled)
   const connection = useConnection();
 
-  // Inject custom client-side commands alongside SDK-discovered ones
-  const allSlashCommands = useMemo(() => {
-    if (status.owner === "self") {
-      const custom = ["clear", "model"];
-      const combined = custom.filter((c) => !slashCommands.includes(c));
-      return [...combined, ...slashCommands];
-    }
-    return slashCommands;
-  }, [slashCommands, status.owner]);
-
   // Get provider capabilities based on session's provider
   const { providers } = useProviders();
   const currentProviderInfo = useMemo(() => {
-    if (!session?.provider) return null;
-    return providers.find((p) => p.name === session.provider) ?? null;
-  }, [providers, session?.provider]);
+    if (!effectiveProvider) return null;
+    return providers.find((p) => p.name === effectiveProvider) ?? null;
+  }, [effectiveProvider, providers]);
   // Default to true for backwards compatibility (except slash commands)
   const supportsPermissionMode =
     currentProviderInfo?.supportsPermissionMode ?? true;
+  const supportedPermissionModes =
+    currentProviderInfo?.supportedPermissionModes ?? ALL_PERMISSION_MODES;
   const supportsThinkingToggle =
     currentProviderInfo?.supportsThinkingToggle ?? true;
   const supportsSlashCommands =
@@ -1452,6 +1448,7 @@ export function SessionPageContent({
                     isHeld={holdModeEnabled ? isHeld : undefined}
                     onHoldChange={holdModeEnabled ? setHold : undefined}
                     supportsPermissionMode={supportsPermissionMode}
+                    supportedPermissionModes={supportedPermissionModes}
                     supportsThinkingToggle={supportsThinkingToggle}
                     contextUsage={session?.contextUsage}
                     isRunning={status.owner === "self"}
@@ -1494,6 +1491,7 @@ export function SessionPageContent({
                 isHeld={holdModeEnabled ? isHeld : undefined}
                 onHoldChange={holdModeEnabled ? setHold : undefined}
                 supportsPermissionMode={supportsPermissionMode}
+                supportedPermissionModes={supportedPermissionModes}
                 supportsThinkingToggle={supportsThinkingToggle}
                 isRunning={status.owner === "self"}
                 isThinking={processState === "in-turn"}
@@ -1513,7 +1511,11 @@ export function SessionPageContent({
                 onAttach={handleAttach}
                 onRemoveAttachment={handleRemoveAttachment}
                 uploadProgress={uploadProgress}
-                slashCommands={status.owner === "self" ? allSlashCommands : []}
+                slashCommands={
+                  status.owner === "self" && supportsSlashCommands
+                    ? slashCommands
+                    : []
+                }
                 onCustomCommand={handleCustomCommand}
               />
             )}

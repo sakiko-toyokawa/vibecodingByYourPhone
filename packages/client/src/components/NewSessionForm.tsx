@@ -1,4 +1,5 @@
 import {
+  ALL_PERMISSION_MODES,
   type ModelInfo,
   type ProviderName,
   resolveModel,
@@ -45,12 +46,7 @@ interface PendingFile {
   previewUrl?: string;
 }
 
-const MODE_ORDER: PermissionMode[] = [
-  "default",
-  "acceptEdits",
-  "plan",
-  "bypassPermissions",
-];
+const MODE_ORDER: readonly PermissionMode[] = ALL_PERMISSION_MODES;
 
 const sectionTitleClasses =
   "mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]";
@@ -197,6 +193,8 @@ export function NewSessionForm({
   // Default to true for backwards compatibility with providers that don't set these flags
   const supportsPermissionMode =
     selectedProviderInfo?.supportsPermissionMode ?? true;
+  const supportedPermissionModes =
+    selectedProviderInfo?.supportedPermissionModes ?? ALL_PERMISSION_MODES;
   const supportsThinkingToggle =
     selectedProviderInfo?.supportsThinkingToggle ?? true;
 
@@ -347,6 +345,12 @@ export function NewSessionForm({
   const handleModeSelect = (selectedMode: PermissionMode) => {
     setMode(selectedMode);
   };
+
+  useEffect(() => {
+    if (!supportsPermissionMode) return;
+    if (supportedPermissionModes.includes(mode)) return;
+    setMode(supportedPermissionModes[0] ?? "default");
+  }, [mode, supportedPermissionModes, supportsPermissionMode]);
 
   const handleSaveDefaults = useCallback(async () => {
     setIsSavingDefaults(true);
@@ -878,28 +882,30 @@ export function NewSessionForm({
         <section className="pb-4">
           <h3 className={sectionTitleClasses}>{t("newSessionModeTitle")}</h3>
           <div className="flex flex-col gap-2">
-            {MODE_ORDER.map((m) => (
-              <button
-                key={m}
-                type="button"
-                className={`${optionCardBaseClasses} ${mode === m ? optionCardSelectedClasses : optionCardUnselectedClasses}`}
-                onClick={() => handleModeSelect(m)}
-                disabled={isStarting}
-              >
-                <span
-                  className="h-3 w-3 shrink-0 rounded-full sm:h-3 sm:w-3"
-                  style={{ backgroundColor: modeDotColors[m] }}
-                />
-                <div className="flex flex-col flex-1">
-                  <span className="text-sm font-medium text-[var(--text-primary)]">
-                    {modeLabels[m]}
-                  </span>
-                  <span className="text-xs text-[var(--text-dimmed)]">
-                    {modeDescriptions[m]}
-                  </span>
-                </div>
-              </button>
-            ))}
+            {MODE_ORDER.filter((m) => supportedPermissionModes.includes(m)).map(
+              (m) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={`${optionCardBaseClasses} ${mode === m ? optionCardSelectedClasses : optionCardUnselectedClasses}`}
+                  onClick={() => handleModeSelect(m)}
+                  disabled={isStarting}
+                >
+                  <span
+                    className="h-3 w-3 shrink-0 rounded-full sm:h-3 sm:w-3"
+                    style={{ backgroundColor: modeDotColors[m] }}
+                  />
+                  <div className="flex flex-col flex-1">
+                    <span className="text-sm font-medium text-[var(--text-primary)]">
+                      {modeLabels[m]}
+                    </span>
+                    <span className="text-xs text-[var(--text-dimmed)]">
+                      {modeDescriptions[m]}
+                    </span>
+                  </div>
+                </button>
+              ),
+            )}
           </div>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

@@ -57,6 +57,23 @@ function isQueuedResponse(
   return "queued" in result && result.queued === true;
 }
 
+async function loadSlashCommandsSafely(
+  process: Process | undefined,
+  sessionId: string,
+) {
+  if (!process?.supportsDynamicCommands) return null;
+
+  try {
+    return await process.supportedCommands();
+  } catch (error) {
+    console.warn(
+      `[sessions] Failed to load slash commands for ${sessionId}:`,
+      error,
+    );
+    return null;
+  }
+}
+
 /**
  * Type guard to check if a result is a QueueFullResponse
  */
@@ -453,9 +470,7 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
       process?.state.type === "waiting-input" ? process.state.request : null;
 
     // Get available slash commands from active process
-    const slashCommands = process?.supportsDynamicCommands
-      ? await process.supportedCommands()
-      : null;
+    const slashCommands = await loadSlashCommandsSafely(process, sessionId);
 
     // Read minimal session info from disk (just for title/timestamps, no messages)
     const metadataProvider = deps.sessionMetadataService?.getProvider(
@@ -649,9 +664,7 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     // Get available slash commands from active process (for "/" button in toolbar)
     // The init message that normally carries these gets discarded from the SSE buffer
     // after ~30s, so we attach them to the REST response for reliable delivery.
-    const slashCommands = process?.supportsDynamicCommands
-      ? await process.supportedCommands()
-      : null;
+    const slashCommands = await loadSlashCommandsSafely(process, sessionId);
 
     if (!session) {
       // Session file doesn't exist yet - only valid if we own the process

@@ -324,7 +324,12 @@ function parseBooleanOrDefault(
  * Parse permission mode from string or return default.
  */
 function parsePermissionMode(value: string | undefined): PermissionMode {
-  if (value === "bypassPermissions" || value === "acceptEdits") {
+  if (
+    value === "default" ||
+    value === "bypassPermissions" ||
+    value === "acceptEdits" ||
+    value === "plan"
+  ) {
     return value;
   }
   return "default";

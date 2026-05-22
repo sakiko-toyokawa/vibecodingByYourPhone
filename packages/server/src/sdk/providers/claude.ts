@@ -141,6 +141,12 @@ let probePromise: Promise<ModelInfo[]> | null = null;
 export class ClaudeProvider implements AgentProvider {
   readonly name: ProviderName = "claude";
   readonly displayName: string = "Claude";
+  readonly supportedPermissionModes = [
+    "default",
+    "acceptEdits",
+    "plan",
+    "bypassPermissions",
+  ] as const;
   readonly supportsPermissionMode = true;
   readonly supportsThinkingToggle = true;
   readonly supportsSlashCommands = true;

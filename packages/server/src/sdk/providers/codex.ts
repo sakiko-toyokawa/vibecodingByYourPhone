@@ -629,6 +629,12 @@ class CodexAppServerClient {
 export class CodexProvider implements AgentProvider {
   readonly name = "codex" as const;
   readonly displayName = "Codex";
+  readonly supportedPermissionModes = [
+    "default",
+    "acceptEdits",
+    "plan",
+    "bypassPermissions",
+  ] as const;
   readonly supportsPermissionMode = true;
   readonly supportsThinkingToggle = true;
   readonly supportsSlashCommands = false;
@@ -1128,12 +1134,14 @@ export class CodexProvider implements AgentProvider {
         cwd: options.cwd,
         approvalPolicy: policy.approvalPolicy,
         sandbox: policy.sandbox,
+        developerInstructions: options.globalInstructions ?? null,
       };
       const threadStartParams: ThreadStartParams = {
         model: options.model ?? null,
         cwd: options.cwd,
         approvalPolicy: policy.approvalPolicy,
         sandbox: policy.sandbox,
+        developerInstructions: options.globalInstructions ?? null,
         experimentalRawEvents: false,
       };
       const threadResult: ThreadResumeResponse | ThreadStartResponse =
@@ -1175,24 +1183,14 @@ export class CodexProvider implements AgentProvider {
       );
 
       const messageGen = queue.generator();
-      let isFirstMessage = !options.resumeSessionId;
-
       for await (const message of messageGen) {
         if (signal.aborted) {
           break;
         }
 
-        let userPrompt = this.extractTextFromMessage(message);
+        const userPrompt = this.extractTextFromMessage(message);
         if (!userPrompt) {
           continue;
-        }
-
-        // Prepend global instructions to the first message of new sessions
-        if (isFirstMessage && options.globalInstructions) {
-          userPrompt = `[Global context]\n${options.globalInstructions}\n\n---\n\n${userPrompt}`;
-          isFirstMessage = false;
-        } else {
-          isFirstMessage = false;
         }
 
         // Emit user message with UUID from queue to enable deduplication.
@@ -1545,26 +1543,78 @@ export class CodexProvider implements AgentProvider {
 
       case "item/tool/requestUserInput": {
         const requestInput = this.asToolRequestUserInputParams(request.params);
-        const questions = requestInput?.questions ?? [];
-
-        // MVP: return empty answers so request can complete without blocking.
-        const answers: ToolRequestUserInputResponse["answers"] = {};
-        for (const question of questions) {
-          answers[question.id] = { answers: [] };
+        if (!requestInput) {
+          log.warn(
+            {
+              method: request.method,
+              requestId: request.id,
+            },
+            "Codex tool user-input params invalid; returning empty answers",
+          );
+          return { answers: {} } satisfies ToolRequestUserInputResponse;
         }
-        log.warn(
-          {
-            method: request.method,
-            requestId: request.id,
-            questionCount: questions.length,
-            threadId: requestInput?.threadId ?? null,
-            turnId: requestInput?.turnId ?? null,
-            itemId: requestInput?.itemId ?? null,
-          },
-          "Codex requested tool user input; returning empty answers in MVP",
+
+        const toolInput = {
+          questions: requestInput.questions.map((question) => ({
+            question: question.question,
+            header: question.header,
+            multiSelect: false,
+            options: (question.options ?? []).map((option) => ({
+              label: option.label,
+              description: option.description,
+            })),
+            questionId: question.id,
+            isOther: question.isOther,
+            isSecret: question.isSecret,
+          })),
+          threadId: requestInput.threadId,
+          turnId: requestInput.turnId,
+          itemId: requestInput.itemId,
+        };
+
+        const result = await this.requestToolApproval(
+          options,
+          "AskUserQuestion",
+          toolInput,
+          signal,
         );
-        const response: ToolRequestUserInputResponse = { answers };
-        return response;
+        if (result.behavior !== "allow") {
+          log.info(
+            {
+              method: request.method,
+              requestId: request.id,
+              threadId: requestInput.threadId,
+              turnId: requestInput.turnId,
+              itemId: requestInput.itemId,
+            },
+            "Codex tool user-input denied; returning empty answers",
+          );
+          return { answers: {} } satisfies ToolRequestUserInputResponse;
+        }
+
+        const rawAnswers =
+          result.updatedInput &&
+          typeof result.updatedInput === "object" &&
+          "answers" in result.updatedInput
+            ? ((result.updatedInput as { answers?: unknown }).answers ?? {})
+            : {};
+        const answerMap =
+          rawAnswers && typeof rawAnswers === "object"
+            ? (rawAnswers as Record<string, unknown>)
+            : {};
+
+        const answers: ToolRequestUserInputResponse["answers"] = {};
+        for (const question of requestInput.questions) {
+          const answer = answerMap[question.question];
+          answers[question.id] = {
+            answers:
+              typeof answer === "string" && answer.trim().length > 0
+                ? [answer]
+                : [],
+          };
+        }
+
+        return { answers } satisfies ToolRequestUserInputResponse;
       }
 
       default: {
@@ -1585,31 +1635,53 @@ export class CodexProvider implements AgentProvider {
     allowDecision: TDecision,
     denyDecision: TDecision,
   ): Promise<TDecision> {
+    const result = await this.requestToolApproval(
+      options,
+      toolName,
+      toolInput,
+      signal,
+    );
+    return result.behavior === "allow" ? allowDecision : denyDecision;
+  }
+
+  private async requestToolApproval(
+    options: StartSessionOptions,
+    toolName: string,
+    toolInput: unknown,
+    signal: AbortSignal,
+  ): Promise<ToolApprovalResult> {
     if (!options.onToolApproval) {
       log.warn(
         { toolName },
         "No onToolApproval handler available; denying Codex approval request",
       );
-      return denyDecision;
+      return {
+        behavior: "deny",
+        message: "No approval handler available",
+        interrupt: true,
+      };
     }
 
-    let result: ToolApprovalResult;
     try {
-      result = await options.onToolApproval(toolName, toolInput, { signal });
+      const result = await options.onToolApproval(toolName, toolInput, {
+        signal,
+      });
+      log.info(
+        { toolName, behavior: result.behavior },
+        "Resolved tool approval callback result",
+      );
+      return result;
     } catch (error) {
       log.warn(
         { toolName, error },
         "onToolApproval threw; denying Codex approval request",
       );
-      return denyDecision;
+      return {
+        behavior: "deny",
+        message: "Approval handler failed",
+        interrupt: true,
+      };
     }
-
-    log.info(
-      { toolName, behavior: result.behavior },
-      "Resolved tool approval callback result",
-    );
-
-    return result.behavior === "allow" ? allowDecision : denyDecision;
   }
 
   private convertNotificationToSDKMessages(

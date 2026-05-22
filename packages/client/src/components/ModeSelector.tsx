@@ -3,12 +3,12 @@ import { createPortal } from "react-dom";
 import { useI18n } from "../i18n";
 import type { PermissionMode } from "../types";
 
-const MODE_ORDER: PermissionMode[] = [
+const MODE_ORDER: readonly PermissionMode[] = [
   "default",
   "acceptEdits",
   "plan",
   "bypassPermissions",
-];
+] as const;
 
 const MODE_LABELS: Record<PermissionMode, string> = {
   default: "Ask before edits",
@@ -31,6 +31,7 @@ const DESKTOP_BREAKPOINT = 769;
 interface ModeSelectorProps {
   mode: PermissionMode;
   onModeChange: (mode: PermissionMode) => void;
+  availableModes?: readonly PermissionMode[];
   disabled?: boolean;
   /** Whether the session is currently held (soft pause) */
   isHeld?: boolean;
@@ -46,6 +47,7 @@ interface ModeSelectorProps {
 export function ModeSelector({
   mode,
   onModeChange,
+  availableModes = MODE_ORDER,
   disabled,
   isHeld = false,
   onHoldChange,
@@ -57,6 +59,7 @@ export function ModeSelector({
   );
   const buttonRef = useRef<HTMLButtonElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const visibleModes = MODE_ORDER.filter((m) => availableModes.includes(m));
 
   const handleButtonClick = () => {
     if (!disabled) {
@@ -155,8 +158,14 @@ export function ModeSelector({
   };
 
   // Display text: show "Hold" when held, otherwise show mode label
-  const displayLabel = isHeld ? t("modeHold" as never) : MODE_LABELS[mode];
-  const displayDotColor = isHeld ? MODE_COLORS.hold : MODE_COLORS[mode];
+  const fallbackMode = visibleModes[0] ?? "default";
+  const effectiveMode = visibleModes.includes(mode) ? mode : fallbackMode;
+  const displayLabel = isHeld
+    ? t("modeHold" as never)
+    : MODE_LABELS[effectiveMode];
+  const displayDotColor = isHeld
+    ? MODE_COLORS.hold
+    : MODE_COLORS[effectiveMode];
 
   // Shared options content used by both mobile sheet and desktop dropdown
   const optionsContent = (
@@ -197,7 +206,7 @@ export function ModeSelector({
       )}
 
       {/* Permission mode options */}
-      {MODE_ORDER.map((m) => (
+      {visibleModes.map((m) => (
         <button
           key={m}
           type="button"

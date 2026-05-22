@@ -17,6 +17,7 @@ export interface MessageInputToolbarProps {
 
   // Provider capability flags (default to true for backwards compatibility)
   supportsPermissionMode?: boolean;
+  supportedPermissionModes?: readonly PermissionMode[];
   supportsThinkingToggle?: boolean;
 
   // Attachments
@@ -61,6 +62,7 @@ export function MessageInputToolbar({
   isHeld,
   onHoldChange,
   supportsPermissionMode = true,
+  supportedPermissionModes,
   supportsThinkingToggle = true,
   canAttach,
   attachmentCount = 0,
@@ -92,6 +94,7 @@ export function MessageInputToolbar({
           <ModeSelector
             mode={mode}
             onModeChange={onModeChange}
+            availableModes={supportedPermissionModes}
             isHeld={isHeld}
             onHoldChange={onHoldChange}
           />

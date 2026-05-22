@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.29] - 2026-05-23
+
+### Fixed
+- Restore desktop voice input availability when Web Speech API is supported.
+- Expose all Codex permission modes in session controls.
+- Stop mixing local session actions into provider slash commands.
+- Keep session loading resilient when dynamic slash command discovery fails.
+
 ## [0.4.28] - 2026-04-16
 
 ### Changed

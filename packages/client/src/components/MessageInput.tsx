@@ -70,6 +70,8 @@ interface Props {
   uploadProgress?: UploadProgress[];
   /** Whether the provider supports permission modes (default: true) */
   supportsPermissionMode?: boolean;
+  /** Specific permission modes the provider supports */
+  supportedPermissionModes?: readonly PermissionMode[];
   /** Whether the provider supports thinking toggle (default: true) */
   supportsThinkingToggle?: boolean;
   /** Available slash commands (without "/" prefix) */
@@ -101,6 +103,7 @@ export function MessageInput({
   onRemoveAttachment,
   uploadProgress = [],
   supportsPermissionMode = true,
+  supportedPermissionModes,
   supportsThinkingToggle = true,
   slashCommands = [],
   onCustomCommand,
@@ -428,6 +431,7 @@ export function MessageInput({
               isHeld={isHeld}
               onHoldChange={onHoldChange}
               supportsPermissionMode={supportsPermissionMode}
+              supportedPermissionModes={supportedPermissionModes}
               supportsThinkingToggle={supportsThinkingToggle}
               canAttach={canAttach}
               attachmentCount={attachments.length}

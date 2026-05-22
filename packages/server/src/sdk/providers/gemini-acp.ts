@@ -91,6 +91,12 @@ interface GeminiSettings {
 export class GeminiACPProvider implements AgentProvider {
   readonly name: ProviderName = "gemini-acp";
   readonly displayName = "Gemini (ACP)";
+  readonly supportedPermissionModes = [
+    "default",
+    "acceptEdits",
+    "plan",
+    "bypassPermissions",
+  ] as const;
   // In Phase 1, permission modes don't do anything since we have no tools
   // In Phase 2, this will be true and we'll handle approvals
   readonly supportsPermissionMode = true;

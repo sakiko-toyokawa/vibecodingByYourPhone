@@ -171,6 +171,7 @@ type CodexItem =
 export class CodexOSSProvider implements AgentProvider {
   readonly name = "codex-oss" as const;
   readonly displayName = "CodexOSS";
+  readonly supportedPermissionModes = [] as const;
   readonly supportsPermissionMode = false;
   readonly supportsThinkingToggle = false;
   readonly supportsSlashCommands = false;
