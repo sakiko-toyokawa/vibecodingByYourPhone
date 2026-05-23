@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.7] - 2026-05-23
+
+### Fixed
+- Fix Windows desktop bundle to correctly copy all transitive dependencies from pnpm's virtual store. Previously, packages like `shiki` (which imports `@shikijs/*`) and `awilix` (which imports `fast-glob`) would crash at runtime because their indirect dependencies were omitted from the bundled `node_modules`.
+
 ## [0.2.6] - 2026-05-23
 
 ### Fixed
