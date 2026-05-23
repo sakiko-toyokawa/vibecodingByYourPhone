@@ -21,6 +21,7 @@ const REQUIRED_RUNTIME_PACKAGES: &[&str] = &[
     "@openai/codex-sdk",
     "awilix",
     "diff",
+    "fast-glob",
     "marked",
     "proper-lockfile",
 ];

@@ -267,6 +267,9 @@ importers:
       diff:
         specifier: ^8.0.3
         version: 8.0.3
+      fast-glob:
+        specifier: ^3.3.3
+        version: 3.3.3
       hono:
         specifier: ^4.12.1
         version: 4.12.8

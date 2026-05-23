@@ -481,6 +481,7 @@ step("Install runtime dependencies", () => {
     "@openai/codex-sdk",
     "awilix",
     "diff",
+    "fast-glob",
     "marked",
     "proper-lockfile",
   ];
