@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.6] - 2026-05-23
+
+### Fixed
+- Bundle `fast-glob` as a direct dependency to fix desktop server startup failure on Windows. `awilix@13.0.3`'s ESM entry imports `fast-glob`, but it was missing from the bundled node_modules because pnpm keeps it as a transitive dependency.
+
 ## [0.2.5] - 2026-05-23
 
 ### Fixed
