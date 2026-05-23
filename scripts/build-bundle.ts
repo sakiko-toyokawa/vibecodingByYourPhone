@@ -572,6 +572,59 @@ function copyNodeModulesDeref(srcRoot: string, destRoot: string): void {
         if (stats.isDirectory()) {
           fs.mkdirSync(destPath, { recursive: true });
           walk(realPath, destPath, depth + 1);
+
+          // Also copy sibling packages (dependencies) from the same
+          // node_modules directory. In pnpm's strict dependency model,
+          // transitive deps live alongside the real package in
+          // .pnpm/<pkg>@version/node_modules/ but are not reachable
+          // after we copy only the package itself.
+          const realParent = path.dirname(realPath);
+          if (depth === 0 && path.basename(realParent) === "node_modules") {
+            const destParent = path.dirname(destPath);
+            let siblings: string[];
+            try {
+              siblings = fs.readdirSync(realParent);
+            } catch {
+              siblings = [];
+            }
+            for (const sibling of siblings) {
+              if (sibling === path.basename(realPath)) continue;
+              const siblingSrc = path.join(realParent, sibling);
+              const siblingDest = path.join(destParent, sibling);
+              if (fs.existsSync(siblingDest)) continue;
+
+              let siblingStat: fs.Stats;
+              try {
+                siblingStat = fs.lstatSync(siblingSrc);
+              } catch {
+                continue;
+              }
+
+              if (siblingStat.isSymbolicLink()) {
+                let siblingReal: string;
+                try {
+                  siblingReal = fs.realpathSync(siblingSrc);
+                } catch {
+                  continue;
+                }
+                let siblingRealStat: fs.Stats;
+                try {
+                  siblingRealStat = fs.statSync(siblingReal);
+                } catch {
+                  continue;
+                }
+                if (siblingRealStat.isDirectory()) {
+                  fs.mkdirSync(siblingDest, { recursive: true });
+                  walk(siblingReal, siblingDest, depth + 1);
+                } else {
+                  fs.copyFileSync(siblingReal, siblingDest);
+                }
+              } else if (siblingStat.isDirectory()) {
+                fs.mkdirSync(siblingDest, { recursive: true });
+                walk(siblingSrc, siblingDest, depth + 1);
+              }
+            }
+          }
         } else {
           fs.copyFileSync(realPath, destPath);
         }
