@@ -12,7 +12,11 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { api } from "../api/client";
-import { MessageInput, type UploadProgress } from "../components/MessageInput";
+import {
+  MessageInput,
+  type SlashCommandOption,
+  type UploadProgress,
+} from "../components/MessageInput";
 import { MessageInputToolbar } from "../components/MessageInputToolbar";
 import { MessageList } from "../components/MessageList";
 import { ModelSwitchModal } from "../components/ModelSwitchModal";
@@ -272,6 +276,226 @@ export function SessionPageContent({
     currentProviderInfo?.supportsThinkingToggle ?? true;
   const supportsSlashCommands =
     currentProviderInfo?.supportsSlashCommands ?? false;
+  const isCodexSession =
+    effectiveProvider === "codex" || effectiveProvider === "codex-oss";
+  const availableSlashCommands = useMemo<SlashCommandOption[]>(() => {
+    const dynamicCommands =
+      status.owner === "self" && supportsSlashCommands
+        ? slashCommands.map((command) => ({
+            value: command.name,
+            description: command.description,
+            source: "provider" as const,
+          }))
+        : [];
+
+    if (dynamicCommands.length > 0) {
+      return dynamicCommands;
+    }
+
+    if (!isCodexSession) {
+      return [];
+    }
+
+    return [
+      {
+        value: "model",
+        description: "choose what model and reasoning effort to use",
+        source: "codex-source",
+      },
+      {
+        value: "fast",
+        description:
+          "toggle Fast mode to enable fastest inference with increased plan usage",
+        source: "codex-source",
+      },
+      {
+        value: "ide",
+        description:
+          "include current selection, open files, and other context from your IDE",
+        source: "codex-source",
+      },
+      {
+        value: "approvals",
+        description: "choose what Codex is allowed to do",
+        source: "codex-source",
+      },
+      {
+        value: "permissions",
+        description: "choose what Codex is allowed to do",
+        source: "codex-source",
+      },
+      {
+        value: "keymap",
+        description: "remap TUI shortcuts",
+        source: "codex-source",
+      },
+      {
+        value: "vim",
+        description: "toggle Vim mode for the composer",
+        source: "codex-source",
+      },
+      {
+        value: "skills",
+        description:
+          "use skills to improve how Codex performs specific tasks",
+        source: "codex-source",
+      },
+      {
+        value: "hooks",
+        description: "view and manage lifecycle hooks",
+        source: "codex-source",
+      },
+      {
+        value: "review",
+        description: "review my current changes and find issues",
+        source: "codex-source",
+      },
+      {
+        value: "rename",
+        description: "rename the current thread",
+        source: "codex-source",
+      },
+      {
+        value: "new",
+        description: "start a new chat during a conversation",
+        source: "codex-source",
+      },
+      {
+        value: "resume",
+        description: "resume a saved chat",
+        source: "codex-source",
+      },
+      {
+        value: "fork",
+        description: "fork the current chat",
+        source: "codex-source",
+      },
+      {
+        value: "init",
+        description:
+          "create an AGENTS.md file with instructions for Codex",
+        source: "codex-source",
+      },
+      {
+        value: "compact",
+        description:
+          "summarize conversation to prevent hitting the context limit",
+        source: "codex-source",
+      },
+      {
+        value: "plan",
+        description: "switch to Plan mode",
+        source: "codex-source",
+      },
+      {
+        value: "goal",
+        description: "set or view the goal for a long-running task",
+        source: "codex-source",
+      },
+      {
+        value: "collab",
+        description: "change collaboration mode (experimental)",
+        source: "codex-source",
+      },
+      {
+        value: "agent",
+        description: "switch the active agent thread",
+        source: "codex-source",
+      },
+      {
+        value: "subagents",
+        description: "switch the active agent thread",
+        source: "codex-source",
+      },
+      {
+        value: "side",
+        description: "start a side conversation in an ephemeral fork",
+        source: "codex-source",
+      },
+      {
+        value: "copy",
+        description: "copy last response as markdown",
+        source: "codex-source",
+      },
+      {
+        value: "diff",
+        description: "show git diff (including untracked files)",
+        source: "codex-source",
+      },
+      {
+        value: "mention",
+        description: "mention a file",
+        source: "codex-source",
+      },
+      {
+        value: "status",
+        description:
+          "show current session configuration and token usage",
+        source: "codex-source",
+      },
+      {
+        value: "mcp",
+        description:
+          "list configured MCP tools; use /mcp verbose for details",
+        source: "codex-source",
+      },
+      {
+        value: "apps",
+        description: "manage apps",
+        source: "codex-source",
+      },
+      {
+        value: "plugins",
+        description: "browse plugins",
+        source: "codex-source",
+      },
+      {
+        value: "logout",
+        description: "log out of Codex",
+        source: "codex-source",
+      },
+      {
+        value: "quit",
+        description: "exit Codex",
+        source: "codex-source",
+      },
+      {
+        value: "exit",
+        description: "exit Codex",
+        source: "codex-source",
+      },
+      {
+        value: "feedback",
+        description: "send logs to maintainers",
+        source: "codex-source",
+      },
+      {
+        value: "stop",
+        description: "stop all background terminals",
+        source: "codex-source",
+      },
+      {
+        value: "clear",
+        description: "clear the terminal and start a new chat",
+        source: "codex-source",
+      },
+      {
+        value: "personality",
+        description: "choose a communication style for Codex",
+        source: "codex-source",
+      },
+      {
+        value: "realtime",
+        description: "toggle realtime voice mode (experimental)",
+        source: "codex-source",
+      },
+      {
+        value: "settings",
+        description: "configure realtime microphone/speaker",
+        source: "codex-source",
+      },
+    ];
+  }, [isCodexSession, slashCommands, status.owner, supportsSlashCommands]);
 
   // Inline title editing state
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -690,7 +914,7 @@ export function SessionPageContent({
       }
       return false;
     },
-    [setAgentContent, showToast, t, setMessages],
+    [setAgentContent, setMessages, showToast, t],
   );
 
   const handleApprove = useCallback(async () => {
@@ -1511,11 +1735,7 @@ export function SessionPageContent({
                 onAttach={handleAttach}
                 onRemoveAttachment={handleRemoveAttachment}
                 uploadProgress={uploadProgress}
-                slashCommands={
-                  status.owner === "self" && supportsSlashCommands
-                    ? slashCommands
-                    : []
-                }
+                slashCommands={availableSlashCommands}
                 onCustomCommand={handleCustomCommand}
               />
             )}

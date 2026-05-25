@@ -18,6 +18,14 @@ import type { ContextUsage, PermissionMode } from "../types";
 import { MessageInputToolbar } from "./MessageInputToolbar";
 import type { VoiceInputButtonRef } from "./VoiceInputButton";
 
+const SLASH_COMMAND_PATTERN = /(?:^|\s)\/([a-z0-9-]*)$/i;
+
+export interface SlashCommandOption {
+  value: string;
+  description?: string;
+  source?: "provider" | "codex-source";
+}
+
 /** Progress info for an in-flight upload */
 export interface UploadProgress {
   fileId: string;
@@ -74,8 +82,8 @@ interface Props {
   supportedPermissionModes?: readonly PermissionMode[];
   /** Whether the provider supports thinking toggle (default: true) */
   supportsThinkingToggle?: boolean;
-  /** Available slash commands (without "/" prefix) */
-  slashCommands?: string[];
+  /** Available slash commands */
+  slashCommands?: SlashCommandOption[];
   /** Callback for custom client-side commands (e.g., "model"). Return true if handled. */
   onCustomCommand?: (command: string) => boolean;
 }
@@ -113,9 +121,11 @@ export function MessageInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const voiceButtonRef = useRef<VoiceInputButtonRef>(null);
+  const commandMenuRef = useRef<HTMLDivElement>(null);
   // User-controlled collapse state (independent of external collapse from approval panel)
   const [userCollapsed, setUserCollapsed] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
+  const [highlightedCommandIndex, setHighlightedCommandIndex] = useState(0);
 
   // Combined display text: committed text + interim transcript
   const displayText = interimTranscript
@@ -137,6 +147,18 @@ export function MessageInput({
   const collapsed = userCollapsed || externalCollapsed;
 
   const canAttach = !!(projectId && sessionId && onAttach);
+  const selectionEnd = textareaRef.current?.selectionEnd ?? text.length;
+  const textBeforeCursor = text.slice(0, selectionEnd);
+  const slashMatch = textBeforeCursor.match(SLASH_COMMAND_PATTERN);
+  const slashQuery = slashMatch?.[1]?.toLowerCase() ?? null;
+  const slashMenuVisible = !collapsed && slashQuery !== null;
+  const filteredSlashCommands = slashQuery
+    ? slashCommands.filter((command) =>
+        command.value.toLowerCase().startsWith(slashQuery),
+      )
+    : slashCommands;
+  const activeSlashCommand =
+    filteredSlashCommands[highlightedCommandIndex] ?? null;
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -151,9 +173,19 @@ export function MessageInput({
     onDraftControlsReady?.(controls);
   }, [controls, onDraftControlsReady]);
 
-  const handleSubmit = useCallback(() => {
+  useEffect(() => {
+    setHighlightedCommandIndex(0);
+  }, [slashQuery, slashCommands, collapsed]);
+
+  useEffect(() => {
+    if (highlightedCommandIndex < filteredSlashCommands.length) return;
+    setHighlightedCommandIndex(0);
+  }, [filteredSlashCommands.length, highlightedCommandIndex]);
+
+  const handleSubmit = useCallback(async () => {
     // Stop voice recording and get any pending interim text
-    const pendingVoice = voiceButtonRef.current?.stopAndFinalize() ?? "";
+    const pendingVoice =
+      (await voiceButtonRef.current?.stopAndFinalize()) ?? "";
 
     // Combine committed text with any pending voice text
     let finalText = text.trimEnd();
@@ -164,6 +196,15 @@ export function MessageInput({
     const hasContent = finalText.trim() || attachments.length > 0;
     if (hasContent && !disabled) {
       const message = finalText.trim();
+      if (
+        message.startsWith("/") &&
+        onCustomCommand?.(message.slice(1).split(/\s+/, 1)[0] ?? "")
+      ) {
+        controls.clearInput();
+        setInterimTranscript("");
+        textareaRef.current?.focus();
+        return;
+      }
       // Clear input state but keep localStorage for failure recovery
       controls.clearInput();
       setInterimTranscript("");
@@ -173,9 +214,10 @@ export function MessageInput({
     }
   }, [text, disabled, controls, onSend, attachments.length]);
 
-  const handleQueue = useCallback(() => {
+  const handleQueue = useCallback(async () => {
     // Stop voice recording and get any pending interim text
-    const pendingVoice = voiceButtonRef.current?.stopAndFinalize() ?? "";
+    const pendingVoice =
+      (await voiceButtonRef.current?.stopAndFinalize()) ?? "";
 
     let finalText = text.trimEnd();
     if (pendingVoice) {
@@ -185,12 +227,49 @@ export function MessageInput({
     const hasContent = finalText.trim() || attachments.length > 0;
     if (hasContent && !disabled && onQueue) {
       const message = finalText.trim();
+      if (
+        message.startsWith("/") &&
+        onCustomCommand?.(message.slice(1).split(/\s+/, 1)[0] ?? "")
+      ) {
+        controls.clearInput();
+        setInterimTranscript("");
+        textareaRef.current?.focus();
+        return;
+      }
       controls.clearInput();
       setInterimTranscript("");
       void Promise.resolve(onQueue(message)).catch(() => {});
       textareaRef.current?.focus();
     }
   }, [text, disabled, controls, onQueue, attachments.length]);
+
+  const insertSlashCommand = useCallback(
+    (command: string) => {
+      const bare = command.startsWith("/") ? command.slice(1) : command;
+      const currentSelectionEnd = textareaRef.current?.selectionEnd ?? text.length;
+      const beforeCursor = text.slice(0, currentSelectionEnd);
+      const afterCursor = text.slice(currentSelectionEnd);
+      const match = beforeCursor.match(SLASH_COMMAND_PATTERN);
+
+      if (!match || match.index === undefined) {
+        const trimmed = text.trimEnd();
+        setText(trimmed ? `${trimmed} /${bare} ` : `/${bare} `);
+        textareaRef.current?.focus();
+        return;
+      }
+
+      const slashStart = match.index + match[0].lastIndexOf("/");
+      const nextText = `${text.slice(0, slashStart)}/${bare} ${afterCursor}`;
+      const nextCursor = slashStart + bare.length + 2;
+
+      setText(nextText);
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+        textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+      });
+    },
+    [text, setText],
+  );
 
   const handleKeyDown = (e: KeyboardEvent) => {
     // Ctrl+Space toggles voice input
@@ -200,6 +279,34 @@ export function MessageInput({
         voiceButtonRef.current.toggle();
       }
       return;
+    }
+
+    if (slashMenuVisible && filteredSlashCommands.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setHighlightedCommandIndex((prev) =>
+          prev + 1 >= filteredSlashCommands.length ? 0 : prev + 1,
+        );
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setHighlightedCommandIndex((prev) =>
+          prev === 0 ? filteredSlashCommands.length - 1 : prev - 1,
+        );
+        return;
+      }
+      if ((e.key === "Enter" || e.key === "Tab") && activeSlashCommand) {
+        e.preventDefault();
+        insertSlashCommand(activeSlashCommand.value);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setHighlightedCommandIndex(0);
+        textareaRef.current?.focus();
+        return;
+      }
     }
 
     if (e.key === "Enter") {
@@ -306,23 +413,9 @@ export function MessageInput({
   // Handle slash command selection - insert command into text
   const handleSlashCommand = useCallback(
     (command: string) => {
-      // Check if this is a custom client-side command (strip leading "/")
-      const bare = command.startsWith("/") ? command.slice(1) : command;
-      if (onCustomCommand?.(bare)) {
-        return; // Custom command handled, don't insert text
-      }
-      // If text is empty or ends with whitespace, just append the command
-      // Otherwise, add a space before it
-      const trimmed = text.trimEnd();
-      if (trimmed) {
-        setText(`${trimmed} ${command} `);
-      } else {
-        setText(`${command} `);
-      }
-      // Focus the textarea so user can continue typing
-      textareaRef.current?.focus();
+      insertSlashCommand(command);
     },
-    [text, setText, onCustomCommand],
+    [insertSlashCommand],
   );
 
   return (
@@ -454,6 +547,46 @@ export function MessageInput({
             />
           )}
         </div>
+
+        {!collapsed && slashMenuVisible && filteredSlashCommands.length > 0 && (
+          <div
+            ref={commandMenuRef}
+            className="absolute bottom-full left-0 right-0 z-[20] mb-2 max-h-52 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+            role="listbox"
+            aria-label="Slash commands"
+          >
+            {filteredSlashCommands.map((command, index) => {
+              const isActive = index === highlightedCommandIndex;
+              return (
+                <button
+                  key={`${command.source ?? "provider"}-${command.value}`}
+                  type="button"
+                  className={`flex w-full items-start justify-between gap-3 px-3 py-2 text-left transition-colors ${isActive ? "bg-[var(--bg-hover)]" : "bg-transparent hover:bg-[var(--bg-hover)]"}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleSlashCommand(`/${command.value}`)}
+                  role="option"
+                  aria-selected={isActive}
+                >
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate [font-family:var(--font-mono)] text-sm text-[var(--text-primary)]">
+                      /{command.value}
+                    </span>
+                    {command.description && (
+                      <span className="truncate text-xs text-[var(--text-muted)]">
+                        {command.description}
+                      </span>
+                    )}
+                  </div>
+                  {command.source && (
+                    <span className="shrink-0 rounded-full bg-[var(--bg-secondary)] px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                      {command.source}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Disclaimer */}
         {!collapsed && (

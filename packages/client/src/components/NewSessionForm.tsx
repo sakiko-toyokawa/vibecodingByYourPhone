@@ -381,7 +381,8 @@ export function NewSessionForm({
 
   const handleStartSession = async () => {
     // Stop voice recording and get any pending interim text
-    const pendingVoice = voiceButtonRef.current?.stopAndFinalize() ?? "";
+    const pendingVoice =
+      (await voiceButtonRef.current?.stopAndFinalize()) ?? "";
 
     // Combine committed text with any pending voice text
     let finalMessage = message.trimEnd();

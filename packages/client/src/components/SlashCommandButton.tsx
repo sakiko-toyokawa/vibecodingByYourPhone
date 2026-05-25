@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { SlashCommandOption } from "./MessageInput";
 
 interface SlashCommandButtonProps {
-  /** Available slash commands (without the "/" prefix) */
-  commands: string[];
+  /** Available slash commands */
+  commands: SlashCommandOption[];
   /** Callback when a command is selected */
   onSelectCommand: (command: string) => void;
   /** Whether the button should be disabled */
@@ -57,8 +58,8 @@ export function SlashCommandButton({
   }, [isOpen]);
 
   const handleCommandClick = useCallback(
-    (command: string) => {
-      onSelectCommand(`/${command}`);
+    (command: SlashCommandOption) => {
+      onSelectCommand(`/${command.value}`);
       setIsOpen(false);
     },
     [onSelectCommand],
@@ -97,13 +98,27 @@ export function SlashCommandButton({
         >
           {commands.map((command) => (
             <button
-              key={command}
+              key={`${command.source ?? "provider"}-${command.value}`}
               type="button"
-              className="block w-full px-3 py-2 text-left [font-family:var(--font-mono)] text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
+              className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--bg-hover)]"
               onClick={() => handleCommandClick(command)}
               role="menuitem"
             >
-              /{command}
+              <div className="flex min-w-0 flex-col">
+                <span className="[font-family:var(--font-mono)] text-sm text-[var(--text-primary)]">
+                  /{command.value}
+                </span>
+                {command.description && (
+                  <span className="text-xs text-[var(--text-muted)]">
+                    {command.description}
+                  </span>
+                )}
+              </div>
+              {command.source && (
+                <span className="shrink-0 rounded-full bg-[var(--bg-secondary)] px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                  {command.source}
+                </span>
+              )}
             </button>
           ))}
         </div>

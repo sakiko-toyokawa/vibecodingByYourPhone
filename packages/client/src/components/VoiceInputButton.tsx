@@ -17,7 +17,7 @@ import { hasCoarsePointer } from "../lib/deviceDetection";
 
 export interface VoiceInputButtonRef {
   /** Stop listening and return any pending interim text */
-  stopAndFinalize: () => string;
+  stopAndFinalize: () => Promise<string>;
   /** Toggle listening on/off */
   toggle: () => void;
   /** Whether currently listening */
@@ -86,6 +86,7 @@ export const VoiceInputButton = forwardRef(function VoiceInputButton(
     status,
     toggleListening,
     stopListening,
+    finalizeListening,
     error,
     interimTranscript,
   } = useSpeechRecognition({
@@ -113,11 +114,10 @@ export const VoiceInputButton = forwardRef(function VoiceInputButton(
     ref,
     () => ({
       stopAndFinalize: () => {
-        const pending = interimTranscript;
         if (isListening) {
-          stopListening();
+          return finalizeListening();
         }
-        return pending;
+        return Promise.resolve(interimTranscript);
       },
       toggle: toggleListening,
       isListening,
@@ -125,6 +125,7 @@ export const VoiceInputButton = forwardRef(function VoiceInputButton(
     }),
     [
       interimTranscript,
+      finalizeListening,
       isListening,
       stopListening,
       toggleListening,

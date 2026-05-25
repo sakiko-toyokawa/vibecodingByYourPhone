@@ -6,6 +6,7 @@ import type { ContextUsage, PermissionMode } from "../types";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import { ModeSelector } from "./ModeSelector";
 import { SlashCommandButton } from "./SlashCommandButton";
+import type { SlashCommandOption } from "./MessageInput";
 import { VoiceInputButton, type VoiceInputButtonRef } from "./VoiceInputButton";
 
 export interface MessageInputToolbarProps {
@@ -33,7 +34,7 @@ export interface MessageInputToolbarProps {
   voiceDisabled?: boolean;
 
   // Slash commands
-  slashCommands?: string[];
+  slashCommands?: SlashCommandOption[];
   onSelectSlashCommand?: (command: string) => void;
 
   // Context usage

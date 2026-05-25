@@ -121,6 +121,8 @@ export interface UseSpeechRecognitionReturn {
   startListening: () => void;
   /** Stop listening */
   stopListening: () => void;
+  /** Stop listening and wait for any final transcript that arrives during shutdown */
+  finalizeListening: () => Promise<string>;
   /** Toggle listening state */
   toggleListening: () => void;
   /** Last error message */
@@ -161,6 +163,11 @@ export function useSpeechRecognition(
   // Track the last final transcript to compute deltas on mobile
   // Mobile Chrome marks cumulative results as isFinal, so we need to dedupe
   const lastFinalTranscriptRef = useRef<string>("");
+  const finalizeResolverRef = useRef<((transcript: string) => void) | null>(
+    null,
+  );
+  const finalizeTranscriptRef = useRef("");
+  const finalizeFallbackRef = useRef("");
 
   // Store callbacks in refs to avoid recreating recognition on callback changes
   const onResultRef = useRef(onResult);
@@ -184,6 +191,10 @@ export function useSpeechRecognition(
       if (recognitionRef.current) {
         recognitionRef.current.abort();
         recognitionRef.current = null;
+      }
+      if (finalizeResolverRef.current) {
+        finalizeResolverRef.current("");
+        finalizeResolverRef.current = null;
       }
     };
   }, []);
@@ -228,12 +239,6 @@ export function useSpeechRecognition(
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      // Ignore results after stopListening() is called - prevents race condition
-      // where late results arrive after submission clears the input
-      if (isStoppingRef.current) {
-        return;
-      }
-
       // Track that we're actively receiving results
       lastResultTimeRef.current = Date.now();
       setStatus("receiving");
@@ -276,10 +281,10 @@ export function useSpeechRecognition(
 
       // Trim interim text to avoid visual shifting from leading/trailing spaces
       const trimmedInterim = interimText.trim();
-      if (trimmedInterim) {
+      if (!isStoppingRef.current && trimmedInterim) {
         setInterimTranscript(trimmedInterim);
         onInterimResultRef.current?.(trimmedInterim);
-      } else if (interimText && !trimmedInterim) {
+      } else if (!isStoppingRef.current && interimText && !trimmedInterim) {
         // Clear interim if it was just whitespace
         setInterimTranscript("");
       }
@@ -287,7 +292,13 @@ export function useSpeechRecognition(
       const trimmedDelta = deltaTranscript.trim();
       if (trimmedDelta) {
         setInterimTranscript("");
-        onResultRef.current?.(trimmedDelta);
+        if (isStoppingRef.current && finalizeResolverRef.current) {
+          finalizeTranscriptRef.current = finalizeTranscriptRef.current
+            ? `${finalizeTranscriptRef.current} ${trimmedDelta}`
+            : trimmedDelta;
+        } else {
+          onResultRef.current?.(trimmedDelta);
+        }
       }
     };
 
@@ -353,6 +364,16 @@ export function useSpeechRecognition(
           onEndRef.current?.();
         }
       } else {
+        const finalizedTranscript =
+          finalizeTranscriptRef.current.trim() ||
+          finalizeFallbackRef.current.trim();
+        if (finalizeResolverRef.current) {
+          finalizeResolverRef.current(finalizedTranscript);
+          finalizeResolverRef.current = null;
+        }
+        finalizeTranscriptRef.current = "";
+        finalizeFallbackRef.current = "";
+        recognitionRef.current = null;
         setIsListening(false);
         setInterimTranscript("");
         setStatus("idle");
@@ -377,13 +398,33 @@ export function useSpeechRecognition(
     }
     if (recognitionRef.current) {
       recognitionRef.current.stop();
-      recognitionRef.current = null;
     }
     setIsListening(false);
     setInterimTranscript("");
     setStatus("idle");
     setError(null);
   }, []);
+
+  const finalizeListening = useCallback((): Promise<string> => {
+    const fallback = interimTranscript.trim();
+    if (!isListening || !recognitionRef.current) {
+      return Promise.resolve(fallback);
+    }
+
+    isStoppingRef.current = true;
+    finalizeTranscriptRef.current = "";
+    finalizeFallbackRef.current = fallback;
+    if (receivingTimeoutRef.current) {
+      clearTimeout(receivingTimeoutRef.current);
+      receivingTimeoutRef.current = null;
+    }
+    setError(null);
+
+    return new Promise<string>((resolve) => {
+      finalizeResolverRef.current = resolve;
+      recognitionRef.current?.stop();
+    });
+  }, [interimTranscript, isListening]);
 
   const toggleListening = useCallback(() => {
     if (isListening) {
@@ -400,6 +441,7 @@ export function useSpeechRecognition(
     interimTranscript,
     startListening,
     stopListening,
+    finalizeListening,
     toggleListening,
     error,
   };

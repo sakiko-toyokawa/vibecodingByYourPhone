@@ -59,6 +59,10 @@ export function ModeSelector({
   );
   const buttonRef = useRef<HTMLButtonElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
   const visibleModes = MODE_ORDER.filter((m) => availableModes.includes(m));
 
   const handleButtonClick = () => {
@@ -147,6 +151,28 @@ export function ModeSelector({
       sheetRef.current?.focus();
     }
   }, [isOpen]);
+
+  // Position desktop dropdown using viewport coordinates so it can be portaled
+  useEffect(() => {
+    if (!isOpen || !isDesktop) return;
+
+    const updatePosition = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setDropdownStyle({
+        top: rect.top - 8,
+        left: rect.left + rect.width / 2,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [isOpen, isDesktop]);
 
   const handleOverlayClick = (e: React.MouseEvent) => {
     // Only close if clicking directly on the overlay, not its children
@@ -261,16 +287,20 @@ export function ModeSelector({
 
   // Desktop: dropdown positioned relative to button (inline)
   const desktopDropdown =
-    isOpen && isDesktop ? (
-      <div
-        ref={sheetRef}
-        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-lg)] min-w-[220px] shadow-[0_2px_6px_rgba(0,0,0,0.08)] z-[10001] animate-[dropdownFadeIn_0.15s_ease-out]"
-        tabIndex={-1}
-        aria-label={t("modeSelectLabel" as never)}
-      >
-        <div className="flex flex-col py-1">{optionsContent}</div>
-      </div>
-    ) : null;
+    isOpen && isDesktop && dropdownStyle
+      ? createPortal(
+          <div
+            ref={sheetRef}
+            className="fixed min-w-[220px] -translate-x-1/2 -translate-y-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[var(--radius-lg)] shadow-[0_2px_6px_rgba(0,0,0,0.08)] z-[10001] animate-[dropdownFadeIn_0.15s_ease-out]"
+            style={dropdownStyle}
+            tabIndex={-1}
+            aria-label={t("modeSelectLabel" as never)}
+          >
+            <div className="flex flex-col py-1">{optionsContent}</div>
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <div className="relative inline-block">

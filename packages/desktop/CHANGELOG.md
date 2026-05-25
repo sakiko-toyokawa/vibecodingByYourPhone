@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.8] - 2026-05-25
+
+### Fixed
+- Show the full desktop session mode menu by portaling the selector dropdown out of the clipped input container.
+- Preserve the final speech recognition segment when sending from voice input.
+- Add slash-command autocomplete in the shared client and position the command menu as a floating overlay above the composer.
+- Use Claude dynamic slash commands when available and fall back to Codex's built-in command set for Codex sessions.
+
 ## [0.2.7] - 2026-05-23
 
 ### Fixed
