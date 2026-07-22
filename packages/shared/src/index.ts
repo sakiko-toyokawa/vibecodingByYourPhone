@@ -455,3 +455,27 @@ export {
   USERNAME_REGEX,
   isValidRelayUsername,
 } from "./relay-protocol.js";
+
+// Loop schemas (spec: docs/spec/02-schema契约.md)
+// NOTE: deliberate exception to this package's type-only export convention —
+// loop state files and ledgers need zod runtime parse/validation on read and
+// write, so the zod schema values are exported alongside their inferred types
+// (see 06-项目规定 hard constraint #1).
+export {
+  LoopCardSchema,
+  type LoopCard,
+  type VerificationPhase,
+  VerificationPhaseSchema,
+} from "./loop-schema/loop-card.js";
+export {
+  type IntentContract,
+  IntentContractSchema,
+} from "./loop-schema/intent-contract.js";
+export {
+  type FailureTag,
+  FailureTagSchema,
+  type RunLedgerEntry,
+  RunLedgerEntrySchema,
+  type RunState,
+  RunStateSchema,
+} from "./loop-schema/run-ledger.js";
