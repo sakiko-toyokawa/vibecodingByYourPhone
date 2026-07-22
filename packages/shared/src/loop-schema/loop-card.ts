@@ -60,6 +60,11 @@ export const LoopCardSchema = z.object({
       .optional(),
     workspace: z.object({
       strategy: z.enum(["worktree", "direct"]),
+      // Phase-0 Yep extension (not in 02-schema契约.md §1): absolute path of
+      // the target project, used as the run's cwd. The spec's LoopCard has no
+      // field that pins a loop to a local checkout; without it a run cannot
+      // start a session. Optional so spec-shaped cards still validate.
+      path: z.string().optional(),
     }),
     verification: z.object({
       required: z.array(VerificationPhaseSchema),

@@ -3,7 +3,7 @@ import type { Hono } from "hono";
 import type { AppOptions } from "../app.js";
 import { createAuthRoutes } from "../auth/routes.js";
 import { container } from "../container.js";
-import type { LoopCardStore } from "../loop/index.js";
+import type { LoopCardStore, LoopRunService } from "../loop/index.js";
 import { updateAllowedHosts } from "../middleware/allowed-hosts.js";
 import type { CodexSessionScanner } from "../projects/codex-scanner.js";
 import { CODEX_SESSIONS_DIR } from "../projects/codex-scanner.js";
@@ -41,6 +41,7 @@ import { createProcessesRoutes } from "./processes.js";
 import { createProjectsRoutes } from "./projects.js";
 import { createProvidersRoutes } from "./providers.js";
 import { createRecentsRoutes } from "./recents.js";
+import { createRunsRoutes } from "./runs.js";
 import { createServerAdminRoutes } from "./server-admin.js";
 import { createServerInfoRoutes } from "./server-info.js";
 import { createSessionsRoutes } from "./sessions.js";
@@ -59,6 +60,7 @@ export interface RouteDependencies {
   codexReaderFactory: (projectPath: string) => CodexSessionReader;
   geminiReaderFactory: (projectPath: string) => GeminiSessionReader;
   loopCardStore: LoopCardStore;
+  loopRunService?: LoopRunService;
 }
 
 export function registerRoutes(
@@ -75,6 +77,7 @@ export function registerRoutes(
     codexReaderFactory,
     geminiReaderFactory,
     loopCardStore,
+    loopRunService,
   } = container.cradle as unknown as RouteDependencies;
 
   // Auth routes (always mounted if authService is provided)
@@ -318,8 +321,14 @@ export function registerRoutes(
   // Files routes (file browser)
   app.route("/api/projects", createFilesRoutes({ scanner }));
 
-  // Loop registry routes (phase 0: create / list / detail only)
-  app.route("/api/loops", createLoopsRoutes({ loopCardStore }));
+  // Loop registry routes + phase-0 run triggers/list
+  app.route(
+    "/api/loops",
+    createLoopsRoutes({ loopCardStore, runService: loopRunService }),
+  );
+  if (loopRunService) {
+    app.route("/api/runs", createRunsRoutes({ runService: loopRunService }));
+  }
 
   // Editor routes (project tree, write, AI edit)
   app.route(

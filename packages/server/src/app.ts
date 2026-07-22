@@ -6,6 +6,7 @@ import {
   createContainerInstance,
   registerValue,
 } from "./container.js";
+import { CronScheduler, LoopRunService, RunLedgerStore } from "./loop/index.js";
 import { createAuthMiddleware } from "./middleware/auth.js";
 import {
   corsMiddleware,
@@ -203,6 +204,34 @@ export function createApp(
   registerValue("geminiReaderFactory", geminiReaderFactory);
   if (externalTracker) {
     registerValue("externalTracker", externalTracker);
+  }
+
+  // Loop phase 0: run orchestration + in-process cron trigger. Built here
+  // (not in services-init) because they need the app-level Supervisor.
+  {
+    const { loopCardStore } = container.cradle;
+    const runLedgerStore = new RunLedgerStore({ dataDir: options.dataDir });
+    const loopRunService = new LoopRunService({
+      supervisor,
+      loopCardStore,
+      runLedgerStore,
+    });
+    const cronScheduler = new CronScheduler({
+      loopCardStore,
+      isRunActive: (loopId) => loopRunService.isRunActive(loopId),
+      onTrigger: (loopId, dedupeKey) => {
+        console.log(`[CronScheduler] firing loop '${loopId}' (${dedupeKey})`);
+        loopRunService.startRun(loopId, "cron").catch((error) => {
+          console.warn(
+            `[CronScheduler] failed to start run for loop '${loopId}':`,
+            error,
+          );
+        });
+      },
+    });
+    cronScheduler.start();
+    registerValue("loopRunService", loopRunService);
+    registerValue("cronScheduler", cronScheduler);
   }
 
   // Register all API routes

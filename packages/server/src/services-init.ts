@@ -14,6 +14,7 @@ import {
   interceptConsole,
 } from "./logging/index.js";
 import { LoopCardStore } from "./loop/index.js";
+import type { CronScheduler, LoopRunService } from "./loop/index.js";
 import {
   ProjectMetadataService,
   SessionMetadataService,
@@ -62,6 +63,10 @@ export interface ServicesContainer {
   sessionMetadataService: SessionMetadataService;
   projectMetadataService: ProjectMetadataService;
   loopCardStore: LoopCardStore;
+  // Loop run orchestration + cron trigger, registered in createApp (they
+  // need the app-level Supervisor)
+  loopRunService?: LoopRunService;
+  cronScheduler?: CronScheduler;
   sessionIndexService: SessionIndexService;
   pushService: PushService;
   browserProfileService: BrowserProfileService;
