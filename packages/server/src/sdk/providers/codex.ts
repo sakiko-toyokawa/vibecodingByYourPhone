@@ -19,6 +19,7 @@ import {
   normalizeCodexToolInvocation,
 } from "../../codex/normalization.js";
 import { getLogger } from "../../logging/logger.js";
+import { AdapterError } from "../adapter-error.js";
 import { findCodexCliPath, whichCommand } from "../cli-detection.js";
 import { logSDKMessage } from "../messageLogger.js";
 import { MessageQueue } from "../messageQueue.js";
@@ -105,6 +106,35 @@ const MODEL_LIST_TIMEOUT_MS = 8000;
 const APP_SERVER_INIT_REQUEST_ID = 1;
 const APP_SERVER_MODEL_LIST_REQUEST_ID = 2;
 const APP_SERVER_SHUTDOWN_GRACE_MS = 1500;
+
+/**
+ * Default timeout for app-server JSON-RPC requests (thread/start, turn/start,
+ * thread/resume, ...). Previously these had NO timeout — a hung app-server
+ * left the pending promise dangling forever (spec 05 阶段 1 "app-server 无
+ * 超时必须在阶段 1 内修复"). The model probe keeps its own shorter
+ * MODEL_LIST_TIMEOUT_MS and is unaffected.
+ *
+ * Config: `CodexProviderConfig.requestTimeoutMs` (per-instance) >
+ * `YEP_CODEX_APP_SERVER_REQUEST_TIMEOUT_MS` env (ms) > this default.
+ */
+const DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS = 60_000;
+const APP_SERVER_REQUEST_TIMEOUT_ENV =
+  "YEP_CODEX_APP_SERVER_REQUEST_TIMEOUT_MS";
+
+export function resolveRequestTimeoutMs(configValue?: number): number {
+  if (
+    typeof configValue === "number" &&
+    Number.isFinite(configValue) &&
+    configValue > 0
+  ) {
+    return configValue;
+  }
+  const envValue = Number(process.env[APP_SERVER_REQUEST_TIMEOUT_ENV]);
+  if (Number.isFinite(envValue) && envValue > 0) {
+    return envValue;
+  }
+  return DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS;
+}
 
 /**
  * Local debug knobs for Codex app-server policy behavior.
@@ -279,6 +309,12 @@ export interface CodexProviderConfig {
   baseUrl?: string;
   /** API key override (normally read from ~/.codex/auth.json) */
   apiKey?: string;
+  /**
+   * Timeout (ms) for app-server JSON-RPC requests (thread/start, turn/start,
+   * thread/resume). Defaults to 60s; also configurable via the
+   * YEP_CODEX_APP_SERVER_REQUEST_TIMEOUT_MS env var.
+   */
+  requestTimeoutMs?: number;
 }
 
 class AsyncQueue<T> {
@@ -356,7 +392,11 @@ type AppServerRequestHandler = (
   request: JsonRpcServerRequest,
 ) => Promise<unknown>;
 
-class CodexAppServerClient {
+/**
+ * Exported for unit tests (loop phase-1 timeout coverage: a fake hanging
+ * app-server drives the request-timeout path).
+ */
+export class CodexAppServerClient {
   private process: ChildProcess | null = null;
   private stdoutBuffer = "";
 
@@ -369,12 +409,19 @@ class CodexAppServerClient {
     const child = this.process;
     return Boolean(child?.pid && child.exitCode === null && !child.killed);
   }
+
+  /** In-flight JSON-RPC requests awaiting a response (test/diagnostic seam). */
+  get pendingRequestCount(): number {
+    return this.pendingRequests.size;
+  }
+
   private nextRequestId = 1;
   private readonly pendingRequests = new Map<
     JsonRpcId,
     {
       resolve: (result: unknown) => void;
       reject: (error: Error) => void;
+      timer: NodeJS.Timeout;
     }
   >();
   private readonly notifications = new AsyncQueue<JsonRpcNotification>();
@@ -385,7 +432,22 @@ class CodexAppServerClient {
     private readonly command: string,
     private readonly cwd: string,
     private readonly env: NodeJS.ProcessEnv,
+    /**
+     * Per-request timeout for JSON-RPC calls. A hung app-server previously
+     * left pending promises dangling forever; on timeout the request rejects
+     * with AdapterError(code=timeout) and the client is torn down like a
+     * process exit (terminal error notification + child termination).
+     */
+    private readonly requestTimeoutMs = DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS,
   ) {}
+
+  /**
+   * Spawn arguments for the app-server child. Protected so tests can
+   * subclass and point at a fake server without touching the real spawn path.
+   */
+  protected getAppServerArgs(): string[] {
+    return ["app-server", "--listen", "stdio://"];
+  }
 
   setServerRequestHandler(handler: AppServerRequestHandler): void {
     this.onServerRequest = handler;
@@ -396,7 +458,7 @@ class CodexAppServerClient {
       throw new Error("Codex app-server already connected");
     }
 
-    const child = spawn(this.command, ["app-server", "--listen", "stdio://"], {
+    const child = spawn(this.command, this.getAppServerArgs(), {
       cwd: this.cwd,
       detached: process.platform !== "win32",
       stdio: ["pipe", "pipe", "pipe"],
@@ -488,6 +550,7 @@ class CodexAppServerClient {
         return;
       }
       this.pendingRequests.delete(id);
+      clearTimeout(pending.timer);
 
       if (message.error && typeof message.error === "object") {
         const error = message.error as JsonRpcError;
@@ -541,9 +604,15 @@ class CodexAppServerClient {
     const id = this.nextRequestId++;
 
     const resultPromise = new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.handleRequestTimeout(id, method);
+      }, this.requestTimeoutMs);
+      // Never keep the Node process alive just for a pending RPC timer.
+      timer.unref();
       this.pendingRequests.set(id, {
         resolve: (result) => resolve(result as T),
         reject,
+        timer,
       });
     });
 
@@ -575,10 +644,65 @@ class CodexAppServerClient {
 
     const closeError = new Error("Codex app-server client closed");
     for (const pending of this.pendingRequests.values()) {
+      clearTimeout(pending.timer);
       pending.reject(closeError);
     }
     this.pendingRequests.clear();
     this.notifications.close(closeError);
+
+    const child = this.process;
+    this.process = null;
+    void terminateChildProcess(child);
+  }
+
+  /**
+   * A pending request exceeded requestTimeoutMs. The app-server is hung:
+   * reject the timed-out request with AdapterError(code=timeout), then tear
+   * the client down with the same terminal behavior as a process exit
+   * (remaining pendings rejected, terminal error notification for consumers,
+   * child process terminated) — a hung app-server never recovers, and the
+   * caller must not wait on it again (spec 02 §4 `timeout`).
+   */
+  private handleRequestTimeout(id: JsonRpcId, method: string): void {
+    const pending = this.pendingRequests.get(id);
+    if (!pending) {
+      return;
+    }
+    this.pendingRequests.delete(id);
+    clearTimeout(pending.timer);
+
+    const timeoutError = new AdapterError(
+      "timeout",
+      `Codex app-server request '${method}' timed out after ${this.requestTimeoutMs}ms`,
+    );
+    pending.reject(timeoutError);
+
+    log.error(
+      { method, requestId: id, timeoutMs: this.requestTimeoutMs },
+      "Codex app-server request timed out; tearing down client",
+    );
+
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
+
+    for (const other of this.pendingRequests.values()) {
+      clearTimeout(other.timer);
+      other.reject(timeoutError);
+    }
+    this.pendingRequests.clear();
+
+    // Same terminal-error notification shape as handleProcessClose, so
+    // consumers (the session loop) surface the failure identically.
+    this.notifications.push({
+      method: "error",
+      params: {
+        error: { message: timeoutError.message },
+        willRetry: false,
+      },
+    });
+    this.notifications.close(timeoutError);
 
     const child = this.process;
     this.process = null;
@@ -590,6 +714,7 @@ class CodexAppServerClient {
     this.closed = true;
 
     for (const pending of this.pendingRequests.values()) {
+      clearTimeout(pending.timer);
       pending.reject(error);
     }
     this.pendingRequests.clear();
@@ -1094,6 +1219,7 @@ export class CodexProvider implements AgentProvider {
       codexCommand,
       options.cwd,
       this.getCodexEnv(),
+      resolveRequestTimeoutMs(this.config.requestTimeoutMs),
     );
     setActiveClient(appServer);
 

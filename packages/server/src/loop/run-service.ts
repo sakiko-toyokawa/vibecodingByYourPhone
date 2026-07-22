@@ -27,6 +27,10 @@ import type {
   RunLedgerEntry,
   RunState,
 } from "@yep-anywhere/shared";
+import {
+  AdapterError,
+  adapterErrorCodeToFailureTag,
+} from "../sdk/adapter-error.js";
 import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { QueuedResponse } from "../supervisor/WorkerQueue.js";
@@ -100,6 +104,8 @@ interface ExecutionOutcome {
   finalText: string;
   sessionRef: string;
   error?: string;
+  /** Set when the failure is a unified adapter hard error (02 §4). */
+  adapterError?: AdapterError;
 }
 
 export interface LoopRunServiceDeps {
@@ -316,7 +322,11 @@ export class LoopRunService {
       judgment_summary: judgmentSummary,
       decision_refs:
         decisionEntries.length > 0 ? [`ledger://decision-${runId}`] : [],
-      failure_tags: [], // failure attribution lands with the learning side
+      // Failure attribution recorded on decision entries (adapter hard
+      // errors, 02 §4); the learning side (phase 3) aggregates further.
+      failure_tags: [
+        ...new Set(decisionEntries.flatMap((d) => d.failure_tags ?? [])),
+      ],
     };
   }
 
@@ -344,6 +354,9 @@ export class LoopRunService {
           error instanceof AssemblyError
             ? error.message
             : `run setup/execution failed: ${error instanceof Error ? error.message : String(error)}`,
+        // Unified adapter hard errors (02 §4) keep their code so the failure
+        // attribution below can use the 失败模式账本 vocabulary.
+        adapterError: error instanceof AdapterError ? error : undefined,
       };
     }
 
@@ -406,6 +419,13 @@ export class LoopRunService {
       // needs_human / failed, the decision lands in the decision ledger, and
       // needs_human bridges into the human-decision pipeline (the run stays
       // registered as active while it waits — see the finally block).
+      //
+      // Adapter hard errors (02 §4: timeout / spawn_failed / ...) are
+      // terminal by construction and never trigger needs_human: there is no
+      // work product to judge and nothing a human verdict could unblock —
+      // retry/resume semantics belong to the phase-2 state machine. The
+      // failure attribution (失败模式账本 vocabulary) is attached to the
+      // control decision entry so the ledger carries it.
       if (this.deps.controlPlane) {
         try {
           const applied = await this.deps.controlPlane.applyJudgment({
@@ -419,6 +439,15 @@ export class LoopRunService {
             judgment,
             judgmentRef,
             createdAt,
+            adapterFailure: outcome.adapterError
+              ? {
+                  code: outcome.adapterError.code,
+                  failureTag: adapterErrorCodeToFailureTag(
+                    outcome.adapterError.code,
+                  ),
+                  message: outcome.adapterError.message,
+                }
+              : undefined,
           });
           finalStatus = applied.state;
           waitingForHuman = applied.state === "needs_human";
@@ -459,6 +488,25 @@ export class LoopRunService {
         created_at: createdAt,
       };
       await store.appendEntry(runId, entry);
+      // No control-plane wired (phase-0 style runs): the adapter failure
+      // attribution still lands in the decision ledger, so the timeout /
+      // hard-error path is auditable there too (05 阶段 1 验收 4).
+      if (!this.deps.controlPlane && outcome.adapterError) {
+        await store.appendDecisionEntry(runId, {
+          decision_id: `decision-${runId}-adapter-failure`,
+          loop_id: loopId,
+          run_id: runId,
+          decision: "failed",
+          reason: `adapter hard error (${outcome.adapterError.code}): ${outcome.adapterError.message}`,
+          evidence_refs: [],
+          policy_refs: [],
+          next_action: "none",
+          failure_tags: [
+            adapterErrorCodeToFailureTag(outcome.adapterError.code),
+          ],
+          created_at: new Date().toISOString(),
+        });
+      }
       console.log(
         `[LoopRunService] run ${runId} (loop '${loopId}') finished: ${entry.final_status}${outcome.error ? ` — ${outcome.error}` : ""}`,
       );
@@ -514,6 +562,7 @@ export class LoopRunService {
     return new Promise<ExecutionOutcome>((resolve) => {
       let finalText = "";
       let settled = false;
+      let adapterError: AdapterError | undefined;
 
       const settle = (ok: boolean, error?: string): void => {
         if (settled) {
@@ -528,6 +577,7 @@ export class LoopRunService {
           finalText,
           sessionRef: proc.sessionId,
           error,
+          adapterError,
         });
       };
 
@@ -567,8 +617,14 @@ export class LoopRunService {
               : "process completed without a result message",
           );
         } else if (event.type === "terminated") {
+          if (event.error instanceof AdapterError) {
+            adapterError = event.error;
+          }
           settle(false, `process terminated: ${event.reason}`);
         } else if (event.type === "error") {
+          if (event.error instanceof AdapterError) {
+            adapterError = event.error;
+          }
           settle(false, event.error.message);
         }
       });

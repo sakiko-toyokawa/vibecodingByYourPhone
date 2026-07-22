@@ -14,6 +14,7 @@ import {
   getModelContextWindow,
 } from "@yep-anywhere/shared";
 import { getLogger } from "../../logging/logger.js";
+import { AdapterError, toAdapterError } from "../adapter-error.js";
 import { detectClaudeCli } from "../cli-detection.js";
 import { logSDKMessage } from "../messageLogger.js";
 import { MessageQueue } from "../messageQueue.js";
@@ -42,6 +43,48 @@ import type {
  * old time-only heuristic if the wrapper causes issues.
  */
 const USE_SPAWN_WRAPPER = true;
+
+/**
+ * Normalize errors thrown while starting a Claude session into the unified
+ * adapter error vocabulary (spec: docs/spec/02-schema契约.md §4), keeping
+ * the existing friendly messages so interactive error display is unchanged.
+ *
+ * - CLI missing / spawn failure → `spawn_failed`（§4: 命令不存在、连接未能建立）
+ * - resume token invalid → `resume_failed`（§4: resume_ref 失效）
+ * - everything else → `toAdapterError` 归一
+ *
+ * AbortError must never be routed here — it is a user-initiated interrupt
+ * and keeps its existing silent semantics (see wrapIterator).
+ * Exported for unit tests.
+ */
+export function normalizeClaudeStartError(
+  error: unknown,
+  context: { resumeAttempted?: boolean } = {},
+): Error {
+  if (error instanceof AdapterError) {
+    return error;
+  }
+  if (error instanceof Error) {
+    if (error.message.includes("Claude Code executable not found")) {
+      return new AdapterError(
+        "spawn_failed",
+        "Claude CLI not installed. Run: curl -fsSL https://claude.ai/install.sh | bash",
+        { cause: error },
+      );
+    }
+    if (error.message.includes("SPAWN") || error.message.includes("spawn")) {
+      return new AdapterError(
+        "spawn_failed",
+        `Failed to spawn Claude CLI process: ${error.message}`,
+        { cause: error },
+      );
+    }
+  }
+  return toAdapterError(error, {
+    operation: "claude startSession",
+    resumeAttempted: context.resumeAttempted,
+  });
+}
 
 /** Static fallback list of Claude models (used if probe fails) */
 const CLAUDE_MODELS_FALLBACK: ModelInfo[] = [
@@ -489,23 +532,11 @@ export class ClaudeProvider implements AgentProvider {
         },
       });
     } catch (error) {
-      // Handle common SDK initialization errors
-      if (error instanceof Error) {
-        if (error.message.includes("Claude Code executable not found")) {
-          throw new Error(
-            "Claude CLI not installed. Run: curl -fsSL https://claude.ai/install.sh | bash",
-          );
-        }
-        if (
-          error.message.includes("SPAWN") ||
-          error.message.includes("spawn")
-        ) {
-          throw new Error(
-            `Failed to spawn Claude CLI process: ${error.message}`,
-          );
-        }
-      }
-      throw error;
+      // Normalize SDK initialization errors into the unified adapter error
+      // vocabulary (02 §4); friendly messages are preserved by the helper.
+      throw normalizeClaudeStartError(error, {
+        resumeAttempted: Boolean(options.resumeSessionId),
+      });
     }
 
     // Wrap the iterator to convert SDK message types to our internal types
@@ -515,6 +546,7 @@ export class ClaudeProvider implements AgentProvider {
       executor: options.executor,
       cwd: effectiveCwd,
       remoteEnv: options.remoteEnv,
+      resumeAttempted: Boolean(options.resumeSessionId),
     });
 
     return {
@@ -573,6 +605,8 @@ export class ClaudeProvider implements AgentProvider {
       executor?: string;
       cwd: string;
       remoteEnv?: Record<string, string>;
+      /** True when this session is resuming an existing session id. */
+      resumeAttempted?: boolean;
     },
   ): AsyncIterableIterator<SDKMessage> {
     const log = getLogger();
@@ -627,13 +661,20 @@ export class ClaudeProvider implements AgentProvider {
         }
       }
     } catch (error) {
-      // Handle abort errors gracefully
+      // Handle abort errors gracefully — AbortError is a user-initiated
+      // interrupt, NOT an adapter failure; it keeps its silent semantics
+      // and is deliberately excluded from the unified error codes (02 §4).
       if (error instanceof Error && error.name === "AbortError") {
         return;
       }
       // Re-throw process termination errors for Process to handle
       // These include: "ProcessTransport is not ready for writing"
-      throw error;
+      // Normalized to the unified adapter error vocabulary; the original
+      // message is preserved so Process/UI behavior is unchanged.
+      throw toAdapterError(error, {
+        operation: "claude query stream",
+        resumeAttempted: remoteOptions?.resumeAttempted,
+      });
     }
   }
 

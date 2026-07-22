@@ -36,6 +36,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   DecisionEntry,
+  FailureTag,
   JudgmentReport,
   RunDecisionAction,
   RunState,
@@ -77,6 +78,18 @@ export interface ApplyJudgmentInput {
   judgmentRef: string | null;
   /** Run creation time (ISO 8601), used for the state record's created_at. */
   createdAt: string;
+  /**
+   * Set when the run was terminated by a unified adapter hard error
+   * (02-schema契约.md §4). The failure attribution (失败模式账本 vocabulary)
+   * is recorded on the control decision entry. Adapter hard errors are
+   * terminal: they decide `failed` via executionOk=false and never bridge
+   * to needs_human (see the run-service call-site comment).
+   */
+  adapterFailure?: {
+    code: string;
+    failureTag: FailureTag;
+    message: string;
+  };
 }
 
 export interface ApplyJudgmentResult {
@@ -142,11 +155,16 @@ export class ControlPlane {
       loop_id: input.loopId,
       run_id: input.runId,
       decision: decision.kind,
-      reason: decision.reason,
+      reason: input.adapterFailure
+        ? `${decision.reason}; adapter hard error (${input.adapterFailure.code}): ${input.adapterFailure.message}`
+        : decision.reason,
       evidence_refs: input.judgment?.evidence ?? [],
       policy_refs: [], // phase 1: no policy projection
       next_action:
         decision.kind === "needs_human" ? "wait_for_approval" : "none",
+      failure_tags: input.adapterFailure
+        ? [input.adapterFailure.failureTag]
+        : undefined,
       created_at: now,
     };
     await this.deps.runLedgerStore.appendDecisionEntry(input.runId, entry);

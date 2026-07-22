@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FailureTagSchema } from "./run-ledger.js";
 
 /**
  * decision_entry — 决策账本条目，记录 control-plane 为什么做出某个决策
@@ -15,6 +16,11 @@ import { z } from "zod";
  * - `feedback` / `override`：03-API契约.md 要求人工决策（含 bypass /
  *   override）均须可审计，02 §8.2 未给出承载字段，这里补上——人工强判
  *   通过 / 拒绝 / 要求修改时记录 original_judgment_ref 与理由 / feedback。
+ * - `failure_tags`（阶段 1 adapter 统一错误码）：adapter 硬错误（02 §4
+ *   七枚举）终止 run 时，把失败模式账本归因词汇写进终止该 run 的决策
+ *   条目（05 阶段 1 验收 4："失败写入账本且归因词汇符合失败模式账本"）。
+ *   02 §8.2 未预留该字段；learning_event.failure_tags（§8.4）属阶段 3，
+ *   这里沿用同一 FailureTagSchema 枚举，不另造同义词。
  */
 export const DecisionKindSchema = z.enum([
   "retry",
@@ -56,6 +62,8 @@ export const DecisionEntrySchema = z.object({
   feedback: z.string().optional(),
   // 人工强判通过 / 拒绝 / 要求修改时非空
   override: DecisionOverrideSchema.optional(),
+  // adapter 硬错误（02 §4）终止 run 时的失败归因（失败模式账本词汇）
+  failure_tags: z.array(FailureTagSchema).optional(),
   created_at: z.string().datetime(),
 });
 export type DecisionEntry = z.infer<typeof DecisionEntrySchema>;
