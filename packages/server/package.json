@@ -8,7 +8,7 @@
     "dev:watch": "node ../../scripts/run-with-safe-home.js tsx watch --conditions source src/index.ts",
     "dev:mock": "AUTH_DISABLED=true node ../../scripts/run-with-safe-home.js tsx --conditions source src/index.ts",
     "build": "tsc",
-    "test": "tsc && node dist/routes/files.test.js"
+    "test": "tsc && node dist/routes/files.test.js && node dist/loop/state/loop-card-store.test.js"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.12.0",

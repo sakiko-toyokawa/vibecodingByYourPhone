@@ -13,6 +13,7 @@ import {
   initLogger,
   interceptConsole,
 } from "./logging/index.js";
+import { LoopCardStore } from "./loop/index.js";
 import {
   ProjectMetadataService,
   SessionMetadataService,
@@ -60,6 +61,7 @@ export interface ServicesContainer {
   notificationService: NotificationService;
   sessionMetadataService: SessionMetadataService;
   projectMetadataService: ProjectMetadataService;
+  loopCardStore: LoopCardStore;
   sessionIndexService: SessionIndexService;
   pushService: PushService;
   browserProfileService: BrowserProfileService;
@@ -240,6 +242,9 @@ export async function initializeServices(): Promise<ServicesContainer> {
   const projectMetadataService = new ProjectMetadataService({
     dataDir: config.dataDir,
   });
+  const loopCardStore = new LoopCardStore({
+    dataDir: config.dataDir,
+  });
   const sessionIndexService = new SessionIndexService({
     projectsDir: config.claudeProjectsDir,
     dataDir: path.join(config.dataDir, "indexes"),
@@ -287,6 +292,7 @@ export async function initializeServices(): Promise<ServicesContainer> {
   await notificationService.initialize();
   await sessionMetadataService.initialize();
   await projectMetadataService.initialize();
+  await loopCardStore.initialize();
   await sessionIndexService.initialize();
   await pushService.initialize();
   await browserProfileService.initialize();
@@ -367,6 +373,7 @@ export async function initializeServices(): Promise<ServicesContainer> {
     notificationService,
     sessionMetadataService,
     projectMetadataService,
+    loopCardStore,
     sessionIndexService,
     pushService,
     browserProfileService,

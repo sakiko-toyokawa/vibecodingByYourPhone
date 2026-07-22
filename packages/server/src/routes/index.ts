@@ -3,6 +3,7 @@ import type { Hono } from "hono";
 import type { AppOptions } from "../app.js";
 import { createAuthRoutes } from "../auth/routes.js";
 import { container } from "../container.js";
+import type { LoopCardStore } from "../loop/index.js";
 import { updateAllowedHosts } from "../middleware/allowed-hosts.js";
 import type { CodexSessionScanner } from "../projects/codex-scanner.js";
 import { CODEX_SESSIONS_DIR } from "../projects/codex-scanner.js";
@@ -33,6 +34,7 @@ import { createGlobalSessionsRoutes } from "./global-sessions.js";
 import { health } from "./health.js";
 import { createInboxRoutes } from "./inbox.js";
 import { createLocalImageRoutes } from "./local-image.js";
+import { createLoopsRoutes } from "./loops.js";
 import { createNetworkBindingRoutes } from "./network-binding.js";
 import { createOnboardingRoutes } from "./onboarding.js";
 import { createProcessesRoutes } from "./processes.js";
@@ -56,6 +58,7 @@ export interface RouteDependencies {
   geminiScanner: GeminiSessionScanner;
   codexReaderFactory: (projectPath: string) => CodexSessionReader;
   geminiReaderFactory: (projectPath: string) => GeminiSessionReader;
+  loopCardStore: LoopCardStore;
 }
 
 export function registerRoutes(
@@ -71,6 +74,7 @@ export function registerRoutes(
     geminiScanner,
     codexReaderFactory,
     geminiReaderFactory,
+    loopCardStore,
   } = container.cradle as unknown as RouteDependencies;
 
   // Auth routes (always mounted if authService is provided)
@@ -313,6 +317,9 @@ export function registerRoutes(
 
   // Files routes (file browser)
   app.route("/api/projects", createFilesRoutes({ scanner }));
+
+  // Loop registry routes (phase 0: create / list / detail only)
+  app.route("/api/loops", createLoopsRoutes({ loopCardStore }));
 
   // Editor routes (project tree, write, AI edit)
   app.route(
