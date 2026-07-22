@@ -117,6 +117,18 @@ export interface ApplyJudgmentInput {
     failureTag: FailureTag;
     message: string;
   };
+  /**
+   * Set when the policy projection intercepted a hard-gate / high-risk
+   * action during the turn (05 阶段 2 验收 4: 硬闸门拦截升级 needs_human,
+   * bypass 下仍被拦 — bypass ≠ 绕过硬闸门). Forces the control decision
+   * to needs_human unless the turn already failed terminally; the policy
+   * ref lands on the decision entry's policy_refs.
+   */
+  policyEscalation?: {
+    action: string;
+    reason: string;
+    policyRef: string;
+  };
 }
 
 export interface ApplyJudgmentResult {
@@ -275,6 +287,13 @@ export class ControlPlane {
       judgment: input.judgment,
       canRetry,
     });
+    // 硬闸门 / 高风险策略拦截升级 needs_human（人工闸门与Bypass.md：
+    // critical 动作一律升级，bypass 不例外）。终端 failed 不覆盖——
+    // 轮次已崩溃，没有可审批的工作产物。
+    if (input.policyEscalation && decision.kind !== "failed") {
+      decision.kind = "needs_human";
+      decision.reason = `policy gate '${input.policyEscalation.action}' intercepted during the turn (bypass ≠ 绕过硬闸门): ${input.policyEscalation.reason}`;
+    }
     // A scheduled retry consumes retry budget immediately (不含首轮).
     if (decision.kind === "retry") {
       budget.used_retries += 1;
@@ -321,6 +340,9 @@ export class ControlPlane {
       nextAction:
         decision.kind === "needs_human" ? "wait_for_approval" : "none",
       evidenceRefs: input.judgment?.evidence ?? [],
+      policyRefs: input.policyEscalation
+        ? [input.policyEscalation.policyRef]
+        : undefined,
       failureTags: input.adapterFailure
         ? [input.adapterFailure.failureTag]
         : undefined,
@@ -350,10 +372,13 @@ export class ControlPlane {
         loop_id: input.loopId,
         run_id: input.runId,
         request_id: requestId,
-        // Phase 2 state-machine slice has no policy projection / hard gates
-        // yet; the action is the judgment's suggested next step.
-        action: input.judgment?.next_action ?? "manual_review",
-        risk: "unrated",
+        // Policy projection (阶段 2): a hard-gate escalation carries its
+        // action/risk; otherwise the judgment's suggested next step.
+        action:
+          input.policyEscalation?.action ??
+          input.judgment?.next_action ??
+          "manual_review",
+        risk: input.policyEscalation ? "critical" : "unrated",
         reason,
         evidence_refs: input.judgment?.evidence ?? [],
         options: DECISION_OPTIONS,
@@ -654,6 +679,8 @@ export class ControlPlane {
     nextAction: string;
     evidenceRefs?: string[];
     failureTags?: FailureTag[];
+    /** 涉及策略（policy://）；策略投影命中的决策携带，否则为空数组。 */
+    policyRefs?: string[];
     feedback?: string;
     override?: DecisionEntry["override"];
     patch?: Partial<RunStateRecord>;
@@ -682,7 +709,7 @@ export class ControlPlane {
       decision: opts.decision,
       reason: opts.reason,
       evidence_refs: opts.evidenceRefs ?? [],
-      policy_refs: [], // policy projection lands later in phase 2
+      policy_refs: opts.policyRefs ?? [],
       next_action: opts.nextAction,
       feedback: opts.feedback,
       override: opts.override,

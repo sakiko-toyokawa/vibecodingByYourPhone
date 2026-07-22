@@ -27,6 +27,7 @@ import type {
   ProcessInfo,
   ProcessOptions,
   ProcessState,
+  ToolApprovalHook,
 } from "./types.js";
 import { DEFAULT_IDLE_TIMEOUT_MS } from "./types.js";
 
@@ -133,6 +134,13 @@ export class Process {
   /** Permission rules for tool filtering (deny/allow patterns from API caller) */
   private _permissions: PermissionRules | undefined;
 
+  /**
+   * Loop-only policy projection hook (05 阶段 2); undefined on interactive
+   * sessions — the mode-based approval flow below is then byte-identical
+   * to before.
+   */
+  private _toolApprovalHook: ToolApprovalHook | undefined;
+
   /** Version counter for permission mode changes (for multi-tab sync) */
   private _modeVersion = 0;
 
@@ -208,6 +216,7 @@ export class Process {
     this.abortFn = options.abortFn ?? null;
     this._permissionMode = options.permissionMode ?? "default";
     this._permissions = options.permissions;
+    this._toolApprovalHook = options.toolApprovalHook;
     this.provider = options.provider;
     this.model = options.model;
     this.executor = options.executor;
@@ -1129,6 +1138,16 @@ export class Process {
     const permissionResult = this.checkPermissionRules(toolName, input);
     if (permissionResult) {
       return permissionResult;
+    }
+
+    // Loop-only policy projection (05 阶段 2): when a hook is wired, it is
+    // the rule source for everything the explicit patterns didn't settle.
+    // Interactive sessions never carry a hook — their flow is unchanged.
+    if (this._toolApprovalHook) {
+      const hookResult = await this._toolApprovalHook(toolName, input);
+      if (hookResult) {
+        return hookResult;
+      }
     }
 
     // Handle based on permission mode

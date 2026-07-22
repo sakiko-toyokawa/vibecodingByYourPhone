@@ -32,12 +32,22 @@
  *    adapter result message's usage, 02 §4 — null when the runtime does
  *    not expose it, never fabricated).
  *
- * Read-only guarantee (three layers, unchanged from phase 0):
+ * Read-only guarantee for LEGACY runs (card without loop.policy, unchanged
+ * from phase 0):
  *  1. permissionMode "plan" (read-only tools auto-approve);
  *  2. explicit deny rules for file-mutating tools (assembly);
  *  3. every tool-approval request is auto-denied — the run is unattended,
  *     so an approval prompt would otherwise hang the turn until the idle
  *     timeout.
+ *
+ * Policy projection (card declares loop.policy, phase 2 second slice):
+ * the canUseTool rule source is the policy arbiter (loop/policy/) wired
+ * through a per-turn approval hook — local rollbackable work self-approves
+ * with a bypass_used decision-ledger audit per call; hard-gate actions
+ * (merge/deploy/delete/publish/bill/notify/close) are blocked even under
+ * bypass and escalate the run to needs_human via applyJudgment's
+ * policyEscalation (05 阶段 2 验收 4). Interactive sessions never carry
+ * the hook; their approval flow is untouched.
  */
 
 import { randomUUID } from "node:crypto";
@@ -70,6 +80,10 @@ import type {
   ResumeSignal,
 } from "./control-plane/control-plane.js";
 import { retryBackoffMs } from "./control-plane/retry-backoff.js";
+import {
+  type PolicyEscalation,
+  createLoopToolApprovalHook,
+} from "./policy/approval-hook.js";
 import type { LoopCardStore } from "./state/loop-card-store.js";
 import type { RunLedgerStore } from "./state/run-ledger-store.js";
 import { type VerificationRefs, verifyRun } from "./verification/verify-run.js";
@@ -152,6 +166,10 @@ interface RunExecutionContext {
   /** Context injected into the next turn's prompt (retry evidence / human
    *  feedback). Consumed by the next executeTurn call. */
   pendingContext: string | null;
+  /** Hard-gate / high-risk escalations recorded by the policy hook during
+   *  the current turn (05 阶段 2: 硬闸门拦截升级 needs_human). Reset at
+   *  each turn start; drained into applyJudgment after the turn. */
+  policyEscalations: PolicyEscalation[];
   /** Set when contract/assembly setup failed before turn 1 could start. */
   setupError?: Error;
 }
@@ -208,8 +226,30 @@ function buildRetryContext(
   return lines.join("\n");
 }
 
-/** Human response (approve / request_changes / resume / budget) as next-turn context. */
-function buildHumanResumeContext(
+/**
+ * Drain the current turn's policy escalations into the applyJudgment input.
+ * The first escalation carries the decision; additional blocks of the same
+ * turn are summarized (each block already has its own policy_blocked
+ * decision-ledger entry from the hook).
+ */
+function drainPolicyEscalation(
+  ctx: RunExecutionContext,
+): { action: string; reason: string; policyRef: string } | undefined {
+  const [first, ...rest] = ctx.policyEscalations;
+  if (!first) {
+    return undefined;
+  }
+  return {
+    action: first.action,
+    reason:
+      rest.length === 0
+        ? first.reason
+        : `${first.reason} (+${rest.length} more policy block(s) this turn, see policy_blocked decision entries)`,
+    policyRef: first.policyRef,
+  };
+}
+
+/** Human response (approve / request_changes / resume / budget) as next-turn context. */ function buildHumanResumeContext(
   signal: ResumeSignal,
   judgment: JudgmentReport | null,
   judgmentRef: string | null,
@@ -513,6 +553,7 @@ export class LoopRunService {
       lastJudgment: null,
       lastJudgmentRef: null,
       pendingContext: null,
+      policyEscalations: [],
     };
     try {
       ctx.contract = buildIntentContract(card, { runId, source });
@@ -570,6 +611,15 @@ export class LoopRunService {
             runId,
             "intent-contract.json",
             ctx.contractJson,
+          );
+        }
+        // 02 §3 policy_projection 段：策略投影的 run 在 turn 1 落投影快照，
+        // 与 intent-contract 同级可审计。
+        if (ctx.turn === 1 && ctx.input?.policyProjection) {
+          await store.writeArtifact(
+            runId,
+            "policy-projection.json",
+            JSON.stringify(ctx.input.policyProjection, null, 2),
           );
         }
         // Turn 1 keeps the phase-0/1 name for compatibility; later turns
@@ -653,6 +703,9 @@ export class LoopRunService {
             judgmentRef,
             createdAt,
             budget: ctx.contract.budget,
+            // 硬闸门 / 高风险策略拦截（本 turn 内 policy hook 收集）：
+            // 升级 needs_human，bypass 下仍被拦（05 阶段 2 验收 4）。
+            policyEscalation: drainPolicyEscalation(ctx),
             usage: {
               tokens: outcome.usage?.tokens ?? null,
               timeMinutes,
@@ -714,9 +767,10 @@ export class LoopRunService {
           runtime: {
             adapter: "claude",
             session_ref: outcome.sessionRef,
-            mode: "plan",
-            adapter_capability_snapshot:
-              "realSdk(agent_sdk);permissionMode=plan;autoDenyApprovals",
+            mode: ctx.input?.permissionMode ?? "plan",
+            adapter_capability_snapshot: ctx.input?.policyProfile
+              ? `realSdk(agent_sdk);permissionMode=${ctx.input.permissionMode};policy=${ctx.input.policyProfile.policy_profile};selfApproveAudit`
+              : "realSdk(agent_sdk);permissionMode=plan;autoDenyApprovals",
           },
           input_refs: {
             intent: `intent://${loopId}`,
@@ -907,6 +961,7 @@ export class LoopRunService {
         lastJudgment,
         lastJudgmentRef: runState.last_judgment,
         pendingContext: null,
+        policyEscalations: [],
       };
     } catch (error) {
       console.error(
@@ -941,19 +996,42 @@ export class LoopRunService {
     ctx.pendingContext = null;
     const message = { text: prompt, mode: ctx.input.permissionMode };
 
+    // Policy projection (05 阶段 2): when the card declared a policy, the
+    // per-turn approval hook is the canUseTool rule source — self-approvals
+    // are audited to the decision ledger, hard gates are blocked and
+    // collected as escalations (drained into applyJudgment after the turn).
+    // Legacy read-only runs (no policy) pass no hook: permissionMode "plan"
+    // + deny rules + auto-deny watcher, exactly as phase 0/1.
+    ctx.policyEscalations = [];
+    const toolApprovalHook = ctx.input.policyProfile
+      ? createLoopToolApprovalHook({
+          profile: ctx.input.policyProfile,
+          runId: ctx.active.runId,
+          loopId: ctx.active.loopId,
+          turn: ctx.turn,
+          workspacePath: ctx.input.cwd,
+          store: this.deps.runLedgerStore,
+          escalations: ctx.policyEscalations,
+        })
+      : undefined;
+    const sessionSettings = {
+      permissions: ctx.input.permissions,
+      toolApprovalHook,
+    };
+
     const result = isFirstTurn
       ? await this.deps.supervisor.startSession(
           ctx.input.cwd,
           message,
           ctx.input.permissionMode,
-          { permissions: ctx.input.permissions },
+          sessionSettings,
         )
       : await this.deps.supervisor.resumeSession(
           ctx.sessionRef as string,
           ctx.input.cwd,
           message,
           ctx.input.permissionMode,
-          { permissions: ctx.input.permissions },
+          sessionSettings,
         );
 
     if ("error" in result && result.error === "queue_full") {

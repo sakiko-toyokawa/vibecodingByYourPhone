@@ -10,6 +10,19 @@ import type {
   UrlProjectId,
 } from "@yep-anywhere/shared";
 import type { PermissionMode, SDKMessage } from "../sdk/types.js";
+import type { ToolApprovalResult } from "../sdk/types.js";
+
+/**
+ * Loop-only policy projection hook (05 阶段 2): consulted by
+ * Process.handleToolApproval before the permissionMode four-tier logic.
+ * Returning a result short-circuits the mode logic; returning undefined
+ * falls through to the existing behavior. Undefined on the Process =
+ * interactive session, approval behavior completely unchanged.
+ */
+export type ToolApprovalHook = (
+  toolName: string,
+  input: unknown,
+) => Promise<ToolApprovalResult | undefined>;
 
 // Constants
 export const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
@@ -238,6 +251,11 @@ export interface ProcessOptions {
   executor?: string;
   /** Permission rules for tool filtering (deny/allow patterns) */
   permissions?: PermissionRules;
+  /**
+   * Loop-only policy projection hook (05 阶段 2). Absent on interactive
+   * sessions — their approval flow is untouched.
+   */
+  toolApprovalHook?: ToolApprovalHook;
   /** OS PID of the spawned agent child process, or getter for deferred resolution */
   pid?: number | (() => number | undefined);
 }

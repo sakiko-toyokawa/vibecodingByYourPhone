@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ApprovalModeSchema } from "./policy.js";
 
 /**
  * LoopCard — trigger 层为每个长期 loop 维护的产品规格。
@@ -106,6 +107,18 @@ export const LoopCardSchema = z.object({
     human_gate: z
       .object({
         required_for: z.array(z.string()).optional(),
+      })
+      .optional(),
+    // Phase-2 Yep extension (not in 02-schema契约.md §1): policy 开关。
+    // 声明后 run 的 canUseTool 规则来源从硬编码改为策略投影（05 阶段 2
+    // "policy projection"）；缺省（无此块）保持阶段 0/1 的只读 plan 行为，
+    // 交互会话完全不受影响。profile 名 / approval_mode 在此选择，完整
+    // PolicyProfile（risk_rules / hard_gates / bypass 允许范围）由服务端
+    // 装配层解析内置默认值。偏差待登记到 06-项目规定.md。
+    policy: z
+      .object({
+        profile: z.string().optional(),
+        approval_mode: ApprovalModeSchema.optional(),
       })
       .optional(),
     persistence: z.object({

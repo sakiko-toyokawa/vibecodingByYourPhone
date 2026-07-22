@@ -517,3 +517,21 @@ export {
   type RunStateRecord,
   RunStateRecordSchema,
 } from "./loop-schema/run-state.js";
+export {
+  type ApprovalMode,
+  ApprovalModeSchema,
+  type BypassScope,
+  BypassScopeSchema,
+  type HardGateAction,
+  HardGateActionSchema,
+  type PolicyProfile,
+  PolicyProfileSchema,
+  type PolicyProjection,
+  PolicyProjectionSchema,
+  type RiskLevel,
+  RiskLevelSchema,
+  type RiskRule,
+  RiskRuleSchema,
+  type RiskRules,
+  RiskRulesSchema,
+} from "./loop-schema/policy.js";

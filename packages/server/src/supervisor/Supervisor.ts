@@ -45,6 +45,7 @@ import {
   type ProcessOptions,
   type SessionOwnership,
   type SessionSummary,
+  type ToolApprovalHook,
   encodeProjectId,
 } from "./types.js";
 
@@ -85,6 +86,12 @@ export interface ModelSettings {
   globalInstructions?: string;
   /** Permission rules for tool filtering (deny/allow patterns) */
   permissions?: PermissionRules;
+  /**
+   * Loop-only policy projection hook (05 阶段 2): threaded into the Process
+   * so the loop's canUseTool rule source is the policy arbiter instead of
+   * the hardcoded mode logic. Never set by interactive sessions.
+   */
+  toolApprovalHook?: ToolApprovalHook;
 }
 
 /** Error response when queue is full */
@@ -402,6 +409,7 @@ export class Supervisor {
       effort: modelSettings?.effort,
       executor: modelSettings?.executor,
       permissions: modelSettings?.permissions,
+      toolApprovalHook: modelSettings?.toolApprovalHook,
     };
 
     const process = new Process(iterator, options);
@@ -504,6 +512,7 @@ export class Supervisor {
       effort: modelSettings?.effort,
       executor: modelSettings?.executor,
       permissions: modelSettings?.permissions,
+      toolApprovalHook: modelSettings?.toolApprovalHook,
     };
 
     const process = new Process(iterator, options);
@@ -603,6 +612,7 @@ export class Supervisor {
       effort: modelSettings?.effort,
       executor: modelSettings?.executor,
       permissions: modelSettings?.permissions,
+      toolApprovalHook: modelSettings?.toolApprovalHook,
     };
 
     const process = new Process(iterator, options);
@@ -703,6 +713,7 @@ export class Supervisor {
       effort: modelSettings?.effort,
       executor: modelSettings?.executor,
       permissions: modelSettings?.permissions,
+      toolApprovalHook: modelSettings?.toolApprovalHook,
     };
 
     const process = new Process(iterator, options);
