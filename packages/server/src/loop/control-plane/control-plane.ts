@@ -1,51 +1,62 @@
 /**
- * Minimal control-plane (spec: docs/spec/05-分阶段计划.md 阶段 1,
- * 03-API契约.md "POST /api/runs/:id/decision" + WS 事件契约).
+ * Phase-2 control-plane (spec: docs/spec/05-分阶段计划.md 阶段 2,
+ * 03-API契约.md "POST /api/runs/:id/decision" 阶段 2 完整迁移表,
+ * loop-engineering/control-plane/状态机.md + 预算与停止规则.md).
  *
- * Phase-1 scope — deliberately minimal (the full 7-state machine with retry
- * backoff and budget enforcement is phase 2):
+ * Replaces the phase-1 minimal form with the full 7-state machine:
  *
- *  - applyJudgment(): after a run's verification, decideControl() maps the
- *    judgment_report to complete / needs_human / failed, the run_state
- *    snapshot is persisted (state/<loop_id>.json, control-plane is the only
- *    writer per 04-存储约定), a decision_entry is appended to
- *    runs/<run_id>.jsonl, and `loop-state-changed` is broadcast.
+ *  - Deterministic transitions: every state change goes through the
+ *    transition table in state-machine.ts (authoritative: 状态机.md /
+ *    02-schema契约.md §7). Illegal transitions are rejected and recorded
+ *    (structured error log; the decision ledger only carries legal
+ *    transitions — a rejected attempt is an interception, not a decision).
  *
- *  - needs_human bridging: when the decision is needs_human the run blocks.
- *    `run-decision-required` is broadcast on the activity channel and the
- *    pending approval is tracked (in memory + in the persisted run_state, so
- *    a server restart can re-discover waiting runs from state files). The
- *    human answer arrives via submitDecision() (POST /api/runs/:id/decision),
- *    which transitions the run, appends a decision_entry carrying the
- *    override record (original_judgment_ref + reason + feedback), broadcasts
- *    `loop-state-changed`, and notifies resolved listeners (the run service
- *    releases its in-memory active-run registration).
+ *  - Idempotent writes: every ledgered transition has a deterministic
+ *    decision_id embedding run_id + turn + target state; a repeated
+ *    trigger of the same transition finds the existing entry and does not
+ *    append / re-save / re-emit (幂等键 run_id+turn+state).
  *
- * Phase-1 deviation from 03's transition table (recorded in the slice
- * report): approve → complete and request_changes → failed instead of
- * 03's needs_human → active, because phase 1 runs are single-turn — there
- * is no next turn to resume into (resume semantics arrive with the phase-2
- * state machine). The human verdicts are recorded as judgment overrides in
- * the decision ledger, which is the audit trail 03/05 require.
+ *  - Budget enforcement: the run's Budget snapshot lives in run_state
+ *    (used_turns / used_retries / used_tokens / used_time_minutes
+ *    accumulated per turn; max_* from the contract, the 数值唯一权威来源).
+ *    max_turns 含首轮、max_retries 不含首轮、同时生效先触者停。Every
+ *    decision entry carries the budget snapshot so the ledger shows
+ *    per-turn consumption. Time is also re-checked at turn start
+ *    (beginTurn) — 每轮开始前检查剩余预算.
  *
- * TODO(phase-2): pause lands on the `paused` state and is recorded, but
- * there is no resume mechanism yet — paused → active via PATCH resume is
- * owned by the phase-2 state machine (05 阶段 2 "paused / resume 控制端点").
+ *  - needs_human bridging (as phase 1) + full human-decision table (03):
+ *      approve         → active  (resume with the human response; feedback 进账本)
+ *      request_changes → active  (feedback 必填, injected into the next turn)
+ *      reject          → failed  (人工拒绝即终止)
+ *      pause           → paused  (恢复只需信号, 不再要求人工响应)
+ *    Transitions back to active fire a ResumeSignal; the run service
+ *    listens and continues the run on the same session (resumeSession).
+ *
+ *  - paused / budget_limited resume interfaces: resumePaused (恢复信号)
+ *    and supplementBudget (人工补充预算) are implemented here; the HTTP
+ *    control endpoints (PATCH /api/loops/:id pause/resume) land in the
+ *    next slice of phase 2 (05 改动清单 routes 项).
+ *
+ * control-plane is the only writer of state/<loop_id>.json (04-存储约定).
  */
 
-import { randomUUID } from "node:crypto";
 import type {
+  Budget,
+  BudgetLimits,
   DecisionEntry,
+  DecisionKind,
   FailureTag,
   JudgmentReport,
   RunDecisionAction,
   RunState,
   RunStateRecord,
 } from "@yep-anywhere/shared";
+import { BudgetSchema } from "@yep-anywhere/shared";
 import type { IEventBus } from "../../watcher/index.js";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
 import { type ControlDecisionKind, decideControl } from "./decide.js";
 import type { RunStateStore } from "./run-state-store.js";
+import { assertLegalTransition } from "./state-machine.js";
 
 export type ControlPlaneErrorCode =
   | "run_not_found"
@@ -60,6 +71,18 @@ export class ControlPlaneError extends Error {
     super(message);
     this.name = "ControlPlaneError";
   }
+}
+
+/** Per-turn resource consumption reported by the run service. */
+export interface TurnUsage {
+  /**
+   * Tokens consumed by the turn (AdapterOutput usage, 02 §4); null when the
+   * runtime did not expose usage — the budget counter is left unchanged,
+   * never fabricated.
+   */
+  tokens: number | null;
+  /** Wall-clock minutes the turn took (execution + verification). */
+  timeMinutes: number;
 }
 
 export interface ApplyJudgmentInput {
@@ -78,6 +101,10 @@ export interface ApplyJudgmentInput {
   judgmentRef: string | null;
   /** Run creation time (ISO 8601), used for the state record's created_at. */
   createdAt: string;
+  /** Budget limits from the IntentContract (数值唯一权威来源, 02 §2). */
+  budget: BudgetLimits;
+  /** This turn's consumption, accumulated into the run's budget snapshot. */
+  usage: TurnUsage;
   /**
    * Set when the run was terminated by a unified adapter hard error
    * (02-schema契约.md §4). The failure attribution (失败模式账本 vocabulary)
@@ -95,6 +122,33 @@ export interface ApplyJudgmentInput {
 export interface ApplyJudgmentResult {
   state: ControlDecisionKind;
   entry: DecisionEntry;
+  /** Budget snapshot after accumulating this turn (drives retry backoff). */
+  budget: Budget;
+  /** True when this exact transition was already ledgered (repeat trigger). */
+  idempotent: boolean;
+}
+
+/**
+ * ResumeSignal — a blocked run (needs_human / paused / budget_limited)
+ * came back to active; the run service continues it with a new turn.
+ */
+export interface ResumeSignal {
+  runId: string;
+  loopId: string;
+  cause:
+    | "human_approve"
+    | "human_request_changes"
+    | "resume_signal"
+    | "budget_supplemented";
+  /** Human feedback to inject into the next turn's context, when given. */
+  feedback?: string;
+}
+
+export interface BeginTurnResult {
+  /** False when the pre-turn budget check stopped the run (budget_limited). */
+  ok: boolean;
+  state: RunState;
+  record: RunStateRecord;
 }
 
 interface PendingApproval {
@@ -109,16 +163,24 @@ export interface ControlPlaneDeps {
   eventBus?: IEventBus;
 }
 
-/** The options a needs_human run offers (03: full set in phase 1). */
+/** The options a needs_human run offers (03: full set). */
 const DECISION_OPTIONS = ["approve", "reject", "request_changes", "pause"];
+
+/** Deterministic decision_id = idempotency key (run_id + turn + target/cause). */
+function controlDecisionId(runId: string, turn: number, to: RunState): string {
+  return `decision-${runId}-t${turn}-${to}`;
+}
 
 export class ControlPlane {
   private readonly deps: ControlPlaneDeps;
   /** run_id -> pending approval (in-memory index; rebuilt from state files) */
   private pending = new Map<string, PendingApproval>();
+  /** run_id -> loop_id (in-memory index; rebuilt from state files on scan) */
+  private runIndex = new Map<string, string>();
   /** run_id -> latest known state (drives API state projections) */
   private statesByRunId = new Map<string, RunState>();
   private resolvedListeners: ((runId: string, state: RunState) => void)[] = [];
+  private resumeListeners: ((signal: ResumeSignal) => void)[] = [];
 
   constructor(deps: ControlPlaneDeps) {
     this.deps = deps;
@@ -130,80 +192,155 @@ export class ControlPlane {
   }
 
   /**
-   * Called when a waiting run leaves needs_human (human decision answered).
-   * The run service uses it to release its in-memory active-run registration.
+   * Read the persisted run_state for a loop (state/<loop_id>.json).
+   * control-plane is the only writer (04-存储约定); this is the reader for
+   * the API layer (03: GET /api/runs/:id returns run_state) and the run
+   * service's restart recovery.
+   */
+  async getRunState(loopId: string): Promise<RunStateRecord | null> {
+    return this.deps.runStateStore.load(loopId);
+  }
+
+  /**
+   * Called when a run reaches a terminal state from a human decision
+   * (reject → failed). The run service uses it to release its in-memory
+   * active-run registration. (complete/failed via applyJudgment are
+   * returned synchronously to the run service, which releases directly.)
    */
   onRunResolved(listener: (runId: string, state: RunState) => void): void {
     this.resolvedListeners.push(listener);
   }
 
   /**
-   * Apply a run's judgment: decide, persist run_state, append the control
-   * decision_entry, broadcast loop-state-changed, and bridge needs_human.
+   * Called when a blocked run comes back to active (human approve /
+   * request_changes, resume signal, budget supplemented). The run service
+   * listens and continues the run with a new turn on the same session.
+   */
+  onResumeRequested(listener: (signal: ResumeSignal) => void): void {
+    this.resumeListeners.push(listener);
+  }
+
+  /**
+   * Apply a run's judgment: accumulate the turn's budget consumption,
+   * decide (complete / retry / needs_human / failed / budget_limited),
+   * persist run_state, append the control decision_entry (idempotently),
+   * broadcast loop-state-changed, and bridge needs_human.
    */
   async applyJudgment(input: ApplyJudgmentInput): Promise<ApplyJudgmentResult> {
+    this.runIndex.set(input.runId, input.loopId);
+    const existing = await this.deps.runStateStore.load(input.loopId);
+
+    // Idempotent replay: this turn was already judged (the run left active
+    // at this turn) — return the recorded outcome without re-writing.
+    if (
+      existing &&
+      existing.run_id === input.runId &&
+      existing.turn === input.turn &&
+      existing.state !== "active"
+    ) {
+      const entries = await this.deps.runLedgerStore.readDecisionEntries(
+        input.runId,
+      );
+      const entry = entries.find(
+        (e) =>
+          e.decision_id ===
+          controlDecisionId(input.runId, input.turn, existing.state),
+      );
+      if (entry && existing.budget) {
+        return {
+          state: existing.state as ControlDecisionKind,
+          entry,
+          budget: existing.budget,
+          idempotent: true,
+        };
+      }
+    }
+
+    // Budget accumulation (预算与停止规则.md: max_turns 含首轮、max_retries
+    // 不含首轮、同时生效先触者停). used_turns = completed turns = this turn.
+    const base: Budget =
+      existing?.budget ?? BudgetSchema.parse({ ...input.budget });
+    const budget: Budget = {
+      ...base,
+      used_turns: input.turn,
+      used_tokens: base.used_tokens + (input.usage.tokens ?? 0),
+      used_time_minutes: base.used_time_minutes + input.usage.timeMinutes,
+    };
+    const exhausted = this.exhaustedFields(budget, input.turn);
+    const canRetry = exhausted.length === 0;
+
     const decision = decideControl({
       executionOk: input.executionOk,
       verificationRan: input.verificationRan,
       judgment: input.judgment,
+      canRetry,
     });
+    // A scheduled retry consumes retry budget immediately (不含首轮).
+    if (decision.kind === "retry") {
+      budget.used_retries += 1;
+    }
 
     const now = new Date().toISOString();
-    const requestId = `decision-${input.runId}-control`;
-    const entry: DecisionEntry = {
-      decision_id: requestId,
-      loop_id: input.loopId,
-      run_id: input.runId,
-      decision: decision.kind,
-      reason: input.adapterFailure
-        ? `${decision.reason}; adapter hard error (${input.adapterFailure.code}): ${input.adapterFailure.message}`
-        : decision.reason,
-      evidence_refs: input.judgment?.evidence ?? [],
-      policy_refs: [], // phase 1: no policy projection
-      next_action:
-        decision.kind === "needs_human" ? "wait_for_approval" : "none",
-      failure_tags: input.adapterFailure
-        ? [input.adapterFailure.failureTag]
-        : undefined,
-      created_at: now,
-    };
-    await this.deps.runLedgerStore.appendDecisionEntry(input.runId, entry);
-
     const record: RunStateRecord = {
-      version: 1,
+      version: 2,
       goal_id: input.goalId,
-      state: decision.kind,
+      run_id: input.runId,
+      // From-state: the run is active while its turn is judged. An existing
+      // record keeps its own state so an out-of-protocol call hits the
+      // transition-table guard instead of being silently re-based.
+      state: existing?.state ?? "active",
       turn: input.turn,
-      intent_version: 1,
+      intent_version: existing?.intent_version ?? 1,
       workspace_ref: input.workspaceRef,
       last_judgment: input.judgmentRef,
-      pending_approval:
-        decision.kind === "needs_human"
-          ? {
-              request_id: requestId,
-              run_id: input.runId,
-              reason: decision.reason,
-              entered_at: now,
-            }
-          : null,
-      created_at: input.createdAt,
+      pending_approval: existing?.pending_approval ?? null,
+      budget,
+      created_at: existing?.created_at ?? input.createdAt,
       updated_at: now,
     };
-    await this.deps.runStateStore.save(input.loopId, record);
-    this.statesByRunId.set(input.runId, decision.kind);
 
-    this.deps.eventBus?.emit({
-      type: "loop-state-changed",
-      loop_id: input.loopId,
-      run_id: input.runId,
-      from_state: "active",
-      to_state: decision.kind,
-      turn: input.turn,
-      reason: decision.reason,
-      timestamp: now,
+    const requestId = controlDecisionId(input.runId, input.turn, decision.kind);
+    const reason = input.adapterFailure
+      ? `${decision.reason}; adapter hard error (${input.adapterFailure.code}): ${input.adapterFailure.message}`
+      : decision.kind === "budget_limited"
+        ? `${decision.reason}; exhausted: ${exhausted.join(", ")}`
+        : decision.reason;
+
+    const {
+      record: updated,
+      entry,
+      idempotent,
+    } = await this.transition({
+      loopId: input.loopId,
+      runId: input.runId,
+      record,
+      to: decision.kind,
+      decision: decision.kind,
+      decisionId: requestId,
+      reason,
+      nextAction:
+        decision.kind === "needs_human" ? "wait_for_approval" : "none",
+      evidenceRefs: input.judgment?.evidence ?? [],
+      failureTags: input.adapterFailure
+        ? [input.adapterFailure.failureTag]
+        : undefined,
+      patch: {
+        turn: input.turn,
+        budget,
+        last_judgment: input.judgmentRef,
+        pending_approval:
+          decision.kind === "needs_human"
+            ? {
+                request_id: requestId,
+                run_id: input.runId,
+                reason,
+                entered_at: now,
+              }
+            : null,
+      },
     });
 
-    if (decision.kind === "needs_human") {
+    if (!idempotent && decision.kind === "needs_human") {
       this.pending.set(input.runId, {
         loopId: input.loopId,
         requestId,
@@ -213,28 +350,100 @@ export class ControlPlane {
         loop_id: input.loopId,
         run_id: input.runId,
         request_id: requestId,
-        // Phase 1 has no policy projection / hard gates; the action is the
-        // judgment's suggested next step.
+        // Phase 2 state-machine slice has no policy projection / hard gates
+        // yet; the action is the judgment's suggested next step.
         action: input.judgment?.next_action ?? "manual_review",
         risk: "unrated",
-        reason: decision.reason,
+        reason,
         evidence_refs: input.judgment?.evidence ?? [],
         options: DECISION_OPTIONS,
         timestamp: now,
       });
     }
 
-    return { state: decision.kind, entry };
+    return { state: decision.kind, entry, budget, idempotent };
+  }
+
+  /**
+   * Begin a new turn for a run (turn >= 2). Drives the retry → active
+   * transition when the run sits in retry, then runs the pre-turn budget
+   * check (预算与停止规则.md 检查点: 每轮开始前检查剩余预算 — time budget is
+   * re-checked here as well as at turn end). On budget exhaustion the run
+   * goes active → budget_limited (先触者停) and ok=false is returned.
+   */
+  async beginTurn(runId: string, nextTurn: number): Promise<BeginTurnResult> {
+    const found = await this.findRun(runId);
+    if (!found) {
+      throw new ControlPlaneError("run_not_found", `Run '${runId}' not found`);
+    }
+    let { record } = found;
+    const { loopId } = found;
+
+    if (record.state === "retry") {
+      const resumed = await this.transition({
+        loopId,
+        runId,
+        record,
+        to: "active",
+        decision: "resumed",
+        decisionId: `decision-${runId}-t${record.turn}-resumed-retry`,
+        reason: `retry backoff elapsed; starting turn ${nextTurn} on the same session (retry #${record.budget?.used_retries ?? "?"})`,
+        nextAction: "none",
+        patch: {},
+      });
+      // An idempotent replay returns the pre-transition record; reload so
+      // the budget check below sees the persisted active state.
+      record = resumed.idempotent
+        ? ((await this.deps.runStateStore.load(loopId)) ?? resumed.record)
+        : resumed.record;
+    }
+
+    if (record.state !== "active") {
+      throw new ControlPlaneError(
+        "invalid_state",
+        `Run '${runId}' cannot begin turn ${nextTurn} from state '${record.state}'`,
+      );
+    }
+
+    const budget = record.budget;
+    if (budget) {
+      // 每轮开始前检查（预算与停止规则.md 检查点）：能否开新一轮只看
+      // turns / time / tokens —— retry 预算在判定为 retry 时已消耗并授权，
+      // 不在此重复闸门（否则 max_retries=1 永远走不到第一轮 retry）。
+      const exhausted = this.exhaustedAtTurnStart(budget);
+      if (exhausted.length > 0) {
+        const limited = await this.transition({
+          loopId,
+          runId,
+          record,
+          to: "budget_limited",
+          decision: "budget_limited",
+          decisionId: controlDecisionId(runId, record.turn, "budget_limited"),
+          reason: `budget exhausted before turn ${nextTurn} (每轮开始前检查, 先触者停): ${exhausted.join(", ")}`,
+          nextAction: "wait_for_budget",
+          patch: {},
+        });
+        return { ok: false, state: "budget_limited", record: limited.record };
+      }
+    }
+
+    const advanced: RunStateRecord = {
+      ...record,
+      turn: nextTurn,
+      updated_at: new Date().toISOString(),
+    };
+    await this.deps.runStateStore.save(loopId, advanced);
+    return { ok: true, state: "active", record: advanced };
   }
 
   /**
    * Answer a needs_human run (POST /api/runs/:id/decision).
    *
-   * Phase-1 transition table (deviation from 03 — see module comment):
-   *   approve          → complete (human overrides the judgment)
-   *   reject           → failed   (human rejection terminates the run)
-   *   request_changes  → failed   (feedback recorded for the next run)
-   *   pause            → paused   (TODO phase-2: resume mechanism)
+   * Phase-2 transition table (03-API契约.md 完整迁移表, 状态机.md):
+   *   approve          → active  (human response carried back; feedback 进账本)
+   *   request_changes  → active  (feedback 必填, injected into the next turn)
+   *   reject           → failed  (human rejection terminates the run)
+   *   pause            → paused  (resume needs only a signal — resumePaused)
    */
   async submitDecision(
     runId: string,
@@ -244,7 +453,7 @@ export class ControlPlane {
     if (action === "request_changes" && !feedback?.trim()) {
       throw new ControlPlaneError(
         "invalid_decision",
-        "feedback is required for request_changes (03: it is injected as context for the next run)",
+        "feedback is required for request_changes (03: it is injected as context for the next turn)",
       );
     }
 
@@ -261,31 +470,39 @@ export class ControlPlane {
 
     const { loopId, record } = waiting;
     const target: RunState =
-      action === "approve"
-        ? "complete"
-        : action === "pause"
-          ? "paused"
-          : "failed";
+      action === "reject" ? "failed" : action === "pause" ? "paused" : "active";
+    const decisionKind: DecisionKind =
+      target === "active"
+        ? "resumed"
+        : target === "failed"
+          ? "failed"
+          : "paused";
 
     const now = new Date().toISOString();
     const reasonByAction: Record<RunDecisionAction, string> = {
-      approve: "human approved the run, overriding the judgment",
+      approve:
+        "human approved; run resumes with the human response carried back (03: needs_human → active)",
       reject: "human rejected the run",
       request_changes:
-        "human requested changes; feedback recorded for the next run",
+        "human requested changes; feedback is injected into the next turn's context (03: needs_human → active)",
       pause: "human paused the run from needs_human",
     };
-    const entry: DecisionEntry = {
-      decision_id: `decision-${runId}-human-${randomUUID().slice(0, 8)}`,
-      loop_id: loopId,
-      run_id: runId,
-      decision: target,
+    const { record: updated } = await this.transition({
+      loopId,
+      runId,
+      record,
+      to: target,
+      decision: decisionKind,
+      decisionId: `decision-${runId}-t${record.turn}-human-${action}`,
       reason: reasonByAction[action],
-      evidence_refs: [],
-      policy_refs: [],
-      // TODO(phase-2): paused resumes via a resume signal (PATCH resume);
-      // the mechanism is owned by the phase-2 state machine.
-      next_action: target === "paused" ? "wait_for_resume_signal" : "none",
+      // paused resumes via a resume signal (resumePaused); active resumes
+      // into the next turn via the run service's resume listener.
+      nextAction:
+        target === "paused"
+          ? "wait_for_resume_signal"
+          : target === "active"
+            ? "resume_next_turn"
+            : "none",
       feedback,
       // Judgment overrides (approve / reject / request_changes) record what
       // was overridden; pause is a control action, not a verdict override.
@@ -297,40 +514,295 @@ export class ControlPlane {
               reason: reasonByAction[action],
               feedback,
             },
+      patch: { pending_approval: null },
+    });
+    this.pending.delete(runId);
+
+    if (target === "active") {
+      this.notifyResume({
+        runId,
+        loopId,
+        cause: action === "approve" ? "human_approve" : "human_request_changes",
+        feedback,
+      });
+    } else if (target === "failed") {
+      this.notifyResolved(runId, target);
+    }
+    // paused: the run stays suspended (and registered) until resumePaused —
+    // same blocking semantics as needs_human, minus the approval payload.
+
+    return updated;
+  }
+
+  /**
+   * Resume a paused run (paused → active, 恢复只需信号、不携带人工响应 —
+   * 03 PATCH resume 语义). Interface for the phase-2 pause/resume control
+   * endpoints; the HTTP route lands in the next slice.
+   */
+  async resumePaused(loopId: string): Promise<RunStateRecord> {
+    const record = await this.deps.runStateStore.load(loopId);
+    if (!record) {
+      throw new ControlPlaneError(
+        "run_not_found",
+        `Loop '${loopId}' has no run state`,
+      );
+    }
+    if (record.state !== "paused") {
+      throw new ControlPlaneError(
+        "invalid_state",
+        `Loop '${loopId}' run is '${record.state}', not paused (resume requires a paused run)`,
+      );
+    }
+    const { record: updated } = await this.transition({
+      loopId,
+      runId: record.run_id,
+      record,
+      to: "active",
+      decision: "resumed",
+      decisionId: `decision-${record.run_id}-t${record.turn}-resumed-pause`,
+      reason:
+        "resume signal received; paused → active (暂停与恢复: 恢复只需信号, 不携带人工响应)",
+      nextAction: "resume_next_turn",
+      patch: {},
+    });
+    this.notifyResume({
+      runId: record.run_id,
+      loopId,
+      cause: "resume_signal",
+    });
+    return updated;
+  }
+
+  /**
+   * Supplement a budget_limited run's budget and resume it
+   * (budget_limited → active, 状态机.md: 人工补充预算并恢复). `patch` raises
+   * one or more max_* fields; the result is re-validated (max_retries <
+   * max_turns still has to hold). Interface for the budget-resume control
+   * endpoint, which lands with the routes slice.
+   */
+  async supplementBudget(
+    loopId: string,
+    patch: Partial<BudgetLimits>,
+  ): Promise<RunStateRecord> {
+    const record = await this.deps.runStateStore.load(loopId);
+    if (!record) {
+      throw new ControlPlaneError(
+        "run_not_found",
+        `Loop '${loopId}' has no run state`,
+      );
+    }
+    if (record.state !== "budget_limited") {
+      throw new ControlPlaneError(
+        "invalid_state",
+        `Loop '${loopId}' run is '${record.state}', not budget_limited`,
+      );
+    }
+    const current = record.budget;
+    if (!current) {
+      throw new ControlPlaneError(
+        "invalid_state",
+        `Loop '${loopId}' run has no budget snapshot to supplement`,
+      );
+    }
+    let supplemented: Budget;
+    try {
+      supplemented = BudgetSchema.parse({
+        ...current,
+        ...Object.fromEntries(
+          Object.entries(patch).filter(([, value]) => value !== undefined),
+        ),
+      });
+    } catch {
+      throw new ControlPlaneError(
+        "invalid_decision",
+        "budget supplement is invalid (max_retries must stay below max_turns)",
+      );
+    }
+    const { record: updated } = await this.transition({
+      loopId,
+      runId: record.run_id,
+      record,
+      to: "active",
+      decision: "resumed",
+      decisionId: `decision-${record.run_id}-t${record.turn}-resumed-budget`,
+      reason: `budget supplemented by a human (${Object.keys(patch).join(", ")}); budget_limited → active`,
+      nextAction: "resume_next_turn",
+      patch: { budget: supplemented },
+    });
+    this.notifyResume({
+      runId: record.run_id,
+      loopId,
+      cause: "budget_supplemented",
+    });
+    return updated;
+  }
+
+  /**
+   * The single writer path for every state change: transition-table guard,
+   * idempotent decision-ledger append, run_state save, in-memory indexes,
+   * loop-state-changed broadcast. `record.state` is the from-state.
+   */
+  private async transition(opts: {
+    loopId: string;
+    runId: string;
+    record: RunStateRecord;
+    to: RunState;
+    decision: DecisionKind;
+    /** Deterministic idempotency key (run_id + turn + target/cause). */
+    decisionId: string;
+    reason: string;
+    nextAction: string;
+    evidenceRefs?: string[];
+    failureTags?: FailureTag[];
+    feedback?: string;
+    override?: DecisionEntry["override"];
+    patch?: Partial<RunStateRecord>;
+  }): Promise<{
+    record: RunStateRecord;
+    entry: DecisionEntry;
+    idempotent: boolean;
+  }> {
+    const { record, to, runId, loopId } = opts;
+    assertLegalTransition(record.state, to, { runId, turn: record.turn });
+
+    // Idempotent write: a repeated trigger of the same transition finds its
+    // entry and does not append / re-save / re-emit.
+    const entries = await this.deps.runLedgerStore.readDecisionEntries(runId);
+    const existing = entries.find((e) => e.decision_id === opts.decisionId);
+    if (existing) {
+      return { record, entry: existing, idempotent: true };
+    }
+
+    const now = new Date().toISOString();
+    const budget = opts.patch?.budget ?? record.budget;
+    const entry: DecisionEntry = {
+      decision_id: opts.decisionId,
+      loop_id: loopId,
+      run_id: runId,
+      decision: opts.decision,
+      reason: opts.reason,
+      evidence_refs: opts.evidenceRefs ?? [],
+      policy_refs: [], // policy projection lands later in phase 2
+      next_action: opts.nextAction,
+      feedback: opts.feedback,
+      override: opts.override,
+      failure_tags: opts.failureTags,
+      // 账本可见逐轮消耗：每条决策携带落账时的预算快照。
+      budget: budget ?? undefined,
       created_at: now,
     };
     await this.deps.runLedgerStore.appendDecisionEntry(runId, entry);
 
+    const from = record.state;
     const updated: RunStateRecord = {
       ...record,
-      state: target,
-      pending_approval: null,
+      ...opts.patch,
+      state: to,
       updated_at: now,
     };
     await this.deps.runStateStore.save(loopId, updated);
-    this.statesByRunId.set(runId, target);
-    this.pending.delete(runId);
+    this.statesByRunId.set(runId, to);
+    this.runIndex.set(runId, loopId);
 
     this.deps.eventBus?.emit({
       type: "loop-state-changed",
       loop_id: loopId,
       run_id: runId,
-      from_state: "needs_human",
-      to_state: target,
+      from_state: from,
+      to_state: to,
       turn: record.turn,
-      reason: reasonByAction[action],
+      reason: opts.reason,
       timestamp: now,
     });
 
+    return { record: updated, entry, idempotent: false };
+  }
+
+  /**
+   * Which budget fields are exhausted. `completedTurns` is the number of
+   * finished turns (max_turns 含首轮: starting another turn requires
+   * completedTurns < max_turns). max_tokens == 0 means untracked.
+   */
+  private exhaustedFields(budget: Budget, completedTurns: number): string[] {
+    const exhausted: string[] = [];
+    if (completedTurns >= budget.max_turns) {
+      exhausted.push(`max_turns (${completedTurns}/${budget.max_turns})`);
+    }
+    if (budget.used_retries >= budget.max_retries) {
+      exhausted.push(
+        `max_retries (${budget.used_retries}/${budget.max_retries})`,
+      );
+    }
+    if (budget.used_time_minutes >= budget.max_time_minutes) {
+      exhausted.push(
+        `max_time_minutes (${budget.used_time_minutes}/${budget.max_time_minutes})`,
+      );
+    }
+    if (budget.max_tokens > 0 && budget.used_tokens >= budget.max_tokens) {
+      exhausted.push(`max_tokens (${budget.used_tokens}/${budget.max_tokens})`);
+    }
+    return exhausted;
+  }
+
+  /**
+   * Pre-turn budget fields (beginTurn): turns / time / tokens only — see
+   * the beginTurn call-site comment for why retries are excluded here.
+   */
+  private exhaustedAtTurnStart(budget: Budget): string[] {
+    const exhausted: string[] = [];
+    if (budget.used_turns >= budget.max_turns) {
+      exhausted.push(`max_turns (${budget.used_turns}/${budget.max_turns})`);
+    }
+    if (budget.used_time_minutes >= budget.max_time_minutes) {
+      exhausted.push(
+        `max_time_minutes (${budget.used_time_minutes}/${budget.max_time_minutes})`,
+      );
+    }
+    if (budget.max_tokens > 0 && budget.used_tokens >= budget.max_tokens) {
+      exhausted.push(`max_tokens (${budget.used_tokens}/${budget.max_tokens})`);
+    }
+    return exhausted;
+  }
+
+  private notifyResume(signal: ResumeSignal): void {
+    for (const listener of this.resumeListeners) {
+      try {
+        listener(signal);
+      } catch (error) {
+        console.error("[ControlPlane] resume listener error:", error);
+      }
+    }
+  }
+
+  private notifyResolved(runId: string, state: RunState): void {
     for (const listener of this.resolvedListeners) {
       try {
-        listener(runId, target);
+        listener(runId, state);
       } catch (error) {
         console.error("[ControlPlane] resolved listener error:", error);
       }
     }
+  }
 
-    return updated;
+  /** Locate a run's state record by run_id (index first, then a file scan). */
+  private async findRun(
+    runId: string,
+  ): Promise<{ loopId: string; record: RunStateRecord } | null> {
+    const loopId = this.runIndex.get(runId);
+    if (loopId) {
+      const record = await this.deps.runStateStore.load(loopId);
+      if (record && (record.run_id === runId || record.run_id === "")) {
+        return { loopId, record };
+      }
+    }
+    const states = await this.deps.runStateStore.list();
+    for (const state of states) {
+      if (state.state.run_id === runId) {
+        this.runIndex.set(runId, state.loopId);
+        return { loopId: state.loopId, record: state.state };
+      }
+    }
+    return null;
   }
 
   /**
@@ -359,6 +831,7 @@ export class ControlPlane {
           loopId,
           requestId: state.pending_approval.request_id,
         });
+        this.runIndex.set(runId, loopId);
         return { loopId, record: state };
       }
     }

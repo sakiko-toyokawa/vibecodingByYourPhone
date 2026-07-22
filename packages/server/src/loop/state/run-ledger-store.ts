@@ -134,7 +134,10 @@ export class RunLedgerStore {
   }
 
   /**
-   * Read the run_ledger_entry for a run. Corrupt lines are skipped with a
+   * Read the run_ledger_entry for a run. A run appends one entry per turn
+   * (02 §8.1: 每次 retry 产生独立 entry) — this returns the LAST valid
+   * entry, i.e. the latest turn's, whose final_status reflects the run's
+   * most recent control decision. Corrupt lines are skipped with a
    * warning; an entry that fails schema validation is treated as absent.
    */
   async readEntry(runId: string): Promise<RunLedgerEntry | null> {
@@ -152,6 +155,7 @@ export class RunLedgerStore {
       throw error;
     }
 
+    let latest: RunLedgerEntry | null = null;
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
       if (!trimmed) {
@@ -178,12 +182,12 @@ export class RunLedgerStore {
             `[RunLedgerStore] run_ledger_entry in runs/${runId}.jsonl failed schema validation:`,
             result.error,
           );
-          return null;
+          continue;
         }
-        return result.data;
+        latest = result.data;
       }
     }
-    return null;
+    return latest;
   }
 
   /**

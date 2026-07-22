@@ -1,31 +1,44 @@
 /**
- * Phase-1 control decision (spec: docs/spec/05-分阶段计划.md 阶段 1
- * "最小四状态推进" + 02-schema契约.md §6/§7).
+ * Phase-2 control decision (spec: docs/spec/05-分阶段计划.md 阶段 2,
+ * 02-schema契约.md §6/§7, loop-engineering/control-plane/状态机.md).
  *
- * Input: the aggregated judgment_report plus minimal run context.
- * Output: which of the phase-1 states the run moves to.
+ * Input: the aggregated judgment_report plus run context (execution result,
+ * budget headroom). Output: which state the run moves to from `active`.
  *
- * Phase-1 decision table (no automatic retry — retry / budget_limited are
- * owned by the phase-2 state machine):
+ * Phase-2 decision table (state machine slice: retry / budget_limited are
+ * decided here; policy_blocked / bypass_used arrive with policy projection):
  *
- * | execution | verification / judgment                    | decision    |
- * |-----------|--------------------------------------------|-------------|
- * | failed    | (any)                                      | failed      |
- * | ok        | not run (card requires no phases)          | complete    |
- * | ok        | overall == passed && !requires_human       | complete    |
- * | ok        | overall == passed && requires_human        | needs_human |
- * | ok        | overall failed / inconclusive (any reason) | needs_human |
+ * | execution | verification / judgment                          | decision       |
+ * |-----------|--------------------------------------------------|----------------|
+ * | failed    | (any)                                            | failed         |
+ * | ok        | not run (card requires no phases)                | complete       |
+ * | ok        | overall == passed && !requires_human             | complete       |
+ * | ok        | requires_human (any overall)                     | needs_human    |
+ * | ok        | overall == failed && retryable && budget 有余量  | retry          |
+ * | ok        | overall == failed && retryable && budget 耗尽    | budget_limited |
+ * | ok        | failed && !retryable / inconclusive / escalate   | needs_human    |
  *
- * requires_human is never overridden by a passing verdict (02 §6 aggregation
- * rule: 人工透传优先级最高). A failed/inconclusive judgment with a retry
- * recommendation still goes to needs_human — phase 1 has no auto retry, so
- * a human decides whether the run stands (approve/reject/request_changes).
+ * Rules behind the table:
+ * - requires_human is never overridden by a passing verdict (02 §6 aggregation
+ *   rule: 人工透传优先级最高).
+ * - retry only when the judgment says retryable AND the run's budget still
+ *   has headroom for another turn (max_turns 含首轮、max_retries 不含首轮,
+ *   先触者停 — 预算与停止规则.md). A retryable failure with an exhausted
+ *   budget is budget_limited (状态机.md: active --预算耗尽--> budget_limited),
+ *   not needs_human: there is a well-defined automatic path, just no budget.
+ * - failed && !retryable / inconclusive judgments escalate to needs_human —
+ *   no automatic path exists, a human decides whether the run stands.
  */
 
 import type { JudgmentReport } from "@yep-anywhere/shared";
 
-/** The only states the phase-1 control decision can produce. */
-export type ControlDecisionKind = "complete" | "needs_human" | "failed";
+/** The states the phase-2 control decision can produce (from `active`). */
+export type ControlDecisionKind =
+  | "complete"
+  | "retry"
+  | "needs_human"
+  | "failed"
+  | "budget_limited";
 
 export interface ControlDecisionContext {
   /** Whether the run's execution turn succeeded (executor exit ok). */
@@ -34,6 +47,13 @@ export interface ControlDecisionContext {
   verificationRan: boolean;
   /** Aggregated judgment_report; null when verification did not run. */
   judgment: JudgmentReport | null;
+  /**
+   * Whether the run's budget allows another turn (turn / retry / token /
+   * time all have headroom). Computed by the control-plane from the run's
+   * accumulated budget snapshot before deciding; false turns a retryable
+   * failure into budget_limited instead of retry.
+   */
+  canRetry: boolean;
 }
 
 export interface ControlDecision {
@@ -46,7 +66,7 @@ export function decideControl(ctx: ControlDecisionContext): ControlDecision {
     return {
       kind: "failed",
       reason:
-        "execution failed; phase 1 treats a crashed turn as an unrecoverable error (02 §7: active → failed)",
+        "execution failed; a crashed turn is an unrecoverable error (02 §7: active → failed)",
     };
   }
 
@@ -58,13 +78,6 @@ export function decideControl(ctx: ControlDecisionContext): ControlDecision {
   }
 
   const judgment = ctx.judgment;
-  if (judgment.overall === "passed" && !judgment.requires_human) {
-    return {
-      kind: "complete",
-      reason: "judgment overall == passed",
-    };
-  }
-
   if (judgment.requires_human) {
     return {
       kind: "needs_human",
@@ -72,8 +85,30 @@ export function decideControl(ctx: ControlDecisionContext): ControlDecision {
     };
   }
 
+  if (judgment.overall === "passed") {
+    return {
+      kind: "complete",
+      reason: "judgment overall == passed",
+    };
+  }
+
+  if (judgment.overall === "failed" && judgment.retryable) {
+    if (ctx.canRetry) {
+      return {
+        kind: "retry",
+        reason:
+          "judgment overall == failed and retryable; budget has headroom for another turn (状态机.md: active → retry)",
+      };
+    }
+    return {
+      kind: "budget_limited",
+      reason:
+        "judgment overall == failed and retryable, but the run's budget is exhausted (状态机.md: active --预算耗尽--> budget_limited; max_turns / max_retries 先触者停)",
+    };
+  }
+
   return {
     kind: "needs_human",
-    reason: `judgment overall == ${judgment.overall} (next_action: ${judgment.next_action}); phase 1 has no automatic retry — escalating to needs_human`,
+    reason: `judgment overall == ${judgment.overall}, not automatically retryable (next_action: ${judgment.next_action}); escalating to needs_human`,
   };
 }

@@ -472,6 +472,12 @@ export {
   IntentContractSchema,
 } from "./loop-schema/intent-contract.js";
 export {
+  type Budget,
+  BudgetSchema,
+  type BudgetLimits,
+  BudgetLimitsSchema,
+} from "./loop-schema/budget.js";
+export {
   type FailureTag,
   FailureTagSchema,
   type RunLedgerEntry,

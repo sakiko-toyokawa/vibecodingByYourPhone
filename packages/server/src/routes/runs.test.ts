@@ -17,9 +17,9 @@ import { createRunsRoutes } from "./runs.js";
 
 const JUDGMENT: JudgmentReport = {
   overall: "failed",
-  next_action: "retry",
-  retryable: true,
-  requires_human: false,
+  next_action: "needs_human",
+  retryable: false,
+  requires_human: true,
   evidence: ["artifact://run-1/verifier-reports.json"],
   unresolved_risks: ["lint errors"],
 };
@@ -115,6 +115,13 @@ async function seedNeedsHumanRun(
     judgment: JUDGMENT,
     judgmentRef: `artifact://${runId}/judgment-report.json`,
     createdAt: new Date().toISOString(),
+    budget: {
+      max_tokens: 0,
+      max_time_minutes: 30,
+      max_turns: 3,
+      max_retries: 2,
+    },
+    usage: { tokens: null, timeMinutes: 1 },
   });
   assert.equal(applied.state, "needs_human");
 }
@@ -127,7 +134,7 @@ function postDecision(app: Hono, runId: string, body: unknown) {
   });
 }
 
-test("needs_human run accepts approve → 200 complete + override落账; replay → 409 invalid_state", async () => {
+test("needs_human run accepts approve → 200 active + override落账（阶段 2 恢复执行）; replay → 409 invalid_state", async () => {
   await withFixture(async ({ app, controlPlane, ledgerStore }) => {
     await seedNeedsHumanRun(controlPlane, ledgerStore);
 
@@ -139,12 +146,13 @@ test("needs_human run accepts approve → 200 complete + override落账; replay 
     const body = (await res.json()) as {
       run_state: { state: string; pending_approval: unknown };
     };
-    assert.equal(body.run_state.state, "complete");
+    // 阶段 2 完整迁移表：approve → active（携带人工响应恢复执行）
+    assert.equal(body.run_state.state, "active");
     assert.equal(body.run_state.pending_approval, null);
 
     const decisions = await ledgerStore.readDecisionEntries("run-1");
     const human = at(decisions, decisions.length - 1);
-    assert.equal(human.decision, "complete");
+    assert.equal(human.decision, "resumed");
     assert.equal(
       human.override?.original_judgment_ref,
       "artifact://run-1/judgment-report.json",
@@ -220,8 +228,8 @@ test("GET /:id ledger_summary carries the judgment_report 摘要 and decision re
     );
     assert.deepEqual(body.ledger_summary.judgment_summary, {
       overall: "failed",
-      next_action: "retry",
-      requires_human: false,
+      next_action: "needs_human",
+      requires_human: true,
     });
     assert.deepEqual(body.ledger_summary.decision_refs, [
       "ledger://decision-run-1",

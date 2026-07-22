@@ -86,6 +86,24 @@ test("multiple appends land as separate lines in order", async () => {
   });
 });
 
+test("readEntry returns the latest turn's entry for multi-turn runs", async () => {
+  await withTempDir(async (dataDir) => {
+    const store = new RunLedgerStore({ dataDir });
+    await store.appendEntry("run-1", {
+      ...makeEntry("run-1"),
+      final_status: "retry",
+    });
+    await store.appendEntry("run-1", {
+      ...makeEntry("run-1"),
+      final_status: "complete",
+    });
+
+    // 02 §8.1: 每次 retry 产生独立 entry；readEntry 以最后一轮为准
+    const read = await store.readEntry("run-1");
+    assert.equal(read?.final_status, "complete");
+  });
+});
+
 test("readEntry skips corrupt lines and still finds the entry", async () => {
   await withTempDir(async (dataDir) => {
     const store = new RunLedgerStore({ dataDir });

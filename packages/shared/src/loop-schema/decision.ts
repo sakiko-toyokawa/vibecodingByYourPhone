@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BudgetSchema } from "./budget.js";
 import { FailureTagSchema } from "./run-ledger.js";
 
 /**
@@ -21,6 +22,12 @@ import { FailureTagSchema } from "./run-ledger.js";
  *   条目（05 阶段 1 验收 4："失败写入账本且归因词汇符合失败模式账本"）。
  *   02 §8.2 未预留该字段；learning_event.failure_tags（§8.4）属阶段 3，
  *   这里沿用同一 FailureTagSchema 枚举，不另造同义词。
+ * - `decision` 枚举补 `resumed`（阶段 2）：02 §8.2 的 8 值枚举没有承载
+ *   "阻塞态恢复到 active"的词汇（retry→active、needs_human→active、
+ *   paused→active、budget_limited→active 都是合法转移且须落账可审计）。
+ *   新增一值而非滥用 retry / bypass_used 语义。
+ * - `budget`（阶段 2）：落账时 run 的预算快照，决策账本由此可见逐轮
+ *   消耗（05 阶段 2 验收 2 "账本能逐轮看到 budget 消耗"）。
  */
 export const DecisionKindSchema = z.enum([
   "retry",
@@ -31,6 +38,7 @@ export const DecisionKindSchema = z.enum([
   "budget_limited",
   "policy_blocked",
   "bypass_used",
+  "resumed",
 ]);
 export type DecisionKind = z.infer<typeof DecisionKindSchema>;
 
@@ -64,6 +72,8 @@ export const DecisionEntrySchema = z.object({
   override: DecisionOverrideSchema.optional(),
   // adapter 硬错误（02 §4）终止 run 时的失败归因（失败模式账本词汇）
   failure_tags: z.array(FailureTagSchema).optional(),
+  // 落账时 run 的预算快照（阶段 2，见文件头注释）
+  budget: BudgetSchema.optional(),
   created_at: z.string().datetime(),
 });
 export type DecisionEntry = z.infer<typeof DecisionEntrySchema>;
