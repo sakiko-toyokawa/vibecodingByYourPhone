@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 268 50">
+  <!-- Light theme lockup: icon + yep[checkmark]anywhere -->
+  <!-- App icon -->
+  <rect x="0" y="1" width="48" height="48" rx="10" fill="#16a34a" />
+  <path
+    d="M 11.2 14 L 20 25 L 36.8 8"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M 20 25 L 20 38"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="4"
+    stroke-linecap="round"
+  />
+  <!-- Text -->
+  <text
+    x="62"
+    y="34"
+    style="font-family: 'Inter', system-ui, sans-serif; font-size: 28px; font-weight: 700; letter-spacing: -1.5px;"
+    fill="#16a34a"
+  >yep</text>
+  <path
+    d="M 116 16 L 122 22 L 132 10"
+    fill="none"
+    stroke="#16a34a"
+    stroke-width="2.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.5"
+  />
+  <text
+    x="138"
+    y="34"
+    style="font-family: 'Inter', system-ui, sans-serif; font-size: 28px; font-weight: 700; letter-spacing: -1.5px;"
+    fill="#171717"
+  >anywhere</text>
+</svg>

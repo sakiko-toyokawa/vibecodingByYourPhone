@@ -1,0 +1,617 @@
+@import "tailwindcss";
+@import "./provider-animations.css" layer(components);
+@import "./renderers.css" layer(components);
+@source "..";
+
+@layer base {
+  html {
+    overflow-x: hidden;
+  }
+
+  body {
+    font-family: var(--font-body), -apple-system, BlinkMacSystemFont, "Segoe UI",
+      Roboto, sans-serif;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    line-height: 1.6;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display), var(--font-body), -apple-system,
+      BlinkMacSystemFont, sans-serif;
+    line-height: 1.2;
+    font-weight: 500;
+  }
+
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    line-height: 1.3;
+  }
+
+  code,
+  pre {
+    font-family: var(--font-mono);
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 bg-[#191919] text-[#faf9f5] rounded-md text-sm font-medium transition-opacity duration-150;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    @apply opacity-90;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-primary)] rounded-md text-sm transition-colors duration-150;
+  }
+
+  .btn-secondary:hover {
+    @apply bg-[var(--border-color)];
+  }
+
+  .btn-ghost {
+    @apply cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] transition-colors duration-150 bg-transparent hover:bg-[var(--bg-hover)];
+  }
+
+  .btn-icon {
+    @apply flex cursor-pointer items-center justify-center rounded-full bg-transparent p-1 text-[var(--text-muted)] transition-colors duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)];
+  }
+}
+
+:root {
+  /* Brand Colors (theme-agnostic) */
+  --accent-rust: #99462a;
+  --accent-rust-dark: #7a3720;
+  --app-claude-orange: #d97706;
+
+  /* Provider Colors (theme-agnostic) */
+  --provider-claude: var(--app-claude-orange);
+  --provider-codex: #10a37f;
+  --provider-gemini: #4285f4;
+  --provider-opencode: #9333ea;
+
+  /* Semantic Colors */
+  --thinking-color: var(--app-claude-orange);
+
+  /* Typography */
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-display: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Monaco, "Cascadia Code", Consolas,
+    monospace;
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-base: 16px;
+  --font-size-lg: 18px;
+  --tab-size: 2;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* Safe Area (for mobile notch/punch-hole screens) */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+
+  /* Spinner */
+  --app-spinner-foreground: var(--thinking-color);
+
+  /* Light Theme (default - unified literary-tech style) */
+  color-scheme: light;
+
+  /* Backgrounds (Design.md: surface system) */
+  --bg-surface: #fbf9f2;
+  --bg-secondary: #f5f4ed;
+  --bg-tertiary: #f0eee7;
+  --bg-hover: #eae8e1;
+  --bg-code: #f0efe9;
+  --bg-input: #ffffff;
+  --bg-overlay: rgba(0, 0, 0, 0.3);
+  --bg-user-message: #e8e7e2;
+
+  /* Text Colors (Design.md: on-surface system) */
+  --text-primary: #1b1c18;
+  --text-secondary: #444748;
+  --text-muted: #747878;
+  --text-dimmed: #8a8a8a;
+
+  /* Border Colors (Design.md: outline at 10% opacity) */
+  --border-color: rgba(27, 28, 24, 0.1);
+  --border-subtle: #e4e2dc;
+  --border-input: #c4c7c7;
+
+  /* Semantic Colors */
+  --link-color: #0066cc;
+  --error-color: #ba1a1a;
+  --success-color: #1a7f37;
+  --warning-color: #9a6700;
+  --warning-badge-bg: #c2410c;
+  --attention-color: #0066cc;
+  --focus-border: var(--accent-rust);
+  --primary-color: #2563eb;
+  --error-hover: #93000a;
+
+  /* Timeline */
+  --timeline-dot-default: #8a8a8a;
+  --timeline-dot-tool: #1a7f37;
+  --timeline-dot-error: #ba1a1a;
+  --timeline-dot-warning: #9a6700;
+  --timeline-dot-working: #d97757;
+  --timeline-line-color: #d4d3ce;
+
+  /* Status Colors */
+  --status-badge-idle-bg: #e8e7e2;
+  --status-badge-idle-text: #5a5a5a;
+  --status-badge-owned-bg: #d4f5d4;
+  --status-badge-owned-text: #1a7f37;
+  --status-badge-external-bg: #fff3cd;
+  --status-badge-external-text: #9a6700;
+  --status-badge-running-bg: #fde5d8;
+  --status-badge-running-text: #c6613f;
+  --status-badge-input-bg: #dbeafe;
+  --status-badge-input-text: #2563eb;
+
+  /* Shiki Syntax Highlighting (GitHub Light inspired) */
+  --shiki-foreground: #24292e;
+  --shiki-background: transparent;
+  --shiki-token-constant: #005cc5;
+  --shiki-token-string: #032f62;
+  --shiki-token-comment: #6a737d;
+  --shiki-token-keyword: #d73a49;
+  --shiki-token-parameter: #e36209;
+  --shiki-token-function: #6f42c1;
+  --shiki-token-string-expression: #22863a;
+  --shiki-token-punctuation: #24292e;
+  --shiki-token-link: #005cc5;
+  --shiki-token-deleted: #d73a49;
+  --shiki-token-inserted: #22863a;
+
+  /* Aliases for backward compatibility */
+  --bg-elevated: var(--bg-secondary);
+  --bg-subtle: var(--bg-hover);
+  --bg-active: var(--bg-hover);
+  --bg-muted: var(--bg-tertiary);
+  --bg-error: rgba(186, 26, 26, 0.1);
+  --bg-success: rgba(26, 127, 55, 0.15);
+  --bg-warning: rgba(154, 103, 0, 0.15);
+  --bg-diff-added: var(--bg-success);
+  --bg-diff-inserted: var(--bg-success);
+  --bg-diff-deleted: var(--bg-error);
+  --bg-diff-removed: var(--bg-error);
+  --border-hover: var(--border-subtle);
+  --border-muted: var(--border-subtle);
+  --accent-color: var(--accent-rust);
+  --accent-primary: var(--accent-rust);
+  --accent-star: var(--accent-rust);
+  --color-success: var(--success-color);
+  --color-error: var(--error-color);
+  --color-warning: var(--warning-color);
+  --text-diff-added: var(--success-color);
+  --text-diff-removed: var(--error-color);
+  --text-error: var(--error-color);
+
+  /* Material-style aliases used by newer editor surfaces */
+  --surface: var(--bg-surface);
+  --surface-dim: var(--bg-secondary);
+  --surface-bright: var(--bg-surface);
+  --surface-container-lowest: var(--bg-surface);
+  --surface-container-low: var(--bg-secondary);
+  --surface-container: var(--bg-tertiary);
+  --surface-container-high: var(--bg-hover);
+  --surface-container-highest: var(--bg-hover);
+  --on-surface: var(--text-primary);
+  --on-surface-variant: var(--text-secondary);
+  --outline: var(--border-input);
+  --outline-variant: var(--border-subtle);
+  --surface-tint: #5f5e5e;
+  --primary: #000000;
+  --on-primary: #ffffff;
+  --background: var(--bg-surface);
+  --on-background: var(--text-primary);
+  --surface-variant: var(--bg-hover);
+}
+
+/* ============================================================================
+   Codex Theme — Obsidian & Veridian dark palette
+   ============================================================================ */
+
+[data-theme="codex"] {
+  color-scheme: dark;
+
+  /* Typography — Obsidian & Veridian uses Inter for all levels */
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+
+  /* Backgrounds */
+  --bg-surface: #1a1b26;
+  --bg-secondary: #20212e;
+  --bg-tertiary: #262736;
+  --bg-hover: #2e2f3f;
+  --bg-code: #13141d;
+  --bg-input: #20212e;
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+  --bg-user-message: #262736;
+
+  /* Text Colors */
+  --text-primary: #f1efff;
+  --text-secondary: #c4c2d6;
+  --text-muted: #9492a8;
+  --text-dimmed: #6e6c82;
+
+  /* Border Colors */
+  --border-color: rgba(255, 255, 255, 0.06);
+  --border-subtle: #2e2f3f;
+  --border-input: #3e3d52;
+
+  /* Semantic Colors */
+  --link-color: #98d4ac;
+  --error-color: #ffb4ab;
+  --success-color: #98d4ac;
+  --warning-color: #fbbc04;
+  --warning-badge-bg: #c2410c;
+  --attention-color: #98d4ac;
+  --focus-border: #98d4ac;
+  --primary-color: #98d4ac;
+
+  /* Accent overrides */
+  --accent-rust: #98d4ac;
+  --accent-rust-dark: #004225;
+  --app-claude-orange: #98d4ac;
+
+  /* Thinking & Spinner */
+  --thinking-color: #98d4ac;
+  --app-spinner-foreground: #98d4ac;
+
+  /* Timeline */
+  --timeline-dot-default: #9492a8;
+  --timeline-dot-tool: #98d4ac;
+  --timeline-dot-error: #ffb4ab;
+  --timeline-dot-warning: #fbbc04;
+  --timeline-dot-working: #98d4ac;
+  --timeline-line-color: #3e3d52;
+
+  /* Status Colors */
+  --status-badge-idle-bg: #2e2f3f;
+  --status-badge-idle-text: #c4c2d6;
+  --status-badge-owned-bg: rgba(152, 212, 172, 0.12);
+  --status-badge-owned-text: #98d4ac;
+  --status-badge-external-bg: rgba(251, 188, 4, 0.12);
+  --status-badge-external-text: #fbbc04;
+  --status-badge-running-bg: rgba(152, 212, 172, 0.12);
+  --status-badge-running-text: #98d4ac;
+  --status-badge-input-bg: rgba(152, 212, 172, 0.12);
+  --status-badge-input-text: #98d4ac;
+
+  /* Shiki Syntax Highlighting */
+  --shiki-foreground: #c9d1d9;
+  --shiki-background: transparent;
+  --shiki-token-constant: #79c0ff;
+  --shiki-token-string: #a5d6ff;
+  --shiki-token-comment: #8b949e;
+  --shiki-token-keyword: #ff7b72;
+  --shiki-token-parameter: #ffa657;
+  --shiki-token-function: #d2a8ff;
+  --shiki-token-string-expression: #98d4ac;
+  --shiki-token-punctuation: #c9d1d9;
+  --shiki-token-link: #98d4ac;
+  --shiki-token-deleted: #ffdcd7;
+  --shiki-token-inserted: #aff5b4;
+
+  /* Aliases */
+  --bg-elevated: var(--bg-secondary);
+  --bg-subtle: var(--bg-hover);
+  --bg-active: var(--bg-hover);
+  --bg-muted: var(--bg-tertiary);
+  --bg-error: rgba(255, 180, 171, 0.12);
+  --bg-success: rgba(152, 212, 172, 0.12);
+  --bg-warning: rgba(251, 188, 4, 0.12);
+  --bg-diff-added: var(--bg-success);
+  --bg-diff-inserted: var(--bg-success);
+  --bg-diff-deleted: var(--bg-error);
+  --bg-diff-removed: var(--bg-error);
+  --border-hover: var(--border-subtle);
+  --border-muted: var(--border-subtle);
+  --accent-color: var(--accent-rust);
+  --accent-primary: var(--accent-rust);
+  --accent-star: var(--accent-rust);
+  --color-success: var(--success-color);
+  --color-error: var(--error-color);
+  --color-warning: var(--warning-color);
+  --text-diff-added: var(--success-color);
+  --text-diff-removed: var(--error-color);
+  --text-error: var(--error-color);
+  --error-hover: #ff8a80;
+  --primary: #98d4ac;
+  --on-primary: #1a1b26;
+}
+
+/* Button overrides for codex theme */
+[data-theme="codex"] .btn-primary {
+  background: #98d4ac;
+  color: #1a1b26;
+}
+
+[data-theme="codex"] .btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+[data-theme="codex"] .btn-secondary {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+[data-theme="codex"] .btn-secondary:hover {
+  background: var(--border-subtle);
+}
+
+/* ============================================================================
+   Gemini Theme — Light futuristic palette
+   ============================================================================ */
+
+[data-theme="gemini"] {
+  color-scheme: light;
+
+  /* Typography — Lumina Future uses Space Grotesk for display, Be Vietnam Pro for body */
+  --font-body: "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-display: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-sans: "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+
+  /* Backgrounds */
+  --bg-surface: #f8f9fa;
+  --bg-secondary: #f3f4f5;
+  --bg-tertiary: #edeeef;
+  --bg-hover: #e7e8e9;
+  --bg-code: #ffffff;
+  --bg-input: #ffffff;
+  --bg-overlay: rgba(0, 0, 0, 0.2);
+  --bg-user-message: #edeeef;
+
+  /* Text Colors */
+  --text-primary: #191c1d;
+  --text-secondary: #414754;
+  --text-muted: #727785;
+  --text-dimmed: #727785;
+
+  /* Border Colors */
+  --border-color: rgba(25, 28, 29, 0.08);
+  --border-subtle: #e1e3e4;
+  --border-input: #c1c6d6;
+
+  /* Semantic Colors — Blue accent */
+  --link-color: #005bc0;
+  --error-color: #ba1a1a;
+  --success-color: #1a7f37;
+  --warning-color: #9a6700;
+  --warning-badge-bg: #c2410c;
+  --attention-color: #005bc0;
+  --focus-border: #005bc0;
+  --primary-color: #005bc0;
+
+  /* Accent overrides */
+  --accent-rust: #005bc0;
+  --accent-rust-dark: #004493;
+  --app-claude-orange: #005bc0;
+
+  /* Thinking & Spinner */
+  --thinking-color: #005bc0;
+  --app-spinner-foreground: #005bc0;
+
+  /* Timeline */
+  --timeline-dot-default: #727785;
+  --timeline-dot-tool: #1a73e8;
+  --timeline-dot-error: #ba1a1a;
+  --timeline-dot-warning: #9a6700;
+  --timeline-dot-working: #005bc0;
+  --timeline-line-color: #c1c6d6;
+
+  /* Status Colors */
+  --status-badge-idle-bg: #e7e8e9;
+  --status-badge-idle-text: #414754;
+  --status-badge-owned-bg: #d4f5d4;
+  --status-badge-owned-text: #1a7f37;
+  --status-badge-external-bg: #fff3cd;
+  --status-badge-external-text: #9a6700;
+  --status-badge-running-bg: #fde5d8;
+  --status-badge-running-text: #c6613f;
+  --status-badge-input-bg: #dbeafe;
+  --status-badge-input-text: #005bc0;
+
+  /* Shiki Syntax Highlighting (GitHub Light) */
+  --shiki-foreground: #24292e;
+  --shiki-background: transparent;
+  --shiki-token-constant: #005cc5;
+  --shiki-token-string: #032f62;
+  --shiki-token-comment: #6a737d;
+  --shiki-token-keyword: #d73a49;
+  --shiki-token-parameter: #e36209;
+  --shiki-token-function: #6f42c1;
+  --shiki-token-string-expression: #22863a;
+  --shiki-token-punctuation: #24292e;
+  --shiki-token-link: #005cc5;
+  --shiki-token-deleted: #d73a49;
+  --shiki-token-inserted: #22863a;
+
+  /* Aliases */
+  --bg-elevated: var(--bg-secondary);
+  --bg-subtle: var(--bg-hover);
+  --bg-active: var(--bg-hover);
+  --bg-muted: var(--bg-tertiary);
+  --bg-error: rgba(186, 26, 26, 0.1);
+  --bg-success: rgba(26, 127, 55, 0.15);
+  --bg-warning: rgba(154, 103, 0, 0.15);
+  --bg-diff-added: var(--bg-success);
+  --bg-diff-inserted: var(--bg-success);
+  --bg-diff-deleted: var(--bg-error);
+  --bg-diff-removed: var(--bg-error);
+  --border-hover: var(--border-subtle);
+  --border-muted: var(--border-subtle);
+  --accent-color: var(--accent-rust);
+  --accent-primary: var(--accent-rust);
+  --accent-star: var(--accent-rust);
+  --color-success: var(--success-color);
+  --color-error: var(--error-color);
+  --color-warning: var(--warning-color);
+  --text-diff-added: var(--success-color);
+  --text-diff-removed: var(--error-color);
+  --text-error: var(--error-color);
+  --primary: #005bc0;
+
+  /* Radius overrides per Lumina Future spec */
+  --radius-xl: 1.5rem;
+}
+
+/* Button overrides for gemini theme */
+[data-theme="gemini"] .btn-primary {
+  background: #005bc0;
+  color: #ffffff;
+}
+
+[data-theme="gemini"] .btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+[data-theme="gemini"] .btn-secondary {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+[data-theme="gemini"] .btn-secondary:hover {
+  background: var(--border-subtle);
+}
+
+/* Session page layout */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Keyframe used by StatusBadge.tsx */
+@keyframes pulse-blue {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(102, 170, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(102, 170, 255, 0);
+  }
+}
+
+@keyframes blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-indicator {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Keyframe used by Toast.tsx */
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Keyframe used by RemoteAccessSetup.tsx */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes connection-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}

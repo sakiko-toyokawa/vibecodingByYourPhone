@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -e
+
+VERSION="$1"
+
+if [ -z "$VERSION" ]; then
+  echo "Usage: $0 <version>"
+  exit 1
+fi
+
+if [[ ! "$VERSION" =~ ^[0-9] ]]; then
+  echo "Error: Version must start with a number (e.g., 1.0.0, not v1.0.0)"
+  exit 1
+fi
+
+# Fail if working tree is dirty (avoid releasing with uncommitted changes)
+if ! git diff-index --quiet HEAD --; then
+  echo "Error: Working tree has uncommitted changes. Please commit or stash first."
+  git diff --stat
+  exit 1
+fi
+
+TAG="site-v${VERSION}"
+
+# Verify changelog has an entry for this version
+if ! grep -q "## \[${TAG}\]" site/CHANGELOG.md; then
+  echo "Error: No changelog entry found for ${TAG} in site/CHANGELOG.md"
+  echo "Add an entry like:"
+  echo ""
+  echo "  ## [${TAG}] - $(date +%Y-%m-%d)"
+  echo ""
+  exit 1
+fi
+
+git tag "$TAG"
+git push origin "$TAG"
+
+echo "Created and pushed tag $TAG"

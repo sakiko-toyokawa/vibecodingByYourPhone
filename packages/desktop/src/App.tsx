@@ -1,0 +1,37 @@
+import { useEffect, useState } from "react";
+import { getConfig, type AppConfig } from "./tauri";
+import { WizardLayout } from "./wizard/WizardLayout";
+import { MainLayout } from "./main/MainLayout";
+
+export function App() {
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getConfig()
+      .then(setConfig)
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="desktop-wizard flex h-screen items-center justify-center">
+        <div className="text-[var(--wizard-text-secondary)]">Loading...</div>
+      </div>
+    );
+  }
+
+  if (config && config.setup_complete) {
+    return <MainLayout />;
+  }
+
+  return (
+    <div className="desktop-wizard h-screen">
+      <WizardLayout
+        onComplete={(newConfig) => {
+          setConfig(newConfig);
+        }}
+      />
+    </div>
+  );
+}

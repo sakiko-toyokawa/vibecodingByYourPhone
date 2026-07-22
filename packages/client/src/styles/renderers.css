@@ -1,0 +1,41 @@
+/* Renderer Styles for Message Content Blocks */
+
+/* ==========================================================================
+   Shared Animations
+   ========================================================================== */
+
+@keyframes blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   Local Media Links
+   ========================================================================== */
+
+/* Used by LocalMediaModal.tsx to capture clicks on server-rendered markdown links */
+.local-media-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   Shiki Highlighted Diff
+   ========================================================================== */
+
+/* Server-rendered diff highlighting (from edit-augments.ts) */
+.line-deleted {
+  background: var(--bg-diff-deleted, rgba(248, 81, 73, 0.15)) !important;
+}
+
+.line-inserted {
+  background: var(--bg-diff-inserted, rgba(63, 185, 80, 0.15)) !important;
+}

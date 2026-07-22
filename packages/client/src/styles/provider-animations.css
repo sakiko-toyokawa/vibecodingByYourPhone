@@ -1,0 +1,150 @@
+/* Provider-specific animations
+   Applied via .provider-anim-{name} class on <html> */
+
+/* ---------- CLAUDE — Soft Breathing ---------- */
+.provider-anim-claude .message-enter {
+  animation: claudeFadeIn 400ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes claudeFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.provider-anim-claude .thinking-dot {
+  animation: claudeBreath 2s ease-in-out infinite;
+}
+
+@keyframes claudeBreath {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.provider-anim-claude .send-button:hover {
+  box-shadow: 0 0 20px rgba(229, 112, 53, 0.3);
+}
+
+/* ---------- CODEX — Snappy Pop ---------- */
+.provider-anim-codex .message-enter {
+  animation: codexPopIn 250ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes codexPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.provider-anim-codex .thinking-dot {
+  animation: codexPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes codexPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
+}
+
+.provider-anim-codex .send-button {
+  transition: transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow
+    150ms ease;
+}
+.provider-anim-codex .send-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(25, 195, 125, 0.25);
+}
+
+/* ---------- GEMINI — Shimmer Flow ---------- */
+.provider-anim-gemini .message-enter {
+  animation: geminiShimmer 500ms cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+@keyframes geminiShimmer {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.provider-anim-gemini .thinking-dot {
+  animation: geminiOrbit 1.5s linear infinite;
+}
+
+@keyframes geminiOrbit {
+  0% {
+    transform: rotate(0deg) translateX(4px) rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg) translateX(4px) rotate(-360deg);
+  }
+}
+
+.provider-anim-gemini .send-button {
+  background: linear-gradient(135deg, #4285f4, #ea4335);
+  position: relative;
+  overflow: hidden;
+}
+.provider-anim-gemini .send-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #fbbc04, #34a853, #4285f4);
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+.provider-anim-gemini .send-button:hover::before {
+  opacity: 1;
+}
+
+/* ---------- OPENCODE — No Animation ---------- */
+.provider-anim-opencode .message-enter {
+  animation: none;
+}
+
+.provider-anim-opencode .thinking-dot {
+  animation: none;
+}
+
+.provider-anim-opencode .send-button {
+  transition: none;
+}
+.provider-anim-opencode .send-button:hover {
+  background-color: var(--accent-primary);
+  color: var(--bg-surface);
+}
+
+/* ---------- OpenCode Progress Bar ---------- */
+@keyframes opencodeProgress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}

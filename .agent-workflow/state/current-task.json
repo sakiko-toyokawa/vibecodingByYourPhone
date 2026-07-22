@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "task": {
+    "id": "",
+    "title": "",
+    "description": "",
+    "type": "feature",
+    "status": "idle",
+    "priority": "medium",
+    "createdAt": "",
+    "updatedAt": "",
+    "assignee": "coder",
+    "branch": "",
+    "baseBranch": "main"
+  },
+  "decomposition": {
+    "completed": false,
+    "steps": []
+  },
+  "coding": {
+    "completed": false,
+    "commits": [],
+    "prUrl": ""
+  },
+  "review": {
+    "round": 0,
+    "maxRounds": 3,
+    "status": "pending",
+    "lastResult": null,
+    "history": []
+  }
+}

@@ -1,0 +1,284 @@
+import type { ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { ThinkingIndicator } from "./ThinkingIndicator";
+
+/**
+ * Common SVG icons used in sidebar navigation.
+ * Extracted to avoid duplication across components.
+ */
+export const SidebarIcons = {
+  inbox: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+      <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+    </svg>
+  ),
+  projects: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </svg>
+  ),
+  agents: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="11" width="18" height="10" rx="2" />
+      <circle cx="12" cy="5" r="3" />
+      <path d="M12 8v3" />
+      <circle cx="8" cy="16" r="1" />
+      <circle cx="16" cy="16" r="1" />
+    </svg>
+  ),
+  settings: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  ),
+  allSessions: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+      <line x1="9" y1="21" x2="9" y2="9" />
+    </svg>
+  ),
+  newSession: (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="12" fill="var(--accent-rust)" />
+      <line
+        x1="12"
+        y1="7"
+        x2="12"
+        y2="17"
+        stroke="white"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <line
+        x1="7"
+        y1="12"
+        x2="17"
+        y2="12"
+        stroke="white"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  ),
+  sourceControl: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="6" y1="3" x2="6" y2="15" />
+      <circle cx="18" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <path d="M18 9a9 9 0 0 1-9 9" />
+    </svg>
+  ),
+  recents: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  ),
+  emulator: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+      <line x1="12" y1="18" x2="12" y2="18" />
+    </svg>
+  ),
+  older: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 8v13H3V8" />
+      <path d="M1 3h22v5H1z" />
+      <line x1="10" y1="12" x2="14" y2="12" />
+    </svg>
+  ),
+};
+
+export interface SidebarNavItemProps {
+  /** Route path to navigate to */
+  to: string;
+  /** Icon to display (use SidebarIcons or custom ReactNode) */
+  icon: ReactNode;
+  /** Label text */
+  label: string;
+  /** Optional badge count (displays if > 0) */
+  badge?: number;
+  /** Called when item is clicked (e.g., to close mobile sidebar) */
+  onClick?: () => void;
+  /** Title tooltip */
+  title?: string;
+  /** Whether this item has an unsent draft */
+  hasDraft?: boolean;
+  /** Show pulsing activity indicator (e.g., for active agents) */
+  hasActivityIndicator?: boolean;
+  /** Base path prefix for relay mode (e.g., "/remote/my-server") */
+  basePath?: string;
+  /** Whether the sidebar is collapsed to icon-only mode */
+  collapsed?: boolean;
+}
+
+/**
+ * Unified sidebar navigation item component.
+ * Provides consistent styling across NavigationSidebar and Sidebar.
+ */
+export function SidebarNavItem({
+  to,
+  icon,
+  label,
+  badge,
+  onClick,
+  title,
+  hasDraft,
+  hasActivityIndicator,
+  basePath = "",
+  collapsed = false,
+}: SidebarNavItemProps) {
+  const location = useLocation();
+  const fullPath = `${basePath}${to}`;
+  // Check if current path matches (with or without basePath prefix)
+  const isActive = location.pathname === fullPath || location.pathname === to;
+
+  return (
+    <Link
+      to={fullPath}
+      className={`group relative flex items-center no-underline transition-all duration-150 ${
+        collapsed ? "justify-center px-0 py-3" : "gap-3 px-3 py-2"
+      } ${
+        isActive
+          ? "bg-transparent text-[var(--text-primary)]"
+          : "bg-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]/40 hover:text-[var(--text-primary)]"
+      }`}
+      onClick={onClick}
+      title={title ?? label}
+    >
+      {isActive && (
+        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-[var(--accent-rust)]" />
+      )}
+      <span
+        className={`shrink-0 transition-colors ${
+          isActive
+            ? "text-[var(--text-primary)]"
+            : "text-[var(--text-muted)] group-hover:text-[var(--text-primary)]"
+        } ${collapsed ? "min-w-0" : "min-w-[16px]"}`}
+      >
+        {icon}
+      </span>
+      {!collapsed && (
+        <span className="flex-1 truncate text-[13px]">{label}</span>
+      )}
+      {hasDraft && (
+        <span className="shrink-0 rounded-full bg-[var(--warning-color)]/15 px-1.5 py-0.5 text-[10px] font-medium text-[var(--warning-color)]">
+          draft
+        </span>
+      )}
+      {!collapsed && hasActivityIndicator && <ThinkingIndicator />}
+      {badge !== undefined && badge > 0 && (
+        <span
+          className={`shrink-0 items-center justify-center rounded-full bg-[var(--accent-rust)] px-1.5 text-[10px] font-semibold text-white ${
+            collapsed
+              ? "absolute right-1 top-1 flex h-4 min-w-4"
+              : "ml-auto flex h-[18px] min-w-[18px]"
+          }`}
+        >
+          {badge}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+export interface SidebarNavSectionProps {
+  children: ReactNode;
+}
+
+/**
+ * Container for sidebar navigation items.
+ * Provides consistent spacing between items.
+ */
+export function SidebarNavSection({ children }: SidebarNavSectionProps) {
+  return <nav className="flex flex-col gap-0.5 px-2">{children}</nav>;
+}

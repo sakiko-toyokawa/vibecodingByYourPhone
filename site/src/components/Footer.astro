@@ -1,0 +1,19 @@
+---
+interface Props {
+  showPrivacy?: boolean;
+}
+
+const { showPrivacy = true } = Astro.props;
+---
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="https://github.com/kzahel/yepanywhere">GitHub</a>
+      <a href="https://www.npmjs.com/package/yepanywhere">npm</a>
+      <a href="https://github.com/kzahel/yepanywhere/issues">Issues</a>
+      {showPrivacy && <a href="/privacy">Privacy</a>}
+    </div>
+    <p>MIT License</p>
+  </div>
+</footer>

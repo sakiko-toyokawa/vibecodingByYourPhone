@@ -1,0 +1,26 @@
+{
+  "name": "@yep-anywhere/shared",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "tssrp6a": "^3.0.0",
+    "tweetnacl": "^1.0.3",
+    "zod": "^4.3.4"
+  }
+}

@@ -1,0 +1,139 @@
+name: Mobile CI
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'desktop-v*'
+      - 'mobile-v*'
+    paths:
+      - 'packages/mobile/**'
+      - 'packages/client/**'
+      - 'packages/shared/**'
+      - '.github/workflows/mobile-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/mobile/**'
+      - 'packages/client/**'
+      - 'packages/shared/**'
+      - '.github/workflows/mobile-ci.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Node.js + pnpm ---
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      # --- Java ---
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # --- Android SDK ---
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.0.11718014'
+
+      # --- Rust ---
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: 'aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android'
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './packages/mobile/src-tauri -> target'
+
+      # --- Install dependencies ---
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      # --- Build shared package (required for client type-checking) ---
+      - name: Build shared package
+        run: pnpm --filter @yep-anywhere/shared build
+
+      # --- Generate temporary signing keystore ---
+      # build.gradle.kts requires a keystore for release builds.
+      # We generate a self-signed one in CI so the APK can be built.
+      # NOTE: local.properties MUST be at the Android project root (gen/android/),
+      #       not in the app/ subdirectory, because build.gradle.kts uses
+      #       rootProject.file("local.properties").
+      - name: Generate CI keystore
+        run: |
+          mkdir -p packages/mobile/src-tauri/gen/android/app
+          keytool -genkeypair -v \
+            -keystore packages/mobile/src-tauri/gen/android/app/yepanywhere.keystore \
+            -alias yepanywhere \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass yepanywhere -keypass yepanywhere \
+            -dname "CN=YepAnywhere"
+          # Use echo commands instead of heredoc to avoid YAML indentation issues
+          {
+            echo "storeFile=yepanywhere.keystore"
+            echo "storePassword=yepanywhere"
+            echo "keyAlias=yepanywhere"
+            echo "keyPassword=yepanywhere"
+          } > packages/mobile/src-tauri/gen/android/local.properties
+          echo "--- local.properties contents ---"
+          cat packages/mobile/src-tauri/gen/android/local.properties
+          echo "--- verify keystore ---"
+          keytool -list -v -keystore packages/mobile/src-tauri/gen/android/app/yepanywhere.keystore -storepass yepanywhere | head -20
+
+      # --- Build Android APK ---
+      - name: Build Android APK
+        run: |
+          cd packages/mobile
+          pnpm tauri android build
+
+      # --- Locate APK ---
+      - name: Find APK
+        id: apk
+        run: |
+          APK=$(find packages/mobile/src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -type f | head -1)
+          if [ -z "$APK" ]; then
+            echo "Error: APK not found"
+            exit 1
+          fi
+          echo "apk_path=$APK" >> "$GITHUB_OUTPUT"
+          echo "Found APK: $APK"
+
+      # --- Upload APK to GitHub Release ---
+      # Desktop CI creates the release via tauri-action; we attach the APK to it.
+      # Retry a few times in case the release hasn't been created yet.
+      - name: Upload APK to release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          APK="${{ steps.apk.outputs.apk_path }}"
+
+          # Wait for release to exist (Desktop CI creates it)
+          for i in $(seq 1 30); do
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              break
+            fi
+            echo "Waiting for release $TAG to be created... ($i/30)"
+            sleep 30
+          done
+
+          gh release upload "$TAG" "$APK" --clobber
+          echo "Uploaded APK to release $TAG"

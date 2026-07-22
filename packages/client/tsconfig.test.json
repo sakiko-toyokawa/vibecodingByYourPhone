@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".test-dist"
+  },
+  "include": [
+    "src/components/FilePathLink.shared.tsx",
+    "src/components/FilePathLink.tsx",
+    "src/components/FilePathLink.test.tsx",
+    "src/pages/relayConnectAttempt.ts",
+    "src/pages/relayConnectAttempt.test.ts",
+    "src/types/desktop.d.ts",
+    "src/vite-env.d.ts"
+  ]
+}

@@ -1,0 +1,72 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+.astro/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Worktrees
+.worktrees/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test coverage
+coverage/
+
+# Test artifacts
+test-results/
+.playwright-artifacts-*/
+
+# Temp files
+.tmp/
+.temp/
+docs/tasks/schema-report.json
+docs/investigations/
+
+# Yep Anywhere local data
+.yep-anywhere/
+
+# Codex sample sessions (local dev data)
+codex-sample-sessions/
+
+# Large local Codex protocol dumps (script now keeps only provider subset)
+packages/server/generated/codex-app-server/
+
+# Text files in repo root
+/*.txt
+
+packages/client/dist-remote
+packages/client/dist-stable
+packages/server/client-dist/
+packages/server/bundled/
+
+# Reference repos (cloned for source reading)
+references/
+start.sh
+# Desktop sidecar binaries (downloaded automatically by prepare-sidecar.cjs)
+packages/desktop/src-tauri/binaries/
+
+# Workspace temp files
+workspace/

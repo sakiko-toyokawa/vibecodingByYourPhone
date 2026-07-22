@@ -1,0 +1,189 @@
+---
+import ArticleLayout from "../layouts/ArticleLayout.astro";
+---
+
+<ArticleLayout
+  title="Claude Code Remote Control vs Yep Anywhere"
+  description="Anthropic just shipped Remote Control for Claude Code. Here's how it compares to Yep Anywhere and what we add on top."
+  date="February 24, 2026"
+  publishedTime="2026-02-24"
+>
+  <p>Anthropic just <a href="https://x.com/noahzweben/status/2026371260805271615">announced Remote Control</a> &mdash; a new Claude Code feature that lets you continue terminal sessions from your phone. We're thrilled. This is exactly the workflow we've been building for, and having Anthropic validate it with a first-party feature is a good sign for the category.</p>
+
+  <p>If you like what Remote Control offers and want to take it further, <a href="https://yepanywhere.com">try Yep Anywhere</a>.</p>
+
+  <div class="tldr">
+    <p><strong>Yep Anywhere</strong> is a "remote desktop" into all your AI agent sessions &mdash; resume, create, and control everything.</p>
+    <p><strong>Claude Remote Control</strong> is "interact with any currently running Claude CLI session." No ability to create new ones or review past sessions.</p>
+  </div>
+
+  <table class="rc-comparison-table">
+    <thead>
+      <tr>
+        <th>Feature</th>
+        <th>Yep</th>
+        <th>RC</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="section-row"><td colspan="3">Session Management</td></tr>
+      <tr><td>Create sessions from phone</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>Queue messages mid-turn</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>Steering messages mid-turn</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>Multi-session dashboard</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>Session starring &amp; archiving</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>Resume VS Code sessions</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>Resume Claude Desktop sessions</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>Session cloning / forking</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr class="section-row"><td colspan="3">Agent Control</td></tr>
+      <tr><td>Tool approvals from mobile</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+      <tr><td>Bypass / YOLO mode</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>Thinking / effort control</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>Plan mode</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+      <tr class="section-row"><td colspan="3">Providers</td></tr>
+      <tr><td>Claude Code</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+      <tr><td>Codex / Codex-OSS</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>Gemini / OpenCode</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>Works with API keys (no subscription)</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>Works with Max plans</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+      <tr><td>Works with Pro plans</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr class="section-row"><td colspan="3">Mobile</td></tr>
+      <tr><td>Push notifications</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+      <tr><td>Voice input</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+      <tr><td>File uploads from phone</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+      <tr><td>Native app integration</td><td class="cross">&mdash;</td><td class="check">&#10003;</td></tr>
+      <tr class="section-row"><td colspan="3">Connectivity</td></tr>
+      <tr><td>Free hosted relay</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+      <tr><td>Self-hosted relay option</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>E2E encryption (relay can't read traffic)</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>Direct LAN / Tailscale</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>No extra supervision telemetry to Anthropic</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>No extra install needed</td><td class="cross">&mdash;</td><td class="check">&#10003;</td></tr>
+      <tr><td>Auto-reconnect</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+      <tr class="section-row"><td colspan="3">Visibility</td></tr>
+      <tr><td>Conversation history</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+      <tr><td>Global activity stream</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr><td>Source control / diffs</td><td class="check">&#10003;</td><td class="cross">&mdash;</td></tr>
+      <tr class="section-row"><td colspan="3">Misc</td></tr>
+      <tr><td>MCP server access</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+    </tbody>
+  </table>
+
+  <h3>What Remote Control does</h3>
+  <p>Run <code>claude remote-control</code> or type <code>/rc</code> in an existing session. Claude Code opens an outbound connection to Anthropic's servers. Open the session URL or scan a QR code on your phone &mdash; in a browser or the Claude iOS/Android app &mdash; and you're connected.</p>
+
+  <p>You can also enable it globally via <code>/config</code> so every session is remotely accessible without opting in.</p>
+
+  <p>It's simple and well-designed. The session runs locally, your files stay on your machine, and the mobile interface lets you send messages and see responses.</p>
+
+  <h3>What Yep Anywhere adds</h3>
+  <p>Remote Control is a remote chat window into a single CLI session. Yep Anywhere is a supervisor that manages multiple agent processes:</p>
+
+  <p><strong>Multi-session dashboard.</strong> Remote Control supports one remote session per CLI instance. To monitor three projects, you need three terminals. Yep Anywhere shows all your sessions &mdash; across projects and providers &mdash; in a single dashboard. Star the ones you care about, archive the rest.</p>
+
+  <p><strong>Start new sessions from your phone.</strong> Remote Control connects to sessions already running in a terminal. Yep Anywhere lets you create and launch new sessions on your dev machine from your phone.</p>
+
+  <p><strong>Server-owned processes.</strong> Yep Anywhere's server manages agent processes &mdash; close your browser, close your laptop, the agents keep running. Reconnect whenever.</p>
+
+  <p><strong>Multiple providers.</strong> Remote Control is Claude Code only. Yep Anywhere also supports Codex CLI in the same interface.</p>
+
+  <p><strong>Self-hosted and encrypted.</strong> Remote Control routes through Anthropic's API servers. Yep Anywhere runs your own server with an optional relay &mdash; all messages are end-to-end encrypted with NaCl, so even the relay sees only ciphertext. Or skip the relay entirely and connect over Tailscale or LAN.</p>
+
+  <p><strong>Works with API keys too.</strong> Remote Control requires a Pro or Max plan. Yep Anywhere works with Pro, Max, or API keys.</p>
+
+  <h3>Where Remote Control wins</h3>
+  <p><strong>Zero setup.</strong> If you already use Claude Code and have the Claude mobile app, it's one command. No server to install.</p>
+
+  <p><strong>Native app.</strong> The Claude iOS/Android app is already on millions of phones.</p>
+
+  <p><strong>Anthropic-backed.</strong> It'll keep improving and it'll always be compatible with the latest Claude Code features.</p>
+
+  <h3>Our take</h3>
+  <p>We genuinely welcome this. The hardest part of building Yep Anywhere has been explaining why you'd want to supervise coding agents from your phone. Anthropic's own PM is now <a href="https://x.com/noahzweben/status/2026371260805271615">making that case</a> &mdash; "take a walk, see the sun, walk your dog without losing your flow." That's our pitch, word for word.</p>
+
+  <p>Remote Control is a great starting point. If you try it and find yourself wanting multi-session oversight, push notifications, or always-on agent processes &mdash; that's what we built.</p>
+
+  <p><a href="https://yepanywhere.com" class="cta-link">Get started with Yep Anywhere</a></p>
+</ArticleLayout>
+
+<style>
+  .tldr {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 24px 0;
+  }
+
+  .tldr p {
+    margin-bottom: 8px;
+  }
+
+  .tldr p:last-child {
+    margin-bottom: 0;
+  }
+
+  .rc-comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 14px;
+  }
+
+  .rc-comparison-table th,
+  .rc-comparison-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+
+  .rc-comparison-table th {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .rc-comparison-table th:not(:first-child) {
+    text-align: center;
+    width: 80px;
+  }
+
+  .rc-comparison-table td:not(:first-child) {
+    text-align: center;
+  }
+
+  .rc-comparison-table td:first-child {
+    color: var(--text-secondary);
+  }
+
+  .rc-comparison-table tr.section-row td {
+    color: var(--text-primary);
+    font-weight: 600;
+    padding-top: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .rc-comparison-table .check {
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .rc-comparison-table .cross {
+    color: var(--text-secondary);
+  }
+
+  .cta-link {
+    display: inline-block;
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 16px;
+    text-decoration: none;
+    margin-top: 8px;
+  }
+
+  .cta-link:hover {
+    text-decoration: underline;
+  }
+</style>

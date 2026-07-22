@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 60">
+  <!-- Light theme wordmark: yep[checkmark]anywhere -->
+  <text
+    x="0"
+    y="44"
+    style="font-family: 'Inter', system-ui, sans-serif; font-size: 42px; font-weight: 700; letter-spacing: -2px;"
+    fill="#16a34a"
+  >yep</text>
+  <!-- Checkmark -->
+  <path
+    d="M 80 26 L 90 36 L 106 16"
+    fill="none"
+    stroke="#16a34a"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.5"
+  />
+  <text
+    x="112"
+    y="44"
+    style="font-family: 'Inter', system-ui, sans-serif; font-size: 42px; font-weight: 700; letter-spacing: -2px;"
+    fill="#171717"
+  >anywhere</text>
+</svg>

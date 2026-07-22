@@ -1,0 +1,113 @@
+---
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout
+  title="Privacy Policy - Yep Anywhere"
+  description="Privacy policy for Yep Anywhere. We collect no telemetry by default."
+>
+  <Header activePage="privacy" />
+
+  <main>
+    <div class="container">
+      <h1>Privacy Policy</h1>
+
+      <div class="highlight">
+        <p>We collect no telemetry by default.</p>
+      </div>
+
+      <p>Yep Anywhere runs entirely on your own machine. There are no accounts, no cloud services, and no databases. Your sessions and data stay local.</p>
+
+      <h2>Network Requests</h2>
+      <p>The application makes minimal network requests:</p>
+      <ul>
+        <li><strong>Yep Anywhere update service</strong> — The app periodically checks <code>updates.yepanywhere.com</code> for version information, and opening Settings → About or using the manual update check triggers a fresh check. These requests include the running app version and an installation identifier so we can maintain relay compatibility, monitor rollout reliability, and support backwards compatibility.</li>
+        <li><strong>Your AI provider</strong> — When you run sessions, requests go directly to your configured AI provider (Anthropic, OpenAI, etc.) using your own API keys.</li>
+      </ul>
+      <p>Aside from update/version checks to <code>updates.yepanywhere.com</code>, app data is not sent to yepanywhere servers. We do not send session contents, prompts, or files to that service.</p>
+
+      <h2>Local Data Storage</h2>
+      <p>All data is stored locally on your machine:</p>
+      <ul>
+        <li>Session transcripts (managed by the Claude SDK in <code>~/.claude/projects/</code>)</li>
+        <li>Server state including logs, uploads, and settings (in <code>~/.yep-anywhere/</code>)</li>
+        <li>Push notification VAPID keys (generated locally, no third-party service)</li>
+        <li>Optional password hash if you enable authentication</li>
+      </ul>
+
+      <h2>Public Relay (Future)</h2>
+      <p>We're building an optional public relay service to enable secure remote access without requiring Tailscale or port forwarding. If you choose to use the public relay:</p>
+      <ul>
+        <li>Connection metadata (timestamps, bandwidth usage) will be logged to prevent abuse</li>
+        <li>Message content is end-to-end encrypted — the relay cannot read your conversations</li>
+        <li>This is entirely opt-in; local-only usage will always be available</li>
+        <li>You can also self-host your own relay server</li>
+      </ul>
+
+      <h2>This Website</h2>
+      <p>This website (yepanywhere.com) loads fonts from Google Fonts, which means Google receives requests when you view these pages. We don't use any other analytics or tracking services on the website.</p>
+
+      <h2>Open Source</h2>
+      <p>Yep Anywhere is 100% open source under the MIT license. You can <a href="https://github.com/kzahel/yepanywhere">inspect the code</a> to verify these claims.</p>
+
+      <p>We publish to npm using <a href="https://docs.npmjs.com/generating-provenance-statements">trusted publishing</a> with provenance attestation directly from GitHub Actions. Every published package links back to the exact source commit and CI workflow run, so you can verify that the code on npm matches the code on GitHub.</p>
+
+      <p style="margin-top: 40px; color: var(--text-secondary); font-size: 14px;">Last updated: January 2026</p>
+    </div>
+  </main>
+
+  <Footer showPrivacy={false} />
+</BaseLayout>
+
+<style>
+  main {
+    padding: 60px 0;
+  }
+
+  h1 {
+    font-size: 32px;
+    margin-bottom: 32px;
+  }
+
+  h2 {
+    font-size: 20px;
+    margin-top: 40px;
+    margin-bottom: 16px;
+    color: var(--accent);
+  }
+
+  p {
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  ul {
+    color: var(--text-secondary);
+    margin-left: 24px;
+    margin-bottom: 16px;
+  }
+
+  li {
+    margin-bottom: 8px;
+  }
+
+  a {
+    color: var(--accent);
+  }
+
+  .highlight {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 24px 0;
+  }
+
+  .highlight p {
+    margin-bottom: 0;
+    color: var(--text-primary);
+    font-size: 18px;
+  }
+</style>

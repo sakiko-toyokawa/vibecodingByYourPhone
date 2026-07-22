@@ -1,0 +1,201 @@
+import { memo, useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
+import { useOptionalSessionMetadata } from "../contexts/SessionMetadataContext";
+import { useRemoteBasePath } from "../hooks/useRemoteBasePath";
+import {
+  FilePathLinkModalFooter,
+  getFilePathLinkEditorPath,
+} from "./FilePathLink.shared";
+import { FileViewer } from "./FileViewer";
+
+interface FilePathLinkProps {
+  /** The file path to display and link to */
+  filePath: string;
+  /** Project ID for fetching file content */
+  projectId: string;
+  /** Optional line number to display */
+  lineNumber?: number;
+  /** Optional column number to display */
+  columnNumber?: number;
+  /** Optional custom display text (defaults to filename) */
+  displayText?: string;
+  /** Whether to show full path or just filename */
+  showFullPath?: boolean;
+  /** Optional session ID to prefer when opening session editor */
+  sessionId?: string;
+}
+
+/**
+ * Get filename from path.
+ */
+function getFileName(filePath: string): string {
+  return filePath.split("/").pop() || filePath;
+}
+
+/**
+ * FilePathLink - A clickable link component that opens a file viewer modal.
+ * Used to make file paths in messages interactive.
+ */
+export const FilePathLink = memo(function FilePathLink({
+  filePath,
+  projectId,
+  lineNumber,
+  columnNumber,
+  displayText,
+  showFullPath = false,
+  sessionId,
+}: FilePathLinkProps) {
+  const basePath = useRemoteBasePath();
+  const sessionMetadata = useOptionalSessionMetadata();
+  const [showModal, setShowModal] = useState(false);
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowModal(true);
+  }, []);
+
+  const handleClose = useCallback(() => {
+    setShowModal(false);
+  }, []);
+
+  const handleOpenInNewTab = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const url = `${basePath}/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`;
+      window.open(url, "_blank");
+    },
+    [basePath, projectId, filePath],
+  );
+
+  const editorSessionId = sessionId ?? sessionMetadata?.sessionId;
+
+  // Format the display text
+  const fileName = showFullPath ? filePath : getFileName(filePath);
+  const text = displayText || fileName;
+
+  // Build line/column suffix
+  let suffix = "";
+  if (lineNumber !== undefined) {
+    suffix = `:${lineNumber}`;
+    if (columnNumber !== undefined) {
+      suffix += `:${columnNumber}`;
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 bg-transparent border-0 p-0 font-mono text-inherit text-[var(--vscode-textLink-foreground,#3794ff)] cursor-pointer underline decoration-transparent hover:decoration-current transition-colors duration-150"
+        onClick={handleClick}
+        onAuxClick={handleOpenInNewTab}
+        title={`${filePath}${suffix}\nClick to view, middle-click to open in new tab`}
+      >
+        <span className="break-all">{text}</span>
+        {suffix && (
+          <span className="text-[var(--text-muted)] no-underline">
+            {suffix}
+          </span>
+        )}
+      </button>
+      {showModal &&
+        createPortal(
+          <FileViewerModal
+            projectId={projectId}
+            filePath={filePath}
+            lineNumber={lineNumber}
+            sessionId={editorSessionId}
+            onClose={handleClose}
+          />,
+          document.body,
+        )}
+    </>
+  );
+});
+
+/**
+ * Modal wrapper for FileViewer.
+ */
+function FileViewerModal({
+  projectId,
+  filePath,
+  lineNumber,
+  sessionId,
+  onClose,
+}: {
+  projectId: string;
+  filePath: string;
+  lineNumber?: number;
+  sessionId?: string;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  const basePath = useRemoteBasePath();
+  const handleOverlayClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
+  }, [onClose]);
+
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, []);
+
+  const editorPath = getFilePathLinkEditorPath({
+    basePath,
+    projectId,
+    sessionId,
+    filePath,
+  });
+
+  return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: Escape key handled in useEffect, click is for overlay dismiss
+    <div
+      className="fixed inset-0 bg-[var(--bg-overlay)] flex items-center justify-center z-[9999]"
+      onClick={handleOverlayClick}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: click only stops propagation, keyboard handled globally */}
+      <dialog
+        className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded w-[90vw] max-w-[1200px] max-h-[85vh] flex flex-col shadow-[0_8px_32px_var(--bg-overlay)] max-sm:w-screen max-sm:max-w-[100vw] max-sm:max-h-[100dvh] max-sm:h-[100dvh] max-sm:rounded-none max-sm:border-none"
+        open
+        onClick={(e) => e.stopPropagation()}
+      >
+        <FileViewer
+          projectId={projectId}
+          filePath={filePath}
+          lineNumber={lineNumber}
+          onClose={onClose}
+        />
+        <FilePathLinkModalFooter
+          editorPath={editorPath}
+          onOpen={() => {
+            if (!editorPath) return;
+            onClose();
+            navigate(editorPath);
+          }}
+        />
+      </dialog>
+    </div>
+  );
+}

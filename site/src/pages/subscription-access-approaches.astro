@@ -1,0 +1,223 @@
+---
+import ArticleLayout from "../layouts/ArticleLayout.astro";
+---
+
+<ArticleLayout
+  title="Five Ways to Access AI Subscriptions Programmatically (and What Breaks)"
+  description="AI coding agents cost $15-75/MTok via API keys, but $20-200/mo via subscriptions. Every wrapper project has to pick an approach to bridge that gap. Here's what the five main strategies look like in practice."
+  date="February 25, 2026"
+  publishedTime="2026-02-25"
+>
+  <p>If you're building anything on top of AI coding agents &mdash; a dashboard, a mobile client, an orchestrator &mdash; you immediately hit a problem: <strong>how do you access the user's subscription plan?</strong></p>
+
+  <p>Claude Max costs $200/month for heavy coding use. The equivalent API usage can run $1,000+/month. ChatGPT Pro is similar. These subscriptions are dramatically cheaper, but they're gated behind official CLI tools. There's no documented "subscription API" you can call with a bearer token.</p>
+
+  <p>Every project in this space has landed on a different approach. After reading the source code of five major projects, here's what we found.</p>
+
+  <h3>The spectrum</h3>
+
+  <p>From least to most structured:</p>
+
+  <pre><code>Raw Terminal &lt;----------------------------------------&gt; Full API Wrapper
+   emdash        Yep Anywhere     OpenCode      pi-mono       Vercel AI
+   (PTY)         (SDK process)  (legit OAuth)  (reverse-eng)  (API keys)</code></pre>
+
+  <h3>Approach 1: Raw terminal passthrough</h3>
+
+  <p><strong>Project:</strong> <a href="https://github.com/generalaction/emdash">emdash</a> (YC W26)</p>
+
+  <p>Emdash spawns CLI tools (<code>claude</code>, <code>codex</code>, <code>gemini</code>, etc.) in a pseudo-terminal via <code>node-pty</code> and streams raw terminal bytes to an <code>xterm.js</code> pane. The user sees exactly what they'd see in a terminal.</p>
+
+  <p>Subscription access is free &mdash; inherited from whatever CLI is installed. Adding a new agent is one registry entry:</p>
+
+  <pre><code>{"{ id: 'gemini', cli: 'gemini', autoApproveFlag: '--yolo', resumeFlag: '--resume' }"}</code></pre>
+
+  <p>This is how they support 21 agents with minimal code. The tradeoff: <strong>no structured data.</strong> You can't parse tool calls, extract diffs, build a mobile UI, or do anything that requires understanding what the agent is actually doing. It's a fancy terminal multiplexer with git worktree management bolted on.</p>
+
+  <p>Works great for desktop power users. Unusable on a phone.</p>
+
+  <h3>Approach 2: Official SDK wrapper</h3>
+
+  <p><strong>Project:</strong> <a href="https://github.com/kzahel/yepanywhere">Yep Anywhere</a> (disclosure: this is our project)</p>
+
+  <p>Uses the official provider SDKs to spawn and manage agent processes:</p>
+
+  <ul>
+    <li><strong>Claude:</strong> <code>@anthropic-ai/claude-code</code> SDK &mdash; structured events (messages, tool calls, diffs, permission requests, thinking blocks)</li>
+    <li><strong>Codex:</strong> <code>@openai/codex-sdk</code> &mdash; structured events (messages, shell commands, file patches, sandbox modes)</li>
+    <li><strong>Gemini:</strong> <code>gemini -o stream-json</code> CLI &mdash; structured JSON stream</li>
+  </ul>
+
+  <p>Each SDK/CLI handles its own authentication. The wrapper inherits whatever plan the user is authenticated with. Provider-specific adapters normalize events into a unified format for the UI.</p>
+
+  <p>The tradeoff: <strong>each provider needs a custom adapter</strong> (~500+ lines) for event normalization. Claude SDK, Codex SDK, and Gemini CLI each have completely different event models. Adding a new provider is expensive. But subscription access is as stable as the official SDKs themselves &mdash; no reverse engineering, no spoofing.</p>
+
+  <h3>Approach 3: Legitimate OAuth</h3>
+
+  <p><strong>Project:</strong> <a href="https://github.com/sst/opencode">OpenCode</a></p>
+
+  <p>OpenCode uses Vercel AI SDK adapters internally for most providers (API-key-based), but implements legitimate OAuth for select providers:</p>
+
+  <ul>
+    <li><strong>ChatGPT/Codex:</strong> OAuth via <code>auth.openai.com</code> with PKCE, accessing ChatGPT Plus/Pro subscription models</li>
+    <li><strong>GitHub Copilot:</strong> Standard device code flow via GitHub's public OAuth app</li>
+  </ul>
+
+  <p>No spoofing &mdash; honest <code>opencode/&lbrace;version&rbrace;</code> user-agent. These are public OAuth clients the providers expose intentionally.</p>
+
+  <p>Notable history: OpenCode previously had a mechanism for users to obtain Claude subscription tokens through the app, but had to remove it after TOS compliance pressure from Anthropic. For Claude, API keys are now required.</p>
+
+  <p>The tradeoff: <strong>only works for providers that expose public OAuth clients.</strong> Anthropic doesn't. So Claude subscription access isn't available through this path.</p>
+
+  <h3>Approach 4: Reverse-engineered OAuth</h3>
+
+  <p><strong>Project:</strong> <a href="https://github.com/badlogic/pi-mono">pi-mono</a></p>
+
+  <p>Pi-mono implements the same OAuth flows the official CLIs use, but independently. It makes direct HTTP API calls with OAuth tokens obtained from subscription authentication across multiple providers:</p>
+
+  <ul>
+    <li><strong>Anthropic (Claude Pro/Max):</strong> Opens <code>claude.ai/oauth/authorize</code> with PKCE</li>
+    <li><strong>OpenAI (ChatGPT Plus/Pro):</strong> OAuth callback server on localhost</li>
+    <li><strong>GitHub Copilot:</strong> Device code flow</li>
+    <li><strong>Google Gemini CLI:</strong> Cloud Code Assist OAuth</li>
+  </ul>
+
+  <p>The critical detail: it spoofs the official CLI identity.</p>
+
+  <pre><code>{'headers["user-agent"] = "claude-cli/2.1.2 (external, cli)";\nheaders["anthropic-beta"] = "claude-code-20250219,oauth-2025-04-20,...";'}</code></pre>
+
+  <p>This gives you direct API streaming (lower latency than spawning a CLI process) with full structured data across multiple providers. Technically elegant.</p>
+
+  <p><strong>But the consequences are real.</strong> Google has already <a href="https://news.ycombinator.com/item?id=47115805">permanently banned hundreds of subscribers</a> who used OpenClaw projects that reverse-engineered Gemini CLI OAuth tokens. OpenCode had to remove its Claude subscription token mechanism. Providers are actively enforcing these boundaries.</p>
+
+  <h3>Why providers enforce this</h3>
+
+  <p>The official CLIs aren't just auth wrappers. They serve as control points for:</p>
+
+  <ul>
+    <li><strong>Telemetry:</strong> Usage patterns, error rates, feature adoption</li>
+    <li><strong>Caching:</strong> Prompt caching is how providers make $20/mo subscriptions viable. Third-party clients break cache hit rates, potentially increasing serving costs 5-10x per request</li>
+    <li><strong>Sharing detection:</strong> One subscription shouldn't power a multi-user service</li>
+    <li><strong>Distillation prevention:</strong> Systematic API access enables model extraction</li>
+  </ul>
+
+  <p>Bypassing the CLI to hit the API directly with spoofed credentials undermines all of these. Providers have strong economic incentives to detect and block it.</p>
+
+  <h3>Approach 5: API keys only</h3>
+
+  <p><strong>Project:</strong> <a href="https://github.com/vercel/ai">Vercel AI SDK</a></p>
+
+  <p>Client-side TypeScript SDK that makes direct HTTP calls to provider APIs using API keys. 55+ provider packages implementing a unified <code>LanguageModelV3</code> interface. Battle-tested, framework-agnostic, the most mature option in this space.</p>
+
+  <p>No subscription-plan access at all. No CLI integration. No self-hosted server. Users must have and pay for API keys.</p>
+
+  <p>Solves a different problem. Included here because it's the most common starting point, and understanding why it <em>doesn't</em> solve subscription access clarifies what the other approaches are doing.</p>
+
+  <h3>Summary</h3>
+
+  <table class="comparison-table">
+    <thead>
+      <tr>
+        <th>Dimension</th>
+        <th>emdash</th>
+        <th>Yep Anywhere</th>
+        <th>OpenCode</th>
+        <th>pi-mono</th>
+        <th>Vercel AI</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Subscription access</td>
+        <td>Yes (passive)</td>
+        <td>Yes (SDK)</td>
+        <td>Partial (Codex, Copilot)</td>
+        <td>Yes (reverse-eng)</td>
+        <td>No</td>
+      </tr>
+      <tr>
+        <td>Structured output</td>
+        <td>None</td>
+        <td>Full</td>
+        <td>Full</td>
+        <td>Full</td>
+        <td>Full</td>
+      </tr>
+      <tr>
+        <td>TOS risk</td>
+        <td>None</td>
+        <td>None</td>
+        <td>None (removed Claude OAuth)</td>
+        <td>High (bans observed)</td>
+        <td>None</td>
+      </tr>
+      <tr>
+        <td>Provider breadth</td>
+        <td>21 CLIs</td>
+        <td>3-4 SDKs</td>
+        <td>10+</td>
+        <td>8+</td>
+        <td>55+</td>
+      </tr>
+      <tr>
+        <td>Add new provider</td>
+        <td>~1 KB</td>
+        <td>~500+ lines</td>
+        <td>Via AI SDK</td>
+        <td>~200 lines</td>
+        <td>~500 lines</td>
+      </tr>
+      <tr>
+        <td>Self-hosted</td>
+        <td>Yes</td>
+        <td>Yes</td>
+        <td>Yes</td>
+        <td>Yes</td>
+        <td>No</td>
+      </tr>
+      <tr>
+        <td>Maintenance surface</td>
+        <td>CLI flags</td>
+        <td>SDK upgrades</td>
+        <td>SDK + OAuth clients</td>
+        <td>Undocumented OAuth endpoints, client IDs, headers</td>
+        <td>SDK upgrades</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>The gap</h3>
+
+  <p>No project provides a stable, documented, multi-provider API for subscription-plan access. The four strategies are:</p>
+
+  <ol>
+    <li><strong>Spawn the official CLI</strong> (emdash, Yep Anywhere) &mdash; stable but per-provider, limited to what each CLI exposes</li>
+    <li><strong>Legitimate OAuth where available</strong> (OpenCode for Codex/Copilot) &mdash; stable but only works for providers that expose public OAuth clients</li>
+    <li><strong>Reverse-engineer OAuth</strong> (pi-mono) &mdash; broad but fragile, with real-world account bans</li>
+    <li><strong>API keys only</strong> (Vercel AI, OpenCode for other providers) &mdash; stable but expensive</li>
+  </ol>
+
+  <p>What the ecosystem arguably needs is for providers to ship an official "subscription API" &mdash; an endpoint where you authenticate with your subscription credentials and make API calls against your plan limits, not a metered API key.</p>
+
+  <p>But providers have reasons to resist. The official CLIs are control points for telemetry, caching, sharing detection, and distillation prevention. Exposing a raw subscription API would bypass all of these. This tension &mdash; users wanting open access vs. providers wanting to own the harness &mdash; is why these workarounds exist and may persist.</p>
+
+  <h3>Open questions</h3>
+
+  <ul>
+    <li><strong>Will providers formalize subscription APIs?</strong> Anthropic and OpenAI both ship SDKs that expose structured output from their CLIs, which is a step in this direction. But neither offers a documented HTTP endpoint for "make an API call against my Pro plan."</li>
+    <li><strong>Can the SDK wrapper approach become a shared layer?</strong> Rather than every project writing its own Claude SDK adapter, could there be an open-source normalization layer that multiple UIs build on top of?</li>
+    <li><strong>Will terminal passthrough get smarter?</strong> Projects like emdash could add lightweight output parsing without going full SDK integration. This middle ground is largely unexplored.</li>
+  </ul>
+
+  <h3>Projects referenced</h3>
+  <ul>
+    <li><a href="https://github.com/generalaction/emdash">emdash</a> &mdash; YC W26, desktop terminal multiplexer for 21 CLI agents</li>
+    <li><a href="https://github.com/kzahel/yepanywhere">Yep Anywhere</a> &mdash; mobile-first structured supervisor using official SDKs</li>
+    <li><a href="https://github.com/sst/opencode">OpenCode</a> &mdash; open-source agentic coding CLI/server with legitimate Codex/Copilot OAuth</li>
+    <li><a href="https://github.com/badlogic/pi-mono">pi-mono</a> &mdash; multi-provider coding agent with independent OAuth implementation</li>
+    <li><a href="https://github.com/vercel/ai">Vercel AI SDK</a> &mdash; provider-agnostic TypeScript SDK (API keys only)</li>
+  </ul>
+
+  <p><em>This post is based on source-code analysis of all five projects, not just documentation. The research doc with more architectural detail is in our <a href="https://github.com/kzahel/yepanywhere/blob/main/docs/research/subscription-access-approaches.md">GitHub repo</a>.</em></p>
+
+</ArticleLayout>
