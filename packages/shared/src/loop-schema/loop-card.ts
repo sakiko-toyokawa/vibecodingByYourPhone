@@ -68,6 +68,18 @@ export const LoopCardSchema = z.object({
     }),
     verification: z.object({
       required: z.array(VerificationPhaseSchema),
+      // Phase-1 Yep extension (not in 02-schema契约.md §1): explicit
+      // verification commands per phase. The spec's verification block only
+      // names required phases; without commands the verifier probes the
+      // workspace package.json scripts (lint/typecheck → static, test →
+      // runtime). Optional so phase-0 cards still validate.
+      // 偏差待登记到 06-项目规定.md。
+      commands: z
+        .object({
+          static: z.array(z.string()).optional(),
+          runtime: z.array(z.string()).optional(),
+        })
+        .optional(),
     }),
     eval: z
       .object({

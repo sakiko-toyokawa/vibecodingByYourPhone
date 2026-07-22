@@ -3,6 +3,11 @@ import test from "node:test";
 import { IntentContractSchema } from "./intent-contract.js";
 import { LoopCardSchema } from "./loop-card.js";
 import { RunLedgerEntrySchema } from "./run-ledger.js";
+import {
+  JudgmentReportSchema,
+  VerificationInputBundleSchema,
+  VerifierReportSchema,
+} from "./verification.js";
 
 // 示例照抄 docs/spec/02-schema契约.md（§1 LoopCard、§2 IntentContract、§8.1 run_ledger_entry）
 const loopCardExample = {
@@ -167,4 +172,102 @@ test("RunLedgerEntry: 缺必填字段 loop_id 应失败", () => {
     runLedgerEntryExample,
   );
   assert.equal(RunLedgerEntrySchema.safeParse(invalid).success, false);
+});
+
+// 示例照抄 docs/spec/02-schema契约.md §5 / §6
+const verificationInputBundleExample = {
+  intent_ref: "intent://123",
+  task_type: "code_change",
+  success_criteria: ["tests pass", "no public API change"],
+  workspace_ref: "workspace://goal_xxx-2",
+  exit_status: 0,
+  evidence_refs: {
+    diff: "artifact://diff.patch",
+    test_output: "artifact://test.log",
+    stdout: "artifact://stdout.log",
+    stderr: "artifact://stderr.log",
+    structured_output: "artifact://codex-output.jsonl",
+    executor_summary: "artifact://executor-summary.md",
+  },
+  runtime_event_refs: ["artifact://runtime-events.jsonl"],
+  permission_event_refs: ["artifact://permission-events.jsonl"],
+  test_output_refs: ["artifact://test.log"],
+  artifact_refs: ["artifact://screenshot.png"],
+  policy_intent_ref: "policy://assisted_local",
+  known_failure_patterns: ["flaky_test_order_dependence"],
+  verifier_chain: ["static", "runtime", "review"],
+};
+
+const verifierReportExample = {
+  verifier_phase: "runtime",
+  status: "failed",
+  evidence_refs: ["artifact://test-output.log"],
+  unresolved_risks: ["auth 集成测试 2 例失败"],
+  recommendation: "retry",
+  confidence: 0.87,
+  requires_human: false,
+};
+
+const judgmentReportExample = {
+  overall: "failed",
+  next_action: "retry",
+  retryable: true,
+  requires_human: false,
+  evidence: ["artifact://test-output.log", "artifact://lint.log"],
+  unresolved_risks: ["auth 集成测试 2 例失败"],
+};
+
+test("VerificationInputBundle: spec 示例 parse 通过", () => {
+  const result = VerificationInputBundleSchema.safeParse(
+    verificationInputBundleExample,
+  );
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+});
+
+test("VerifierReport: spec 示例 parse 通过", () => {
+  const result = VerifierReportSchema.safeParse(verifierReportExample);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+});
+
+test("JudgmentReport: spec 示例 parse 通过", () => {
+  const result = JudgmentReportSchema.safeParse(judgmentReportExample);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+});
+
+test("VerifierReport: requires_human 缺省默认 false", () => {
+  const { requires_human: _omitted, ...withoutDefault } = structuredClone(
+    verifierReportExample,
+  );
+  const result = VerifierReportSchema.safeParse(withoutDefault);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+  assert.equal(result.data?.requires_human, false);
+});
+
+test("VerifierReport: confidence 超出 0–1 应失败", () => {
+  const invalid = structuredClone(verifierReportExample);
+  invalid.confidence = 1.5;
+  assert.equal(VerifierReportSchema.safeParse(invalid).success, false);
+});
+
+test("LoopCard: 旧卡（无 verification.commands）向后兼容 parse 通过", () => {
+  const result = LoopCardSchema.safeParse(loopCardExample);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+  assert.equal(result.data?.loop.verification.commands, undefined);
+});
+
+test("LoopCard: 阶段 1 扩展 verification.commands parse 通过", () => {
+  const extended = structuredClone(loopCardExample);
+  extended.loop.verification = {
+    required: ["static", "runtime"],
+    commands: {
+      static: ["pnpm run lint"],
+      runtime: ["pnpm run test -- --smoke"],
+    },
+  } as typeof extended.loop.verification;
+  const result = LoopCardSchema.safeParse(extended);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+  assert.deepEqual(result.data?.loop.verification.commands, {
+    static: ["pnpm run lint"],
+    runtime: ["pnpm run test -- --smoke"],
+  });
 });

@@ -2,9 +2,12 @@
  * Phase-0 run orchestration (spec: docs/spec/05-分阶段计划.md 阶段 0).
  *
  * Wires trigger → contract → assembly → Supervisor → run ledger into the
- * minimal closed loop. Phase 0 has no control-plane: a run is either
+ * minimal closed loop. There is no control-plane yet: a run is either
  * "active" (tracked in memory) or finished with a ledger entry on disk;
- * there is no 7-state machine, no budget enforcement, no verification.
+ * there is no 7-state machine and no budget enforcement. When the card
+ * requires verification phases, the phase-1 verification layer
+ * (loop/verification/) runs after execution and its judgment decides
+ * complete vs failed (needs_human bridging is the next slice).
  *
  * run_id rule: `run-<UTC yyyymmddTHHMMSSz>-<8 lowercase hex>` — sortable
  * by fire time, collision-safe, file-system safe (matches the ledger
@@ -19,7 +22,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { RunLedgerEntry } from "@yep-anywhere/shared";
+import type { IntentContract, RunLedgerEntry } from "@yep-anywhere/shared";
 import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { QueuedResponse } from "../supervisor/WorkerQueue.js";
@@ -34,6 +37,7 @@ import {
 } from "./contract/intent-contract.js";
 import type { LoopCardStore } from "./state/loop-card-store.js";
 import type { RunLedgerStore } from "./state/run-ledger-store.js";
+import { type VerificationRefs, verifyRun } from "./verification/verify-run.js";
 
 export type LoopRunErrorCode =
   | "loop_not_found"
@@ -221,10 +225,11 @@ export class LoopRunService {
     const { runId, loopId, source, createdAt } = active;
     const store = this.deps.runLedgerStore;
     let outcome: ExecutionOutcome;
+    let contract: IntentContract | null = null;
     let contractJson: string | null = null;
 
     try {
-      const contract = buildIntentContract(card, { runId, source });
+      contract = buildIntentContract(card, { runId, source });
       contractJson = JSON.stringify(contract, null, 2);
       const input = assembleRuntimeInput(card, contract);
       outcome = await this.execute(input);
@@ -252,6 +257,52 @@ export class LoopRunService {
         `artifact://${runId}/stdout.log`,
       ];
 
+      // Phase-1 verification layer (05 阶段 1 "两段起步"): runs only when the
+      // card requires phases and the run got far enough to have a contract
+      // and a workspace. When it does not run, verification_refs keep the
+      // explicit "not_applicable" sentinel (not a fake reference).
+      let verificationRefs: VerificationRefs = {
+        verification_input: "not_applicable",
+        verifier_runtime: "not_applicable",
+        verifier_report: "not_applicable",
+        judgment_report: "not_applicable",
+      };
+      let finalStatus: RunLedgerEntry["final_status"] = outcome.ok
+        ? "complete"
+        : "failed";
+
+      const requiredPhases = card.loop.verification.required;
+      const workspacePath = card.loop.workspace.path;
+      if (requiredPhases.length > 0 && contract && workspacePath) {
+        try {
+          const verification = await verifyRun(
+            {
+              card,
+              contract,
+              runId,
+              workspacePath,
+              exitStatus: outcome.ok ? 0 : 1,
+              stdoutRef: `artifact://${runId}/stdout.log`,
+            },
+            { store },
+          );
+          verificationRefs = verification.refs;
+          // TODO(phase-1 next slice): judgment.next_action "needs_human" /
+          // "escalate" must bridge into the Yep approval pipeline and move
+          // the run to needs_human; this slice records failed/inconclusive
+          // as failed.
+          finalStatus =
+            outcome.ok && verification.judgment.overall === "passed"
+              ? "complete"
+              : "failed";
+        } catch (error) {
+          console.error(
+            `[LoopRunService] verification failed for run ${runId}:`,
+            error,
+          );
+        }
+      }
+
       const entry: RunLedgerEntry = {
         loop_id: loopId,
         run_id: runId,
@@ -267,22 +318,14 @@ export class LoopRunService {
           memory_packet: null, // phase 0: no memory packet
           workspace: `workspace://${loopId}/${runId}`,
         },
-        // Phase 0 has no verification layer (05: "无验证层"). The ledger
-        // schema requires these strings — "not_applicable" is the explicit
-        // sentinel, not a fake reference.
-        verification_refs: {
-          verification_input: "not_applicable",
-          verifier_runtime: "not_applicable",
-          verifier_report: "not_applicable",
-          judgment_report: "not_applicable",
-        },
+        verification_refs: verificationRefs,
         learning_refs: {
           control_decision: `ledger://${runId}`,
           human_feedback: [],
           external_feedback: [],
         },
         artifact_refs: artifactRefs,
-        final_status: outcome.ok ? "complete" : "failed",
+        final_status: finalStatus,
         created_at: createdAt,
       };
       await store.appendEntry(runId, entry);

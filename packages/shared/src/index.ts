@@ -479,3 +479,17 @@ export {
   type RunState,
   RunStateSchema,
 } from "./loop-schema/run-ledger.js";
+export {
+  type JudgmentNextAction,
+  JudgmentNextActionSchema,
+  type JudgmentReport,
+  JudgmentReportSchema,
+  type VerificationInputBundle,
+  VerificationInputBundleSchema,
+  type VerifierRecommendation,
+  VerifierRecommendationSchema,
+  type VerifierReport,
+  VerifierReportSchema,
+  type VerifierStatus,
+  VerifierStatusSchema,
+} from "./loop-schema/verification.js";
