@@ -41,6 +41,8 @@ import { GitStatusPage } from "./pages/GitStatusPage";
 import { GlobalSessionsPage } from "./pages/GlobalSessionsPage";
 import { HostPickerPage } from "./pages/HostPickerPage";
 import { InboxPage } from "./pages/InboxPage";
+import { LoopDetailPage } from "./pages/LoopDetailPage";
+import { LoopsPage } from "./pages/LoopsPage";
 import { NewSessionPage } from "./pages/NewSessionPage";
 import { OlderSessionsPage } from "./pages/OlderSessionsPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
@@ -98,6 +100,8 @@ const APP_ROUTES = (
       <Route path="older" element={<OlderSessionsPage />} />
       <Route path="agents" element={<AgentsPage />} />
       <Route path="inbox" element={<InboxPage />} />
+      <Route path="loops" element={<LoopsPage />} />
+      <Route path="loops/:loopId" element={<LoopDetailPage />} />
       <Route path="git-status" element={<GitStatusPage />} />
       <Route path="devices" element={<EmulatorPage />} />
       <Route path="devices/:deviceId" element={<EmulatorPage />} />

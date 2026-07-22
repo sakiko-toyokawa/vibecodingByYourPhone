@@ -1,0 +1,301 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  type LoopRunSummary,
+  type RunDetail,
+  type StoredLoop,
+  loopsApi,
+} from "../api/loops";
+import { PageHeader } from "../components/PageHeader";
+import { useI18n } from "../i18n";
+import { useNavigationLayout } from "../layouts";
+import { activityBus } from "../lib/activityBus";
+import { runStateBadgeClass } from "../lib/loopStateStyle";
+
+const POLL_INTERVAL_MS = 10_000;
+
+function formatTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString();
+}
+
+/**
+ * Loop detail page: run history with state badges, judgment summary for the
+ * selected run, and a manual "run now" trigger.
+ *
+ * Refreshes every 10s and immediately on loop-state-changed events for this
+ * loop.
+ */
+export function LoopDetailPage() {
+  const { t } = useI18n();
+  const { openSidebar, isWideScreen } = useNavigationLayout();
+  const navigate = useNavigate();
+  const { loopId } = useParams<{ loopId: string }>();
+
+  const [loop, setLoop] = useState<StoredLoop | null>(null);
+  const [runs, setRuns] = useState<LoopRunSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [triggering, setTriggering] = useState(false);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [runDetail, setRunDetail] = useState<RunDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const selectedRunIdRef = useRef<string | null>(null);
+  selectedRunIdRef.current = selectedRunId;
+
+  const load = useCallback(async () => {
+    if (!loopId) return;
+    try {
+      const [{ loop: storedLoop }, { runs: runList }] = await Promise.all([
+        loopsApi.getLoop(loopId),
+        loopsApi.listRuns(loopId),
+      ]);
+      setLoop(storedLoop);
+      setRuns(runList);
+      setError(null);
+      // Refresh the open judgment panel too (state may have changed)
+      if (selectedRunIdRef.current) {
+        try {
+          setRunDetail(await loopsApi.getRun(selectedRunIdRef.current));
+        } catch {
+          // Keep showing the stale detail; the list still refreshed
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setLoading(false);
+    }
+  }, [loopId]);
+
+  // Initial load + 10s polling
+  useEffect(() => {
+    void load();
+    const interval = setInterval(() => void load(), POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  // Immediate refresh on loop-state-changed for this loop
+  useEffect(() => {
+    if (!loopId) return;
+    return activityBus.on("loop-state-changed", (event) => {
+      if (event.loop_id === loopId) void load();
+    });
+  }, [loopId, load]);
+
+  const handleSelectRun = useCallback(async (runId: string) => {
+    setSelectedRunId(runId);
+    setDetailLoading(true);
+    try {
+      setRunDetail(await loopsApi.getRun(runId));
+    } catch {
+      setRunDetail(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  const handleRunNow = useCallback(async () => {
+    if (!loopId) return;
+    setTriggering(true);
+    setActionError(null);
+    try {
+      await loopsApi.triggerRun(loopId);
+      await load();
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      if (status === 409) {
+        setActionError(t("loopsRunActive"));
+      } else {
+        setActionError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      setTriggering(false);
+    }
+  }, [loopId, load, t]);
+
+  const judgment = runDetail?.ledger_summary.judgment_summary ?? null;
+  const failureTags = runDetail?.ledger_summary.failure_tags ?? [];
+
+  return (
+    <div
+      className={
+        isWideScreen
+          ? "flex min-h-0 min-w-0 flex-1 justify-center overflow-hidden"
+          : "flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-hidden"
+      }
+    >
+      <div
+        className={
+          isWideScreen
+            ? "flex h-dvh w-full flex-col"
+            : "flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-hidden"
+        }
+      >
+        <PageHeader
+          title={loopId ?? t("loopsTitle")}
+          showBack
+          onBack={() => navigate("..")}
+          rightContent={
+            <button
+              type="button"
+              className="rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-medium text-[var(--on-primary)] transition-opacity hover:opacity-90 disabled:opacity-50"
+              onClick={() => void handleRunNow()}
+              disabled={triggering}
+            >
+              {triggering ? t("loopsRunStarting") : t("loopsRunNow")}
+            </button>
+          }
+        />
+
+        <main className="flex-1 min-h-0 min-w-0 w-full overflow-x-hidden overflow-y-auto [-webkit-overflow-scrolling:touch]">
+          <div className="box-border min-w-0 w-full px-6 py-8 md:px-10 md:py-10">
+            {actionError && (
+              <p className="mb-4 rounded-[var(--radius-sm)] border border-[var(--error-color)]/40 bg-[var(--error-color)]/10 p-3 [font-size:var(--font-size-sm)] text-[var(--error-color)]">
+                {actionError}
+              </p>
+            )}
+
+            {loading && (
+              <p className="p-3 [font-size:var(--font-size-sm)] italic text-[var(--text-muted)]">
+                {t("loopsLoading")}
+              </p>
+            )}
+
+            {error && (
+              <p className="p-3 [font-size:var(--font-size-sm)] text-[var(--error-color)]">
+                {t("loopsError", { message: error.message })}
+              </p>
+            )}
+
+            {loop && (
+              <p className="mb-6 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                <span className="font-mono">
+                  {loop.card.loop.trigger.type === "schedule" &&
+                  loop.card.loop.trigger.cron
+                    ? loop.card.loop.trigger.cron
+                    : loop.card.loop.trigger.type}
+                </span>
+                {" · "}
+                {t("loopsCreated", { time: formatTime(loop.created_at) })}
+              </p>
+            )}
+
+            {!loading && !error && (
+              <>
+                <h2
+                  className="m-0 mb-4 text-xl text-[var(--text-primary)]"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  {t("loopsRunsTitle")}
+                </h2>
+                {runs.length === 0 ? (
+                  <p className="p-[var(--space-3)] italic text-[var(--text-muted)]">
+                    {t("loopsNoRuns")}
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-[var(--space-2)]">
+                    {runs.map((run) => (
+                      <button
+                        key={run.run_id}
+                        type="button"
+                        onClick={() => void handleSelectRun(run.run_id)}
+                        className={`block w-full border rounded-[var(--radius-md)] bg-[var(--bg-secondary)] p-4 text-left transition-[border-color] duration-150 hover:border-[var(--border-hover)] ${
+                          selectedRunId === run.run_id
+                            ? "border-[var(--accent-rust)]"
+                            : "border-[var(--border-color)]"
+                        }`}
+                      >
+                        <div className="flex min-w-0 flex-wrap items-center gap-[var(--space-2)]">
+                          <span
+                            className={`shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium ${runStateBadgeClass(run.state)}`}
+                          >
+                            {run.state}
+                          </span>
+                          <span className="shrink-0 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                            {run.source}
+                          </span>
+                          <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                            {formatTime(run.created_at)}
+                          </span>
+                        </div>
+                        <div className="mt-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-xs text-[var(--text-dimmed)]">
+                          {run.run_id}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {selectedRunId && (
+                  <section className="mt-6 border border-[var(--border-color)] rounded-[var(--radius-md)] bg-[var(--bg-secondary)] p-6">
+                    <h3
+                      className="m-0 mb-4 text-lg text-[var(--text-primary)]"
+                      style={{ fontFamily: "var(--font-display)" }}
+                    >
+                      {t("loopsJudgmentTitle")}
+                    </h3>
+                    {detailLoading ? (
+                      <p className="p-3 [font-size:var(--font-size-sm)] italic text-[var(--text-muted)]">
+                        {t("loopsLoading")}
+                      </p>
+                    ) : !runDetail ? (
+                      <p className="p-3 [font-size:var(--font-size-sm)] italic text-[var(--text-muted)]">
+                        {t("loopsNoJudgment")}
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-[var(--space-2)] [font-size:var(--font-size-sm)]">
+                        <div className="flex items-start justify-between gap-[var(--space-3)]">
+                          <span className="shrink-0 text-[var(--text-muted)]">
+                            {t("loopsJudgmentOverall")}
+                          </span>
+                          <span className="break-all text-right text-[var(--text-primary)]">
+                            {judgment?.overall ?? "—"}
+                          </span>
+                        </div>
+                        <div className="flex items-start justify-between gap-[var(--space-3)]">
+                          <span className="shrink-0 text-[var(--text-muted)]">
+                            {t("loopsJudgmentNextAction")}
+                          </span>
+                          <span className="break-all text-right text-[var(--text-primary)]">
+                            {judgment?.next_action ?? "—"}
+                          </span>
+                        </div>
+                        <div className="flex items-start justify-between gap-[var(--space-3)]">
+                          <span className="shrink-0 text-[var(--text-muted)]">
+                            {t("loopsJudgmentTurns")}
+                          </span>
+                          <span className="text-right text-[var(--text-primary)]">
+                            {runDetail.ledger_summary.turns_used} /{" "}
+                            {runDetail.ledger_summary.retries_used}
+                          </span>
+                        </div>
+                        {failureTags.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-[var(--space-2)] pt-1">
+                            <span className="text-[var(--text-muted)]">
+                              {t("loopsFailureTags")}
+                            </span>
+                            {failureTags.map((tag) => (
+                              <span
+                                key={tag}
+                                className="rounded-[var(--radius-sm)] bg-[var(--error-color)]/15 px-2 py-0.5 text-xs font-medium text-[var(--error-color)]"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </section>
+                )}
+              </>
+            )}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}

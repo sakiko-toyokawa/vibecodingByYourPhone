@@ -142,6 +142,42 @@ export interface BrowserTabDisconnectedEvent {
   timestamp: string;
 }
 
+/** Decision option offered for a needs_human run (03-API契约.md). */
+export type LoopDecisionOption =
+  | "approve"
+  | "reject"
+  | "request_changes"
+  | "pause";
+
+/** Event emitted when a loop run enters needs_human and waits for approval. */
+export interface RunDecisionRequiredEvent {
+  type: "run-decision-required";
+  loop_id: string;
+  run_id: string;
+  request_id: string;
+  /** The judgment's suggested next step */
+  action: string;
+  risk: string;
+  reason: string;
+  evidence_refs: string[];
+  options: LoopDecisionOption[];
+  timestamp: string;
+}
+
+/** Event emitted when a loop run changes state (loop-state-changed). */
+export interface LoopStateChangedEvent {
+  type: "loop-state-changed";
+  loop_id: string;
+  run_id: string;
+  from_state?: string;
+  /** New state (server emits to_state; state tolerated for forward compat) */
+  to_state?: string;
+  state?: string;
+  turn?: number;
+  reason?: string;
+  timestamp: string;
+}
+
 // Map event names to their data types
 interface ActivityEventMap {
   "file-change": FileChangeEvent;
@@ -151,6 +187,9 @@ interface ActivityEventMap {
   "session-seen": SessionSeenEvent;
   "process-state-changed": ProcessStateEvent;
   "session-metadata-changed": SessionMetadataChangedEvent;
+  // Loop events
+  "run-decision-required": RunDecisionRequiredEvent;
+  "loop-state-changed": LoopStateChangedEvent;
   // Connection events
   "browser-tab-connected": BrowserTabConnectedEvent;
   "browser-tab-disconnected": BrowserTabDisconnectedEvent;
@@ -405,6 +444,8 @@ class ActivityBus {
       "session-seen",
       "process-state-changed",
       "session-metadata-changed",
+      "run-decision-required",
+      "loop-state-changed",
       "browser-tab-connected",
       "browser-tab-disconnected",
       "source-change",

@@ -11,6 +11,8 @@
     "src/pages/relayConnectAttempt.ts",
     "src/pages/relayConnectAttempt.test.ts",
     "src/types/desktop.d.ts",
-    "src/vite-env.d.ts"
+    "src/vite-env.d.ts",
+    "src/lib/loopDecisions.ts",
+    "src/lib/loopDecisions.test.ts"
   ]
 }

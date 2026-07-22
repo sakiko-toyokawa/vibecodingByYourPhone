@@ -9,6 +9,8 @@ import { GitStatusPage } from "./pages/GitStatusPage";
 import { GlobalSessionsPage } from "./pages/GlobalSessionsPage";
 import { InboxPage } from "./pages/InboxPage";
 import { LoginPage } from "./pages/LoginPage";
+import { LoopDetailPage } from "./pages/LoopDetailPage";
+import { LoopsPage } from "./pages/LoopsPage";
 import { NewSessionPage } from "./pages/NewSessionPage";
 import { OlderSessionsPage } from "./pages/OlderSessionsPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
@@ -34,6 +36,8 @@ export function AppRoutes() {
         <Route path="/older" element={<OlderSessionsPage />} />
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/inbox" element={<InboxPage />} />
+        <Route path="/loops" element={<LoopsPage />} />
+        <Route path="/loops/:loopId" element={<LoopDetailPage />} />
         <Route path="/settings" element={<SettingsLayout />} />
         <Route path="/settings/:category" element={<SettingsLayout />} />
         {/* Project-scoped pages */}

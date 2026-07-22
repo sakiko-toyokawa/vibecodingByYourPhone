@@ -409,6 +409,14 @@ export function Sidebar({
               collapsed={isCollapsed}
             />
             <SidebarNavItem
+              to="/loops"
+              icon={SidebarIcons.loops}
+              label={t("sidebarLoops")}
+              onClick={onNavigate}
+              basePath={basePath}
+              collapsed={isCollapsed}
+            />
+            <SidebarNavItem
               to="/settings"
               icon={SidebarIcons.settings}
               label={t("sidebarSettings")}
