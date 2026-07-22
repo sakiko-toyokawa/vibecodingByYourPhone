@@ -1,0 +1,80 @@
+import { z } from "zod";
+
+/**
+ * decision_entry — 决策账本条目，记录 control-plane 为什么做出某个决策
+ * （运行账本回答"发生了什么"，决策账本回答"为什么"）。
+ * 权威定义：docs/spec/02-schema契约.md §8.2。
+ *
+ * 与运行账本合并存放在 runs/<run_id>.jsonl，以 type 字段区分（见
+ * 04-存储约定.md）；ledger://decision-<run_id> 解析到该文件中
+ * type == "decision_entry" 的行。
+ *
+ * 相对 02 §8.2 的扩展（偏差已在实现报告中记录）：
+ * - `created_at`：02 §8.2 未列出，但其余账本条目（§8.1/§8.4/§8.5）均有
+ *   写入时间，决策账本同样需要可审计的时间序；
+ * - `feedback` / `override`：03-API契约.md 要求人工决策（含 bypass /
+ *   override）均须可审计，02 §8.2 未给出承载字段，这里补上——人工强判
+ *   通过 / 拒绝 / 要求修改时记录 original_judgment_ref 与理由 / feedback。
+ */
+export const DecisionKindSchema = z.enum([
+  "retry",
+  "paused",
+  "needs_human",
+  "failed",
+  "complete",
+  "budget_limited",
+  "policy_blocked",
+  "bypass_used",
+]);
+export type DecisionKind = z.infer<typeof DecisionKindSchema>;
+
+/**
+ * override 语义：人工决策覆盖了 judgment_report 的机器结论时记录。
+ * `original_judgment_ref` 指向被覆盖的 judgment_report（artifact://），
+ * `reason` 是 override 理由，`feedback` 是人工随决策提交的反馈原文。
+ */
+export const DecisionOverrideSchema = z.object({
+  original_judgment_ref: z.string(),
+  reason: z.string(),
+  feedback: z.string().optional(),
+});
+export type DecisionOverride = z.infer<typeof DecisionOverrideSchema>;
+
+export const DecisionEntrySchema = z.object({
+  decision_id: z.string(),
+  loop_id: z.string(),
+  run_id: z.string(),
+  decision: DecisionKindSchema,
+  // 决策理由（机器决策写判定依据，人工决策写人工结论）
+  reason: z.string(),
+  evidence_refs: z.array(z.string()),
+  // 涉及策略（policy://）；阶段 1 无 policy projection，恒为 []
+  policy_refs: z.array(z.string()),
+  // 决策后的挂起动作（如 wait_for_approval）
+  next_action: z.string(),
+  // 人工随决策提交的反馈（POST /api/runs/:id/decision 的 feedback）
+  feedback: z.string().optional(),
+  // 人工强判通过 / 拒绝 / 要求修改时非空
+  override: DecisionOverrideSchema.optional(),
+  created_at: z.string().datetime(),
+});
+export type DecisionEntry = z.infer<typeof DecisionEntrySchema>;
+
+/**
+ * POST /api/runs/:id/decision 的请求体（03-API契约.md）。
+ * approve / reject / request_changes / pause；request_changes 时 feedback
+ * 必填（由服务端在路由层强校验，schema 层保持 optional 以区分 400 原因）。
+ */
+export const RunDecisionActionSchema = z.enum([
+  "approve",
+  "reject",
+  "request_changes",
+  "pause",
+]);
+export type RunDecisionAction = z.infer<typeof RunDecisionActionSchema>;
+
+export const RunDecisionRequestSchema = z.object({
+  decision: RunDecisionActionSchema,
+  feedback: z.string().optional(),
+});
+export type RunDecisionRequest = z.infer<typeof RunDecisionRequestSchema>;

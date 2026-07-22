@@ -493,3 +493,21 @@ export {
   type VerifierStatus,
   VerifierStatusSchema,
 } from "./loop-schema/verification.js";
+export {
+  type DecisionEntry,
+  DecisionEntrySchema,
+  type DecisionKind,
+  DecisionKindSchema,
+  type DecisionOverride,
+  DecisionOverrideSchema,
+  type RunDecisionAction,
+  RunDecisionActionSchema,
+  type RunDecisionRequest,
+  RunDecisionRequestSchema,
+} from "./loop-schema/decision.js";
+export {
+  type PendingApproval,
+  PendingApprovalSchema,
+  type RunStateRecord,
+  RunStateRecordSchema,
+} from "./loop-schema/run-state.js";

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { DecisionEntrySchema, RunDecisionRequestSchema } from "./decision.js";
 import { IntentContractSchema } from "./intent-contract.js";
 import { LoopCardSchema } from "./loop-card.js";
 import { RunLedgerEntrySchema } from "./run-ledger.js";
@@ -270,4 +271,84 @@ test("LoopCard: 阶段 1 扩展 verification.commands parse 通过", () => {
     static: ["pnpm run lint"],
     runtime: ["pnpm run test -- --smoke"],
   });
+});
+
+// 示例照抄 docs/spec/02-schema契约.md §8.2（created_at 为扩展字段，
+// override 示例取自 03-API契约.md 的人工 override 审计要求）
+const decisionEntryExample = {
+  decision_id: "decision_001",
+  loop_id: "loop_ci_fix",
+  run_id: "run_20260720_001",
+  decision: "needs_human",
+  reason: "verifier 与 runtime 自述冲突，且涉及 protected branch",
+  evidence_refs: ["artifact://diff.patch", "artifact://verifier-report.json"],
+  policy_refs: ["policy://production_guarded"],
+  next_action: "wait_for_approval",
+  created_at: "2026-07-20T10:00:00Z",
+};
+
+test("DecisionEntry: 02 §8.2 示例 parse 通过", () => {
+  const result = DecisionEntrySchema.safeParse(decisionEntryExample);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+  assert.equal(result.data?.override, undefined);
+});
+
+test("DecisionEntry: 人工 override（original_judgment_ref + 理由 + feedback）parse 通过", () => {
+  const withOverride = {
+    ...decisionEntryExample,
+    decision_id: "decision_002",
+    decision: "complete",
+    reason: "human approved the run, overriding the judgment",
+    feedback: "人工确认风险可接受",
+    override: {
+      original_judgment_ref: "artifact://judgment-report.json",
+      reason: "human approved the run, overriding the judgment",
+      feedback: "人工确认风险可接受",
+    },
+  };
+  const result = DecisionEntrySchema.safeParse(withOverride);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+  assert.equal(
+    result.data?.override?.original_judgment_ref,
+    "artifact://judgment-report.json",
+  );
+});
+
+test("DecisionEntry: 8 值决策枚举之外取值应失败", () => {
+  const invalid = { ...decisionEntryExample, decision: "approve" };
+  assert.equal(DecisionEntrySchema.safeParse(invalid).success, false);
+});
+
+test("DecisionEntry: 缺 reason / evidence_refs 非数组应失败", () => {
+  const { reason: _omitted, ...withoutReason } = decisionEntryExample;
+  assert.equal(DecisionEntrySchema.safeParse(withoutReason).success, false);
+  const badEvidence = { ...decisionEntryExample, evidence_refs: "not-array" };
+  assert.equal(DecisionEntrySchema.safeParse(badEvidence).success, false);
+});
+
+test("DecisionEntry: override 缺 original_judgment_ref 应失败", () => {
+  const badOverride = {
+    ...decisionEntryExample,
+    override: { reason: "强判通过" },
+  };
+  assert.equal(DecisionEntrySchema.safeParse(badOverride).success, false);
+});
+
+test("RunDecisionRequest: 03 端点请求体正反例", () => {
+  assert.equal(
+    RunDecisionRequestSchema.safeParse({ decision: "approve" }).success,
+    true,
+  );
+  assert.equal(
+    RunDecisionRequestSchema.safeParse({
+      decision: "request_changes",
+      feedback: "先修 lint",
+    }).success,
+    true,
+  );
+  assert.equal(
+    RunDecisionRequestSchema.safeParse({ decision: "merge" }).success,
+    false,
+  );
+  assert.equal(RunDecisionRequestSchema.safeParse({}).success, false);
 });

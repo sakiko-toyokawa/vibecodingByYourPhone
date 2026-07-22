@@ -2,12 +2,11 @@
  * Phase-0 run orchestration (spec: docs/spec/05-分阶段计划.md 阶段 0).
  *
  * Wires trigger → contract → assembly → Supervisor → run ledger into the
- * minimal closed loop. There is no control-plane yet: a run is either
- * "active" (tracked in memory) or finished with a ledger entry on disk;
- * there is no 7-state machine and no budget enforcement. When the card
- * requires verification phases, the phase-1 verification layer
- * (loop/verification/) runs after execution and its judgment decides
- * complete vs failed (needs_human bridging is the next slice).
+ * minimal closed loop. When a control-plane is wired (phase 1), the
+ * post-execution judgment drives the minimal state progression
+ * (active → complete / needs_human / failed) and needs_human bridging;
+ * without one (phase-0 tests), a run is either "active" (tracked in memory)
+ * or finished with a ledger entry on disk — no budget enforcement.
  *
  * run_id rule: `run-<UTC yyyymmddTHHMMSSz>-<8 lowercase hex>` — sortable
  * by fire time, collision-safe, file-system safe (matches the ledger
@@ -22,7 +21,12 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { IntentContract, RunLedgerEntry } from "@yep-anywhere/shared";
+import type {
+  IntentContract,
+  JudgmentReport,
+  RunLedgerEntry,
+  RunState,
+} from "@yep-anywhere/shared";
 import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { QueuedResponse } from "../supervisor/WorkerQueue.js";
@@ -35,6 +39,7 @@ import {
   type ContractSource,
   buildIntentContract,
 } from "./contract/intent-contract.js";
+import type { ControlPlane } from "./control-plane/control-plane.js";
 import type { LoopCardStore } from "./state/loop-card-store.js";
 import type { RunLedgerStore } from "./state/run-ledger-store.js";
 import { type VerificationRefs, verifyRun } from "./verification/verify-run.js";
@@ -59,9 +64,28 @@ export interface RunSummary {
   run_id: string;
   loop_id: string;
   /** "active" while in flight; afterwards the ledger entry's final_status */
-  state: "active" | "complete" | "failed";
+  state: RunState;
   source: ContractSource;
   created_at: string;
+}
+
+/**
+ * LedgerSummary — 运行账本 / 决策账本的摘要投影（03-API契约.md
+ * "GET /api/runs/:id"），不是全量账本；前端需要明细时按 URI 解析文件。
+ */
+export interface LedgerSummary {
+  turns_used: number;
+  retries_used: number;
+  verifier_report_refs: string[];
+  judgment_report_ref: string | null;
+  /** judgment_report 摘要（overall / next_action / requires_human） */
+  judgment_summary: {
+    overall: string;
+    next_action: string;
+    requires_human: boolean;
+  } | null;
+  decision_refs: string[];
+  failure_tags: string[];
 }
 
 interface ActiveRun {
@@ -82,6 +106,10 @@ export interface LoopRunServiceDeps {
   supervisor: Supervisor;
   loopCardStore: LoopCardStore;
   runLedgerStore: RunLedgerStore;
+  /** Phase-1 minimal control-plane; absent in tests that only exercise
+   *  phase-0 orchestration (verification verdicts then map straight to
+   *  complete/failed as before). */
+  controlPlane?: ControlPlane;
 }
 
 function makeRunId(now: Date): string {
@@ -100,6 +128,18 @@ export class LoopRunService {
 
   constructor(deps: LoopRunServiceDeps) {
     this.deps = deps;
+    // A needs_human run keeps its active registration while it waits; the
+    // control-plane calls this when the human decision resolves it.
+    deps.controlPlane?.onRunResolved((runId) => this.releaseRun(runId));
+  }
+
+  /** Release a resolved (previously needs_human) run's active registration. */
+  private releaseRun(runId: string): void {
+    const active = this.activeByRunId.get(runId);
+    if (active) {
+      this.activeByRunId.delete(runId);
+      this.activeByLoop.delete(active.loopId);
+    }
   }
 
   isRunActive(loopId: string): boolean {
@@ -163,7 +203,12 @@ export class LoopRunService {
         summaries.push({
           run_id: entry.run_id,
           loop_id: entry.loop_id,
-          state: entry.final_status === "complete" ? "complete" : "failed",
+          // The ledger entry is append-only (its final_status can be a stale
+          // needs_human after a human decision) — the control-plane's latest
+          // known state wins when available.
+          state:
+            this.deps.controlPlane?.currentStateOf(entry.run_id) ??
+            entry.final_status,
           source: "cron", // source is not in the ledger schema; see report
           created_at: entry.created_at,
         });
@@ -175,7 +220,7 @@ export class LoopRunService {
       summaries.push({
         run_id: active.runId,
         loop_id: loopId,
-        state: "active",
+        state: this.deps.controlPlane?.currentStateOf(active.runId) ?? "active",
         source: active.source,
         created_at: active.createdAt,
       });
@@ -185,21 +230,25 @@ export class LoopRunService {
     return summaries;
   }
 
-  /** Single run view: active run metadata or the finished ledger entry. */
-  async getRun(
-    runId: string,
-  ): Promise<{ run: RunSummary; ledger: RunLedgerEntry | null } | null> {
+  /** Single run view: active run metadata or the finished ledger entry,
+   *  plus the 03 LedgerSummary projection (incl. judgment_report 摘要). */
+  async getRun(runId: string): Promise<{
+    run: RunSummary;
+    ledger: RunLedgerEntry | null;
+    ledger_summary: LedgerSummary;
+  } | null> {
     const active = this.activeByRunId.get(runId);
     if (active) {
       return {
         run: {
           run_id: active.runId,
           loop_id: active.loopId,
-          state: "active",
+          state: this.deps.controlPlane?.currentStateOf(runId) ?? "active",
           source: active.source,
           created_at: active.createdAt,
         },
         ledger: null,
+        ledger_summary: await this.buildLedgerSummary(runId, null),
       };
     }
     const entry = await this.deps.runLedgerStore.readEntry(runId);
@@ -210,11 +259,64 @@ export class LoopRunService {
       run: {
         run_id: entry.run_id,
         loop_id: entry.loop_id,
-        state: entry.final_status === "complete" ? "complete" : "failed",
+        // Append-only ledger can hold a stale needs_human; prefer the
+        // control-plane's latest known state (see listRuns).
+        state:
+          this.deps.controlPlane?.currentStateOf(entry.run_id) ??
+          entry.final_status,
         source: "cron",
         created_at: entry.created_at,
       },
       ledger: entry,
+      ledger_summary: await this.buildLedgerSummary(runId, entry),
+    };
+  }
+
+  /** Build the 03 LedgerSummary projection from the ledger file + artifacts. */
+  private async buildLedgerSummary(
+    runId: string,
+    entry: RunLedgerEntry | null,
+  ): Promise<LedgerSummary> {
+    const refs = entry?.verification_refs;
+    const notApplicable = (ref: string | undefined): ref is string =>
+      ref !== undefined && ref !== "not_applicable";
+
+    let judgmentSummary: LedgerSummary["judgment_summary"] = null;
+    const judgmentJson = await this.deps.runLedgerStore.readArtifact(
+      runId,
+      "judgment-report.json",
+    );
+    if (judgmentJson) {
+      try {
+        const judgment = JSON.parse(judgmentJson) as JudgmentReport;
+        judgmentSummary = {
+          overall: judgment.overall,
+          next_action: judgment.next_action,
+          requires_human: judgment.requires_human,
+        };
+      } catch {
+        console.warn(
+          `[LoopRunService] judgment-report.json for run ${runId} is unparseable`,
+        );
+      }
+    }
+
+    const decisionEntries =
+      await this.deps.runLedgerStore.readDecisionEntries(runId);
+
+    return {
+      turns_used: 1, // phase 1: single-turn runs
+      retries_used: 0, // phase 1: no retry (phase-2 budget counter)
+      verifier_report_refs: notApplicable(refs?.verifier_report)
+        ? [refs.verifier_report]
+        : [],
+      judgment_report_ref: notApplicable(refs?.judgment_report)
+        ? refs.judgment_report
+        : null,
+      judgment_summary: judgmentSummary,
+      decision_refs:
+        decisionEntries.length > 0 ? [`ledger://decision-${runId}`] : [],
+      failure_tags: [], // failure attribution lands with the learning side
     };
   }
 
@@ -246,6 +348,7 @@ export class LoopRunService {
     }
 
     const stdout = outcome.finalText || outcome.error || "(no output)";
+    let waitingForHuman = false;
     try {
       if (contractJson) {
         await store.writeArtifact(runId, "intent-contract.json", contractJson);
@@ -267,9 +370,10 @@ export class LoopRunService {
         verifier_report: "not_applicable",
         judgment_report: "not_applicable",
       };
-      let finalStatus: RunLedgerEntry["final_status"] = outcome.ok
-        ? "complete"
-        : "failed";
+      let verificationRan = false;
+      let judgment: JudgmentReport | null = null;
+      let judgmentRef: string | null = null;
+      let finalStatus: RunState = outcome.ok ? "complete" : "failed";
 
       const requiredPhases = card.loop.verification.required;
       const workspacePath = card.loop.workspace.path;
@@ -287,20 +391,46 @@ export class LoopRunService {
             { store },
           );
           verificationRefs = verification.refs;
-          // TODO(phase-1 next slice): judgment.next_action "needs_human" /
-          // "escalate" must bridge into the Yep approval pipeline and move
-          // the run to needs_human; this slice records failed/inconclusive
-          // as failed.
-          finalStatus =
-            outcome.ok && verification.judgment.overall === "passed"
-              ? "complete"
-              : "failed";
+          verificationRan = true;
+          judgment = verification.judgment;
+          judgmentRef = verification.refs.judgment_report;
         } catch (error) {
           console.error(
             `[LoopRunService] verification failed for run ${runId}:`,
             error,
           );
         }
+      }
+
+      // Phase-1 minimal control-plane: the judgment decides complete /
+      // needs_human / failed, the decision lands in the decision ledger, and
+      // needs_human bridges into the human-decision pipeline (the run stays
+      // registered as active while it waits — see the finally block).
+      if (this.deps.controlPlane) {
+        try {
+          const applied = await this.deps.controlPlane.applyJudgment({
+            loopId,
+            runId,
+            turn: 1,
+            goalId: contract?.intent_id ?? "unknown",
+            workspaceRef: `workspace://${loopId}/${runId}`,
+            executionOk: outcome.ok,
+            verificationRan,
+            judgment,
+            judgmentRef,
+            createdAt,
+          });
+          finalStatus = applied.state;
+          waitingForHuman = applied.state === "needs_human";
+        } catch (error) {
+          console.error(
+            `[LoopRunService] control-plane failed for run ${runId}:`,
+            error,
+          );
+        }
+      } else if (verificationRan && judgment) {
+        finalStatus =
+          outcome.ok && judgment.overall === "passed" ? "complete" : "failed";
       }
 
       const entry: RunLedgerEntry = {
@@ -338,8 +468,13 @@ export class LoopRunService {
         error,
       );
     } finally {
-      this.activeByLoop.delete(loopId);
-      this.activeByRunId.delete(runId);
+      // A needs_human run is a blocking wait state: it keeps its active
+      // registration (same-loop runs stay serial, 409 run_active) until the
+      // human decision resolves it via ControlPlane → releaseRun().
+      if (!waitingForHuman) {
+        this.activeByLoop.delete(loopId);
+        this.activeByRunId.delete(runId);
+      }
     }
   }
 

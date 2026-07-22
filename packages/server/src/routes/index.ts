@@ -3,7 +3,11 @@ import type { Hono } from "hono";
 import type { AppOptions } from "../app.js";
 import { createAuthRoutes } from "../auth/routes.js";
 import { container } from "../container.js";
-import type { LoopCardStore, LoopRunService } from "../loop/index.js";
+import type {
+  ControlPlane,
+  LoopCardStore,
+  LoopRunService,
+} from "../loop/index.js";
 import { updateAllowedHosts } from "../middleware/allowed-hosts.js";
 import type { CodexSessionScanner } from "../projects/codex-scanner.js";
 import { CODEX_SESSIONS_DIR } from "../projects/codex-scanner.js";
@@ -61,6 +65,7 @@ export interface RouteDependencies {
   geminiReaderFactory: (projectPath: string) => GeminiSessionReader;
   loopCardStore: LoopCardStore;
   loopRunService?: LoopRunService;
+  loopControlPlane?: ControlPlane;
 }
 
 export function registerRoutes(
@@ -78,6 +83,7 @@ export function registerRoutes(
     geminiReaderFactory,
     loopCardStore,
     loopRunService,
+    loopControlPlane,
   } = container.cradle as unknown as RouteDependencies;
 
   // Auth routes (always mounted if authService is provided)
@@ -327,7 +333,13 @@ export function registerRoutes(
     createLoopsRoutes({ loopCardStore, runService: loopRunService }),
   );
   if (loopRunService) {
-    app.route("/api/runs", createRunsRoutes({ runService: loopRunService }));
+    app.route(
+      "/api/runs",
+      createRunsRoutes({
+        runService: loopRunService,
+        controlPlane: loopControlPlane,
+      }),
+    );
   }
 
   // Editor routes (project tree, write, AI edit)

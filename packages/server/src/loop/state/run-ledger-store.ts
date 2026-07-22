@@ -18,6 +18,8 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {
+  type DecisionEntry,
+  DecisionEntrySchema,
   type RunLedgerEntry,
   RunLedgerEntrySchema,
 } from "@yep-anywhere/shared";
@@ -57,9 +59,32 @@ export class RunLedgerStore {
   async appendEntry(runId: string, entry: RunLedgerEntry): Promise<void> {
     this.assertSafeName(runId, "run_id");
     const validated = RunLedgerEntrySchema.parse(entry);
-    const line = `${JSON.stringify({ type: "run_ledger_entry", ...validated })}\n`;
-    const filePath = path.join(this.runsDir, `${runId}.jsonl`);
+    await this.enqueueAppend(
+      runId,
+      `${JSON.stringify({ type: "run_ledger_entry", ...validated })}\n`,
+    );
+  }
 
+  /**
+   * Append a decision_entry (决策账本, 02 §8.2) to runs/<run_id>.jsonl.
+   * Run ledger and decision ledger share one file per 04-存储约定; readers
+   * split by the `type` discriminator.
+   */
+  async appendDecisionEntry(
+    runId: string,
+    entry: DecisionEntry,
+  ): Promise<void> {
+    this.assertSafeName(runId, "run_id");
+    const validated = DecisionEntrySchema.parse(entry);
+    await this.enqueueAppend(
+      runId,
+      `${JSON.stringify({ type: "decision_entry", ...validated })}\n`,
+    );
+  }
+
+  /** Serialize appends to the same run file through a per-file chain. */
+  private enqueueAppend(runId: string, line: string): Promise<void> {
+    const filePath = path.join(this.runsDir, `${runId}.jsonl`);
     const previous = this.appendChains.get(runId) ?? Promise.resolve();
     const next = previous.then(async () => {
       await fs.mkdir(this.runsDir, { recursive: true });
@@ -159,6 +184,60 @@ export class RunLedgerStore {
       }
     }
     return null;
+  }
+
+  /**
+   * Read all decision_entry lines for a run (ledger://decision-<run_id>).
+   * Corrupt or invalid lines are skipped with a warning.
+   */
+  async readDecisionEntries(runId: string): Promise<DecisionEntry[]> {
+    this.assertSafeName(runId, "run_id");
+    let content: string;
+    try {
+      content = await fs.readFile(
+        path.join(this.runsDir, `${runId}.jsonl`),
+        "utf-8",
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+
+    const entries: DecisionEntry[] = [];
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        console.warn(
+          `[RunLedgerStore] skipping unparseable line in runs/${runId}.jsonl`,
+        );
+        continue;
+      }
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        (parsed as { type?: unknown }).type === "decision_entry"
+      ) {
+        const { type: _type, ...entry } = parsed as Record<string, unknown>;
+        const result = DecisionEntrySchema.safeParse(entry);
+        if (!result.success) {
+          console.warn(
+            `[RunLedgerStore] decision_entry in runs/${runId}.jsonl failed schema validation:`,
+            result.error,
+          );
+          continue;
+        }
+        entries.push(result.data);
+      }
+    }
+    return entries;
   }
 
   /** List run ids that have a ledger file. */

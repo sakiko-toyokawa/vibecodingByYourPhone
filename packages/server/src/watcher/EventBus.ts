@@ -6,6 +6,7 @@ import type {
   AgentActivity,
   ContextUsage,
   PendingInputType,
+  RunState,
   UrlProjectId,
 } from "@yep-anywhere/shared";
 import type { SessionOwnership, SessionSummary } from "../supervisor/types.js";
@@ -214,6 +215,55 @@ export interface BrowserTabDisconnectedEvent {
   timestamp: string;
 }
 
+/**
+ * Loop control-plane: emitted on every run state-machine transition
+ * (spec: docs/spec/03-API契约.md "loop-state-changed"). Broadcast on the
+ * activity channel; 7-enum run states per 02-schema契约.md §7.
+ */
+export interface LoopStateChangedEvent {
+  type: "loop-state-changed";
+  loop_id: string;
+  run_id: string;
+  from_state: RunState;
+  to_state: RunState;
+  /** Current turn (from 1, first turn included) */
+  turn: number;
+  /** Transition reason (e.g. which budget fired for budget_limited) */
+  reason?: string;
+  /** State transition time (ISO 8601) — the run_state's updated_at */
+  timestamp: string;
+}
+
+/**
+ * Loop control-plane: emitted when a run is judged needs_human and blocks
+ * waiting for a human decision (spec: docs/spec/03-API契约.md
+ * "run-decision-required", payload aligned with the Human Gate Payload).
+ * The frontend should answer via POST /api/runs/:id/decision.
+ */
+export interface RunDecisionRequiredEvent {
+  type: "run-decision-required";
+  loop_id: string;
+  run_id: string;
+  /** Approval request id — the needs_human decision_entry's decision_id */
+  request_id: string;
+  /** Requested action (hard-gate action for gate hits; the judgment's
+   *  next_action otherwise — phase 1 has no policy projection yet) */
+  action: string;
+  /** Risk grading; "unrated" in phase 1 (no policy projection yet) */
+  risk: string;
+  /** Why the run is blocked */
+  reason: string;
+  /** artifact:// evidence refs (verifier evidence, diff, …) */
+  evidence_refs: string[];
+  /** Artifact summary, when available */
+  diff_summary?: string;
+  /** Subset of ["approve","reject","request_changes","pause"] */
+  options: string[];
+  /** Recommended decision, when the control-plane has one */
+  recommended?: string;
+  timestamp: string;
+}
+
 /** Union of all event types that can be emitted through the bus */
 export type BusEvent =
   | FileChangeEvent
@@ -233,7 +283,9 @@ export type BusEvent =
   | SessionUpdatedEvent
   | NetworkBindingChangedEvent
   | BrowserTabConnectedEvent
-  | BrowserTabDisconnectedEvent;
+  | BrowserTabDisconnectedEvent
+  | LoopStateChangedEvent
+  | RunDecisionRequiredEvent;
 
 export type EventHandler<T = BusEvent> = (event: T) => void;
 

@@ -6,7 +6,13 @@ import {
   createContainerInstance,
   registerValue,
 } from "./container.js";
-import { CronScheduler, LoopRunService, RunLedgerStore } from "./loop/index.js";
+import {
+  ControlPlane,
+  CronScheduler,
+  LoopRunService,
+  RunLedgerStore,
+  RunStateStore,
+} from "./loop/index.js";
 import { createAuthMiddleware } from "./middleware/auth.js";
 import {
   corsMiddleware,
@@ -206,15 +212,23 @@ export function createApp(
     registerValue("externalTracker", externalTracker);
   }
 
-  // Loop phase 0: run orchestration + in-process cron trigger. Built here
-  // (not in services-init) because they need the app-level Supervisor.
+  // Loop phase 0/1: run orchestration + in-process cron trigger + minimal
+  // control-plane (needs_human bridging). Built here (not in services-init)
+  // because they need the app-level Supervisor and event bus.
   {
     const { loopCardStore } = container.cradle;
     const runLedgerStore = new RunLedgerStore({ dataDir: options.dataDir });
+    const runStateStore = new RunStateStore({ dataDir: options.dataDir });
+    const loopControlPlane = new ControlPlane({
+      runStateStore,
+      runLedgerStore,
+      eventBus: options.eventBus,
+    });
     const loopRunService = new LoopRunService({
       supervisor,
       loopCardStore,
       runLedgerStore,
+      controlPlane: loopControlPlane,
     });
     const cronScheduler = new CronScheduler({
       loopCardStore,
@@ -231,6 +245,7 @@ export function createApp(
     });
     cronScheduler.start();
     registerValue("loopRunService", loopRunService);
+    registerValue("loopControlPlane", loopControlPlane);
     registerValue("cronScheduler", cronScheduler);
   }
 
