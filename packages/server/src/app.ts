@@ -9,8 +9,11 @@ import {
 import {
   ControlPlane,
   CronScheduler,
+  FailurePatternStore,
   LearningEventStore,
+  LearningWorker,
   LoopRunService,
+  ProposalStore,
   RunLedgerStore,
   RunStateStore,
 } from "./loop/index.js";
@@ -249,9 +252,27 @@ export function createApp(
       },
     });
     cronScheduler.start();
+    // 阶段 3 学习侧: 异步 learning worker, 与主链路同进程但崩溃隔离
+    // (tick 整体 try/catch + 健康记录, 见 learning/worker.ts). 只读
+    // events.jsonl + runs/, 只写 failure-patterns.json / proposals/ /
+    // cursor.json (04 单写者表). proposalStore 是 server 进程单例 —
+    // 后续提案 API 也必须经它, 不能另开实例直写文件.
+    const failurePatternStore = new FailurePatternStore({
+      dataDir: options.dataDir,
+    });
+    const proposalStore = new ProposalStore({ dataDir: options.dataDir });
+    const learningWorker = new LearningWorker({
+      learningEventStore,
+      failurePatternStore,
+      proposalStore,
+      runLedgerStore,
+    });
+    learningWorker.start();
     registerValue("loopRunService", loopRunService);
     registerValue("loopControlPlane", loopControlPlane);
     registerValue("cronScheduler", cronScheduler);
+    registerValue("learningWorker", learningWorker);
+    registerValue("proposalStore", proposalStore);
   }
 
   // Register all API routes

@@ -5,6 +5,8 @@ export * from "./control-plane/decide.js";
 export * from "./control-plane/retry-backoff.js";
 export * from "./control-plane/run-state-store.js";
 export * from "./control-plane/state-machine.js";
+export * from "./learning/signature.js";
+export * from "./learning/worker.js";
 export * from "./run-service.js";
 export * from "./state/loop-card-store.js";
 export * from "./state/run-ledger-store.js";

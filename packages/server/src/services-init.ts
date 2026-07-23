@@ -17,7 +17,9 @@ import { LoopCardStore } from "./loop/index.js";
 import type {
   ControlPlane,
   CronScheduler,
+  LearningWorker,
   LoopRunService,
+  ProposalStore,
 } from "./loop/index.js";
 import {
   ProjectMetadataService,
@@ -72,6 +74,9 @@ export interface ServicesContainer {
   loopRunService?: LoopRunService;
   loopControlPlane?: ControlPlane;
   cronScheduler?: CronScheduler;
+  // 阶段 3 学习侧 (createApp 注册; proposalStore 是提案单写者单例)
+  learningWorker?: LearningWorker;
+  proposalStore?: ProposalStore;
   sessionIndexService: SessionIndexService;
   pushService: PushService;
   browserProfileService: BrowserProfileService;
