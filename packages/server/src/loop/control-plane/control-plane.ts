@@ -48,12 +48,14 @@ import type {
   DecisionKind,
   FailureTag,
   JudgmentReport,
+  LearningEvent,
   RunDecisionAction,
   RunState,
   RunStateRecord,
 } from "@yep-anywhere/shared";
 import { BudgetSchema } from "@yep-anywhere/shared";
 import type { IEventBus } from "../../watcher/index.js";
+import type { LearningEventStore } from "../state/learning-event-store.js";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
 import { type ControlDecisionKind, decideControl } from "./decide.js";
 import type { RunStateStore } from "./run-state-store.js";
@@ -190,6 +192,14 @@ export interface ControlPlaneDeps {
   runLedgerStore: RunLedgerStore;
   /** Optional: events are only broadcast when a bus is wired. */
   eventBus?: IEventBus;
+  /**
+   * Optional: learning_event sink (阶段 3). When wired, a run reaching a
+   * terminal decision (complete / failed / budget_limited) or a decision
+   * carrying failure_tags appends one learning_event to
+   * learning/events.jsonl — fire-and-forget (只发不等), emission failures
+   * are logged and never affect run progression.
+   */
+  learningEventStore?: LearningEventStore;
 }
 
 /** The options a needs_human run offers (03: full set). */
@@ -210,6 +220,8 @@ export class ControlPlane {
   private statesByRunId = new Map<string, RunState>();
   private resolvedListeners: ((runId: string, state: RunState) => void)[] = [];
   private resumeListeners: ((signal: ResumeSignal) => void)[] = [];
+  /** In-flight fire-and-forget learning_event appends (settle hook for tests). */
+  private pendingLearningEvents: Promise<void>[] = [];
 
   constructor(deps: ControlPlaneDeps) {
     this.deps = deps;
@@ -824,7 +836,65 @@ export class ControlPlane {
       timestamp: now,
     });
 
+    // 阶段 3 learning_event (02 §8.4): a terminal decision (complete /
+    // failed / budget_limited) or a decision carrying failure_tags emits
+    // one learning signal for the async learning worker. Fire-and-forget
+    // (只发不等): the append is not awaited and any emission failure is
+    // logged by emitLearningEvent, never propagated — 主链路对学习零感知.
+    if (
+      to === "complete" ||
+      to === "failed" ||
+      to === "budget_limited" ||
+      (entry.failure_tags?.length ?? 0) > 0
+    ) {
+      this.emitLearningEvent({
+        // Deterministic idempotency key derived from the decision entry;
+        // an idempotent replay returns above before reaching this point.
+        event_id: `learn-evt-${opts.decisionId}`,
+        run_id: runId,
+        loop_id: loopId,
+        decision: opts.decision,
+        judgment_ref: updated.last_judgment ?? "not_available",
+        ledger_refs: [`ledger://${runId}`, `ledger://decision-${runId}`],
+        failure_tags: entry.failure_tags ?? [],
+        created_at: now,
+      });
+    }
+
     return { record: updated, entry, idempotent: false };
+  }
+
+  /**
+   * Append a learning_event without awaiting it (02 §8.4: 主链路发出后即
+   * 继续，不等学习结果). Any failure (schema, IO — e.g. EACCES on
+   * events.jsonl) is caught and logged here; run progression is unaffected.
+   */
+  private emitLearningEvent(event: LearningEvent): void {
+    const store = this.deps.learningEventStore;
+    if (!store) {
+      return;
+    }
+    const pending: Promise<void> = store.appendEvent(event).catch((error) => {
+      console.error(
+        `[ControlPlane] learning_event emit failed for run ${event.run_id} (只发不等, run 推进不受影响):`,
+        error,
+      );
+    });
+    this.pendingLearningEvents.push(pending);
+    void pending.finally(() => {
+      const index = this.pendingLearningEvents.indexOf(pending);
+      if (index >= 0) {
+        this.pendingLearningEvents.splice(index, 1);
+      }
+    });
+  }
+
+  /**
+   * Test hook: wait for in-flight fire-and-forget learning_event appends.
+   * Production code never awaits emissions (只发不等).
+   */
+  async settleLearningEvents(): Promise<void> {
+    await Promise.all(this.pendingLearningEvents);
   }
 
   /**

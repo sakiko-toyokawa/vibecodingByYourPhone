@@ -539,3 +539,23 @@ export {
   type RiskRules,
   RiskRulesSchema,
 } from "./loop-schema/policy.js";
+export {
+  type FailurePattern,
+  FailurePatternSchema,
+  type FailurePatternStatus,
+  FailurePatternStatusSchema,
+  type ImprovementProposal,
+  ImprovementProposalSchema,
+  type LearningEvent,
+  LearningEventSchema,
+  type ProposalCreatedBy,
+  ProposalCreatedBySchema,
+  type ProposalPipelineStage,
+  ProposalPipelineStageSchema,
+  type ProposalRisk,
+  ProposalRiskSchema,
+  type ProposalStatus,
+  ProposalStatusSchema,
+  type ProposalType,
+  ProposalTypeSchema,
+} from "./loop-schema/learning.js";

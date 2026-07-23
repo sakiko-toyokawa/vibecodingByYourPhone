@@ -8,5 +8,8 @@ export * from "./control-plane/state-machine.js";
 export * from "./run-service.js";
 export * from "./state/loop-card-store.js";
 export * from "./state/run-ledger-store.js";
+export * from "./state/learning-event-store.js";
+export * from "./state/failure-pattern-store.js";
+export * from "./state/proposal-store.js";
 export * from "./trigger/cron-matcher.js";
 export * from "./trigger/cron-scheduler.js";

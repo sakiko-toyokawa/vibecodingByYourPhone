@@ -9,6 +9,7 @@ import {
 import {
   ControlPlane,
   CronScheduler,
+  LearningEventStore,
   LoopRunService,
   RunLedgerStore,
   RunStateStore,
@@ -219,10 +220,14 @@ export function createApp(
     const { loopCardStore } = container.cradle;
     const runLedgerStore = new RunLedgerStore({ dataDir: options.dataDir });
     const runStateStore = new RunStateStore({ dataDir: options.dataDir });
+    const learningEventStore = new LearningEventStore({
+      dataDir: options.dataDir,
+    });
     const loopControlPlane = new ControlPlane({
       runStateStore,
       runLedgerStore,
       eventBus: options.eventBus,
+      learningEventStore,
     });
     const loopRunService = new LoopRunService({
       supervisor,

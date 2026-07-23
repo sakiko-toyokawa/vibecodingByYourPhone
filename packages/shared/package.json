@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "node --import tsx --test src/loop-schema/loop-schema.test.ts"
+    "test": "node --import tsx --test src/loop-schema/loop-schema.test.ts src/loop-schema/learning.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
