@@ -83,15 +83,27 @@ export function buildIntentContract(
   const discovery = loop.discovery ?? {};
   const handoff = loop.handoff ?? {};
 
-  const rawGoal = [
-    `Loop '${loop.id}' read-only scan`,
-    discovery.source ? `source=${discovery.source}` : null,
-    discovery.query ? `query=${discovery.query}` : null,
-  ]
-    .filter(Boolean)
-    .join("; ");
+  // 策略模式（非 manual approval_mode）生成可写合约：约束从"只读"变为
+  // "工作区边界内"，outcome 允许有边界的修改。manual / 无 policy 块保持
+  // 阶段 0/1 的只读形状。裁决依据是 card 原始字段，不引入 policy 模块依赖。
+  const approvalMode = loop.policy?.approval_mode;
+  const writeCapable = approvalMode !== undefined && approvalMode !== "manual";
 
-  const constraints: string[] = ["read_only"];
+  const rawGoal =
+    handoff.task ??
+    [
+      writeCapable
+        ? `Loop '${loop.id}' task`
+        : `Loop '${loop.id}' read-only scan`,
+      discovery.source ? `source=${discovery.source}` : null,
+      discovery.query ? `query=${discovery.query}` : null,
+    ]
+      .filter(Boolean)
+      .join("; ");
+
+  const constraints: string[] = [
+    writeCapable ? "workspace_bounded" : "read_only",
+  ];
   if (handoff.max_items_per_run !== undefined) {
     constraints.push(`max_items_per_run=${handoff.max_items_per_run}`);
   }
@@ -101,13 +113,22 @@ export function buildIntentContract(
     source: options.source === "cron" ? "cron" : "ui",
     raw_goal: rawGoal,
     task_type: {
-      primary: handoff.default_task_type ?? "read_only_report",
+      primary:
+        handoff.default_task_type ??
+        (writeCapable ? "maintenance" : "read_only_report"),
       confidence: 1,
       requires_clarification: false,
     },
-    outcome:
-      "一份只读扫描报告：列出发现与建议，不对工作区做任何修改（报告即结果，无验证层）",
-    success_criteria: ["只读扫描完成并产出报告文本", "工作区未产生任何写改动"],
+    outcome: writeCapable
+      ? "完成任务目标并产出结果报告：允许在工作区内做有边界的修改；merge/deploy/delete/publish/bill/notify/close 等硬闸门动作禁止，发现需要时在报告中注明"
+      : "一份只读扫描报告：列出发现与建议，不对工作区做任何修改（报告即结果，无验证层）",
+    success_criteria: writeCapable
+      ? [
+          "任务目标完成并产出报告文本",
+          "修改不超出工作区边界",
+          "未尝试硬闸门动作",
+        ]
+      : ["只读扫描完成并产出报告文本", "工作区未产生任何写改动"],
     constraints,
     budget: buildBudgetLimits(card),
   });

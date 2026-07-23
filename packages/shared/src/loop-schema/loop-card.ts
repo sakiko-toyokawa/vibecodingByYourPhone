@@ -57,6 +57,10 @@ export const LoopCardSchema = z.object({
       .object({
         default_task_type: z.string().optional(),
         max_items_per_run: z.number().optional(),
+        // Phase-2 Yep extension (not in 02-schema契约.md §1): free-form task
+        // description. Without it the contract can only generate a generic
+        // goal, which is unusable for write-capable (policy) loops.
+        task: z.string().optional(),
       })
       .optional(),
     workspace: z.object({
