@@ -34,8 +34,9 @@
  *
  *  - paused / budget_limited resume interfaces: resumePaused (恢复信号)
  *    and supplementBudget (人工补充预算) are implemented here; the HTTP
- *    control endpoints (PATCH /api/loops/:id pause/resume) land in the
- *    next slice of phase 2 (05 改动清单 routes 项).
+ *    control endpoints (PATCH /api/loops/:id pause/resume/archive) live in
+ *    routes/loops.ts (阶段 2 第三刀). pauseActive is the active → paused
+ *    side of PATCH pause (主动暂停，不走审批管线).
  *
  * control-plane is the only writer of state/<loop_id>.json (04-存储约定).
  */
@@ -163,6 +164,22 @@ export interface BeginTurnResult {
   record: RunStateRecord;
 }
 
+/**
+ * Seed for pausing a run whose first turn is still in flight: turn 1 has no
+ * run_state record yet (it is first written at judgment time), so PATCH
+ * pause materializes one from the run service's execution context before
+ * driving active → paused.
+ */
+export interface PauseSeed {
+  runId: string;
+  turn: number;
+  goalId: string;
+  workspaceRef: string;
+  /** Contract budget limits; null when setup failed before a contract existed. */
+  budget: BudgetLimits | null;
+  createdAt: string;
+}
+
 interface PendingApproval {
   loopId: string;
   requestId: string;
@@ -258,11 +275,15 @@ export class ControlPlane {
           e.decision_id ===
           controlDecisionId(input.runId, input.turn, existing.state),
       );
-      if (entry && existing.budget) {
+      if (entry) {
         return {
           state: existing.state as ControlDecisionKind,
           entry,
-          budget: existing.budget,
+          // A PATCH-pause seeded record may carry a null budget (turn 1 had
+          // no judgment yet); fall back to the contract budget with zero
+          // usage — the same base the normal path below computes, never
+          // fabricated consumption.
+          budget: existing.budget ?? BudgetSchema.parse({ ...input.budget }),
           idempotent: true,
         };
       }
@@ -560,9 +581,70 @@ export class ControlPlane {
   }
 
   /**
+   * Pause an active run (active → paused, 03 PATCH pause: 主动暂停，不走
+   * 审批管线 — no approval is queued, resume needs only a signal).
+   *
+   * The decision_id uses the canonical run_id+turn+state form so a racing
+   * applyJudgment for the same turn resolves as an idempotent replay of
+   * this pause instead of an illegal transition.
+   *
+   * `seed` covers turn 1 still in flight (no run_state record yet): the
+   * record is materialized from the run service's execution context, then
+   * transitioned. Killing the executing process is the caller's job (the
+   * run service terminates it right after this resolves — 阶段 2 选项 A:
+   * 杀执行进程，partial result 丢弃，session_ref 保留供 resume)。
+   */
+  async pauseActive(loopId: string, seed?: PauseSeed): Promise<RunStateRecord> {
+    let record = await this.deps.runStateStore.load(loopId);
+    if (!record || (seed && record.run_id !== seed.runId)) {
+      if (!seed) {
+        throw new ControlPlaneError(
+          "run_not_found",
+          `Loop '${loopId}' has no active run state to pause`,
+        );
+      }
+      // Notional from-state: the run is active (its first turn is executing)
+      // even though no judgment has landed yet.
+      record = {
+        version: 2,
+        goal_id: seed.goalId,
+        run_id: seed.runId,
+        state: "active",
+        turn: seed.turn,
+        intent_version: 1,
+        workspace_ref: seed.workspaceRef,
+        last_judgment: null,
+        pending_approval: null,
+        budget: seed.budget ? BudgetSchema.parse({ ...seed.budget }) : null,
+        created_at: seed.createdAt,
+        updated_at: new Date().toISOString(),
+      };
+    }
+    if (record.state !== "active") {
+      throw new ControlPlaneError(
+        "invalid_state",
+        `Loop '${loopId}' run is '${record.state}', not active (pause requires an active run; needs_human runs are paused via POST /api/runs/:id/decision)`,
+      );
+    }
+    const { record: updated } = await this.transition({
+      loopId,
+      runId: record.run_id,
+      record,
+      to: "paused",
+      decision: "paused",
+      decisionId: controlDecisionId(record.run_id, record.turn, "paused"),
+      reason:
+        "human paused the run via PATCH /api/loops/:id (主动暂停, 不走审批管线; the executing process is killed and the partial turn result dropped — session_ref 保留供 resume)",
+      nextAction: "wait_for_resume_signal",
+      patch: {},
+    });
+    return updated;
+  }
+
+  /**
    * Resume a paused run (paused → active, 恢复只需信号、不携带人工响应 —
-   * 03 PATCH resume 语义). Interface for the phase-2 pause/resume control
-   * endpoints; the HTTP route lands in the next slice.
+   * 03 PATCH resume 语义). Wired to PATCH /api/loops/:id {action:"resume"}
+   * in routes/loops.ts.
    */
   async resumePaused(loopId: string): Promise<RunStateRecord> {
     const record = await this.deps.runStateStore.load(loopId);

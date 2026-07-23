@@ -935,6 +935,8 @@
   "loopsRunNow": "立即运行",
   "loopsRunStarting": "启动中…",
   "loopsRunActive": "该循环已有正在运行的 run",
+  "loopsPause": "暂停",
+  "loopsResume": "恢复",
   "loopsRunsTitle": "运行历史",
   "loopsNoRuns": "还没有运行记录",
   "loopsJudgmentTitle": "判定摘要",

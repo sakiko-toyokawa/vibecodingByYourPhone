@@ -935,6 +935,8 @@
   "loopsRunNow": "今すぐ実行",
   "loopsRunStarting": "開始中…",
   "loopsRunActive": "このループには実行中の run があります",
+  "loopsPause": "一時停止",
+  "loopsResume": "再開",
   "loopsRunsTitle": "実行履歴",
   "loopsNoRuns": "まだ実行がありません",
   "loopsJudgmentTitle": "判定",

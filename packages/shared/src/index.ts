@@ -510,6 +510,10 @@ export {
   RunDecisionActionSchema,
   type RunDecisionRequest,
   RunDecisionRequestSchema,
+  type LoopAction,
+  LoopActionSchema,
+  type LoopActionRequest,
+  LoopActionRequestSchema,
 } from "./loop-schema/decision.js";
 export {
   type PendingApproval,

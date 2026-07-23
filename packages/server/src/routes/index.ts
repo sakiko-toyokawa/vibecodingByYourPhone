@@ -327,10 +327,14 @@ export function registerRoutes(
   // Files routes (file browser)
   app.route("/api/projects", createFilesRoutes({ scanner }));
 
-  // Loop registry routes + phase-0 run triggers/list
+  // Loop registry routes + phase-0 run triggers/list + phase-2 pause/resume/archive
   app.route(
     "/api/loops",
-    createLoopsRoutes({ loopCardStore, runService: loopRunService }),
+    createLoopsRoutes({
+      loopCardStore,
+      runService: loopRunService,
+      controlPlane: loopControlPlane,
+    }),
   );
   if (loopRunService) {
     app.route(

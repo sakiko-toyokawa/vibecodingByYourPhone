@@ -935,6 +935,8 @@
   "loopsRunNow": "Run now",
   "loopsRunStarting": "Starting…",
   "loopsRunActive": "A run is already active for this loop",
+  "loopsPause": "Pause",
+  "loopsResume": "Resume",
   "loopsRunsTitle": "Run history",
   "loopsNoRuns": "No runs yet",
   "loopsJudgmentTitle": "Judgment",

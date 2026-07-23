@@ -23,6 +23,12 @@ export interface StoredLoop {
   created_at: string;
   updated_at: string;
   archived: boolean;
+  /**
+   * Loop-level pause flag (阶段 2, 03-API契约.md PATCH pause: "无活跃 run
+   * 时仅阻止后续触发"). Undefined on pre-phase-2 registries = not paused.
+   * While set, LoopRunService.startRun rejects new triggers (loop_paused).
+   */
+  paused?: boolean;
 }
 
 export interface LoopRegistryState {
@@ -146,6 +152,40 @@ export class LoopCardStore {
       archived: false,
     };
     this.state.loops[stored.id] = stored;
+    await this.save();
+    return stored;
+  }
+
+  /**
+   * Set the loop-level pause flag (03 PATCH pause/resume). Durable across
+   * restarts, so triggers stay blocked even when no run state exists.
+   */
+  async setPaused(
+    id: string,
+    paused: boolean,
+  ): Promise<StoredLoop | undefined> {
+    const stored = this.state.loops[id];
+    if (!stored) {
+      return undefined;
+    }
+    stored.paused = paused;
+    stored.updated_at = new Date().toISOString();
+    await this.save();
+    return stored;
+  }
+
+  /**
+   * Soft-delete a loop (03 PATCH archive): hidden from the default list, the
+   * file is not deleted (04-存储约定). Callers must refuse archiving loops
+   * with an active run before calling this.
+   */
+  async archiveLoop(id: string): Promise<StoredLoop | undefined> {
+    const stored = this.state.loops[id];
+    if (!stored) {
+      return undefined;
+    }
+    stored.archived = true;
+    stored.updated_at = new Date().toISOString();
     await this.save();
     return stored;
   }

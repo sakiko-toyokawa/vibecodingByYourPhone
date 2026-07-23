@@ -95,6 +95,12 @@ export interface AgentSession {
    * Interrupt the current turn gracefully without killing the process.
    * The query will stop processing the current turn and return control.
    * Only supported by Claude SDK 0.2.7+.
+   *
+   * 已知能力缺口（loop spec 00-落地映射 短板表 / 05 阶段 2 风险节）:
+   * Codex app-server 无优雅 interrupt —— codex.ts 的 AgentSession 只有
+   * abort（杀进程）。因此 loop 使用 Codex runtime 时，pause/cancel 只能
+   * 杀进程、partial result 丢失；调用方不得假设本方法存在（用
+   * Process.canInterrupt() / 本字段是否为 undefined 判断）。
    */
   interrupt?: () => Promise<void>;
   /**

@@ -96,3 +96,16 @@ export const RunDecisionRequestSchema = z.object({
   feedback: z.string().optional(),
 });
 export type RunDecisionRequest = z.infer<typeof RunDecisionRequestSchema>;
+
+/**
+ * PATCH /api/loops/:id 的请求体（03-API契约.md，阶段 2）：
+ * pause（主动暂停，不走审批管线）/ resume（恢复信号，不携带人工响应）/
+ * archive（软删除）。未知 action 由路由层映射为 400 invalid_action。
+ */
+export const LoopActionSchema = z.enum(["pause", "resume", "archive"]);
+export type LoopAction = z.infer<typeof LoopActionSchema>;
+
+export const LoopActionRequestSchema = z.object({
+  action: LoopActionSchema,
+});
+export type LoopActionRequest = z.infer<typeof LoopActionRequestSchema>;

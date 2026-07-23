@@ -1167,6 +1167,12 @@ export class CodexProvider implements AgentProvider {
     return {
       iterator,
       queue,
+      // 能力缺口（loop spec 00-落地映射 短板表，06 偏差）: Codex app-server
+      // 无优雅 interrupt —— 与 claude.ts 的 AgentSession.interrupt 不同，
+      // 这里只提供 abort（杀进程）。loop 的 pause/cancel 在 Codex 链路只能
+      // 杀进程、partial result 丢失（05 阶段 2 验收 5 对 Codex 链路相应
+      // 降级；control-plane / run-service 以注释与账本
+      // adapter_capability_snapshot 的 interrupt 能力项显式记录该缺口）。
       abort: () => {
         abortController.abort();
         activeClient?.close();

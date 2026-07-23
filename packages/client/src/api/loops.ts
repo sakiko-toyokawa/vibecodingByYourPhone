@@ -1,4 +1,5 @@
 import type {
+  LoopAction,
   LoopCard,
   RunDecisionAction,
   RunState,
@@ -73,6 +74,18 @@ export const loopsApi = {
     fetchJSON<{ run: LoopRunSummary }>(
       `/loops/${encodeURIComponent(loopId)}/runs`,
       { method: "POST", body: JSON.stringify({}) },
+    ),
+
+  /**
+   * PATCH pause / resume / archive (03-API契约.md, 阶段 2). pause on an
+   * active run kills the executing process (partial result dropped) and
+   * parks the run; resume continues it from the next turn on the same
+   * session. 409 invalid_state for illegal transitions.
+   */
+  patchLoop: (loopId: string, action: LoopAction) =>
+    fetchJSON<{ loop_id: string; current_run_state: RunState | null }>(
+      `/loops/${encodeURIComponent(loopId)}`,
+      { method: "PATCH", body: JSON.stringify({ action }) },
     ),
 
   /** Human answer for a needs_human run. request_changes requires feedback. */

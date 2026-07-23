@@ -935,6 +935,8 @@
   "loopsRunNow": "Ejecutar ahora",
   "loopsRunStarting": "Iniciando…",
   "loopsRunActive": "Ya hay una ejecución activa para este bucle",
+  "loopsPause": "Pausar",
+  "loopsResume": "Reanudar",
   "loopsRunsTitle": "Historial de ejecuciones",
   "loopsNoRuns": "Aún no hay ejecuciones",
   "loopsJudgmentTitle": "Veredicto",

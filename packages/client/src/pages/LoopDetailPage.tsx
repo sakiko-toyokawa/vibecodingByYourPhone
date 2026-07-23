@@ -39,6 +39,7 @@ export function LoopDetailPage() {
   const [error, setError] = useState<Error | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState(false);
+  const [patching, setPatching] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [runDetail, setRunDetail] = useState<RunDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -116,6 +117,27 @@ export function LoopDetailPage() {
     }
   }, [loopId, load, t]);
 
+  // PATCH pause / resume (03-API契约.md, 阶段 2). The current run state is
+  // derived from the newest run in the list projection.
+  const handlePatch = useCallback(
+    async (action: "pause" | "resume") => {
+      if (!loopId) return;
+      setPatching(true);
+      setActionError(null);
+      try {
+        await loopsApi.patchLoop(loopId, action);
+        await load();
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setPatching(false);
+      }
+    },
+    [loopId, load],
+  );
+
+  const currentRunState = runs[0]?.state ?? null;
+
   const judgment = runDetail?.ledger_summary.judgment_summary ?? null;
   const failureTags = runDetail?.ledger_summary.failure_tags ?? [];
 
@@ -139,14 +161,37 @@ export function LoopDetailPage() {
           showBack
           onBack={() => navigate("..")}
           rightContent={
-            <button
-              type="button"
-              className="rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-medium text-[var(--on-primary)] transition-opacity hover:opacity-90 disabled:opacity-50"
-              onClick={() => void handleRunNow()}
-              disabled={triggering}
-            >
-              {triggering ? t("loopsRunStarting") : t("loopsRunNow")}
-            </button>
+            <div className="flex items-center gap-[var(--space-2)]">
+              {(currentRunState === "active" ||
+                currentRunState === "retry") && (
+                <button
+                  type="button"
+                  className="rounded-md border border-[var(--border-color)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-opacity hover:opacity-90 disabled:opacity-50"
+                  onClick={() => void handlePatch("pause")}
+                  disabled={patching}
+                >
+                  {t("loopsPause")}
+                </button>
+              )}
+              {currentRunState === "paused" && (
+                <button
+                  type="button"
+                  className="rounded-md border border-[var(--border-color)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-opacity hover:opacity-90 disabled:opacity-50"
+                  onClick={() => void handlePatch("resume")}
+                  disabled={patching}
+                >
+                  {t("loopsResume")}
+                </button>
+              )}
+              <button
+                type="button"
+                className="rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-medium text-[var(--on-primary)] transition-opacity hover:opacity-90 disabled:opacity-50"
+                onClick={() => void handleRunNow()}
+                disabled={triggering}
+              >
+                {triggering ? t("loopsRunStarting") : t("loopsRunNow")}
+              </button>
+            </div>
           }
         />
 

@@ -935,6 +935,8 @@
   "loopsRunNow": "Jetzt ausführen",
   "loopsRunStarting": "Startet…",
   "loopsRunActive": "Für diesen Loop läuft bereits ein Run",
+  "loopsPause": "Pausieren",
+  "loopsResume": "Fortsetzen",
   "loopsRunsTitle": "Run-Verlauf",
   "loopsNoRuns": "Noch keine Runs",
   "loopsJudgmentTitle": "Bewertung",

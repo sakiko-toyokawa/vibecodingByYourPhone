@@ -26,6 +26,23 @@
  *    injected into that turn's context. After a server restart the context
  *    is rebuilt from the card store + ledger + state file (best effort).
  *
+ *  - PATCH pause (主动暂停, 03-API契约.md, 不走审批管线): pauseActiveRun
+ *    drives active → paused through the control-plane, then KILLS the
+ *    executing process (阶段 2 关键决策 — 选项 A). Rationale for A over
+ *    B (let the turn finish, then park): phase 2 has no worktree isolation
+ *    and partial-result semantics are undefined — a turn that keeps running
+ *    after the human said "pause" would keep mutating the workspace and
+ *    would land a judgment for a run that is already paused. The killed
+ *    turn's partial result is dropped (no ledger entry / judgment for it);
+ *    the session_ref is kept (session jsonl stays on disk) so resume
+ *    continues on the SAME session from the next turn. Codex capability
+ *    gap (00-落地映射 短板表): codex.ts AgentSession has no graceful
+ *    interrupt — only abort — so on a Codex runtime pause/cancel can only
+ *    ever kill the process and the partial result is lost; on Claude the
+ *    SDK interrupt exists but option A deliberately uniformizes on
+ *    terminate so both runtimes share one pause semantics. Recorded as a
+ *    known deviation (06).
+ *
  *  - Budget: the contract's budget (max_turns 含首轮 / max_retries 不含首轮,
  *    先触者停) is passed to the control-plane every turn together with the
  *    turn's measured consumption (wall-clock minutes; tokens from the
@@ -57,6 +74,7 @@ import type {
   LoopCard,
   RunLedgerEntry,
   RunState,
+  RunStateRecord,
 } from "@yep-anywhere/shared";
 import { IntentContractSchema } from "@yep-anywhere/shared";
 import {
@@ -75,9 +93,10 @@ import {
   type ContractSource,
   buildIntentContract,
 } from "./contract/intent-contract.js";
-import type {
-  ControlPlane,
-  ResumeSignal,
+import {
+  type ControlPlane,
+  ControlPlaneError,
+  type ResumeSignal,
 } from "./control-plane/control-plane.js";
 import { retryBackoffMs } from "./control-plane/retry-backoff.js";
 import {
@@ -91,6 +110,7 @@ import { type VerificationRefs, verifyRun } from "./verification/verify-run.js";
 export type LoopRunErrorCode =
   | "loop_not_found"
   | "loop_archived"
+  | "loop_paused"
   | "run_active"
   | "loop_not_runnable";
 
@@ -303,6 +323,11 @@ export class LoopRunService {
   private activeByRunId = new Map<string, ActiveRun>();
   /** run_id -> suspended execution context (needs_human / budget_limited / paused) */
   private suspended = new Map<string, RunExecutionContext>();
+  /** run_id -> context of a run currently inside the turn loop (incl. turn 1
+   *  in flight, before any state record exists) */
+  private executingContexts = new Map<string, RunExecutionContext>();
+  /** run_id -> the Process executing the current turn (for PATCH pause kill) */
+  private executingProcesses = new Map<string, Process>();
 
   constructor(deps: LoopRunServiceDeps) {
     this.deps = deps;
@@ -337,6 +362,82 @@ export class LoopRunService {
   }
 
   /**
+   * PATCH pause 的实现（03-API契约.md: 主动暂停，不走审批管线 — 审批队列
+   * 无新增排队项）. Drives active → paused through the control-plane, then
+   * kills the executing process (选项 A, 见文件头): the partial turn result
+   * is dropped, the session_ref survives for resume.
+   *
+   * Returns the updated run_state, or null when the loop has no active run
+   * (the route then only sets the loop-level pause flag — 仅阻止后续触发).
+   * Throws ControlPlaneError invalid_state for runs in a non-active
+   * non-terminal state (needs_human runs pause via the decision endpoint).
+   */
+  async pauseActiveRun(loopId: string): Promise<RunStateRecord | null> {
+    const controlPlane = this.deps.controlPlane;
+    if (!controlPlane) {
+      throw new LoopRunError(
+        "loop_not_runnable",
+        "Control plane not wired; pause is unavailable",
+      );
+    }
+    const record = await controlPlane.getRunState(loopId);
+    if (
+      record &&
+      record.state !== "active" &&
+      record.state !== "complete" &&
+      record.state !== "failed"
+    ) {
+      throw new ControlPlaneError(
+        "invalid_state",
+        `Loop '${loopId}' run is '${record.state}', not active (03: 对非 active run pause → 409; needs_human runs are paused via POST /api/runs/:id/decision)`,
+      );
+    }
+    const active = this.activeByLoop.get(loopId);
+    if (record?.state === "active") {
+      // Also covers a stale active record after a server restart: the
+      // transition still lands; terminateExecuting is then a no-op.
+      const updated = await controlPlane.pauseActive(loopId);
+      this.terminateExecuting(record.run_id);
+      return updated;
+    }
+    if (active) {
+      // Turn 1 still in flight: no run_state record exists yet (it is first
+      // written at judgment time) — or a terminal record from the previous
+      // run is in its place. Pause via a seeded record (PauseSeed).
+      const ctx = this.executingContexts.get(active.runId);
+      const updated = await controlPlane.pauseActive(loopId, {
+        runId: active.runId,
+        turn: ctx?.turn ?? 1,
+        goalId: ctx?.contract?.intent_id ?? "unknown",
+        workspaceRef: `workspace://${loopId}/${active.runId}`,
+        budget: ctx?.contract?.budget ?? null,
+        createdAt: active.createdAt,
+      });
+      this.terminateExecuting(active.runId);
+      return updated;
+    }
+    return null;
+  }
+
+  /**
+   * Kill the process executing a run's current turn (PATCH pause, 选项 A).
+   * No-op when the run is between turns (backoff / verification): the run
+   * stays paused in the state file and resume rebuilds the context.
+   * Process.terminate kills the underlying CLI via abortFn and emits
+   * "terminated", which settles watchProcess as a failed turn — the paused
+   * check in runTurns then suspends the context before any judgment lands.
+   */
+  private terminateExecuting(runId: string): void {
+    const proc = this.executingProcesses.get(runId);
+    if (!proc) {
+      return;
+    }
+    proc.terminate(
+      "run paused via PATCH /api/loops/:id (主动暂停, 选项 A: kill executing process, partial result dropped)",
+    );
+  }
+
+  /**
    * Start a run for a loop. Registers the run as active synchronously
    * (so concurrent triggers get run_active), then executes in the
    * background — ledger entries are appended per turn as the run finishes.
@@ -353,6 +454,14 @@ export class LoopRunService {
       throw new LoopRunError(
         "run_active",
         `Loop '${loopId}' already has an active run`,
+      );
+    }
+    // Loop-level pause flag (03 PATCH pause: 无活跃 run 时仅阻止后续触发).
+    // Checked after run_active so a paused run still reports run_active.
+    if (stored.paused) {
+      throw new LoopRunError(
+        "loop_paused",
+        `Loop '${loopId}' is paused (PATCH resume to re-enable triggers)`,
       );
     }
 
@@ -576,6 +685,7 @@ export class LoopRunService {
     const { runId, loopId, createdAt } = ctx.active;
     const store = this.deps.runLedgerStore;
     let blocked = false;
+    this.executingContexts.set(runId, ctx);
 
     try {
       for (;;) {
@@ -604,6 +714,20 @@ export class LoopRunService {
           ctx.sessionRef = outcome.sessionRef;
         }
         const timeMinutes = (Date.now() - turnStartedAt) / 60_000;
+
+        // --- PATCH pause interception (主动暂停, 选项 A, 见文件头) ---
+        // The control-plane already moved the run to paused and the
+        // executing process was killed; the partial turn produced no
+        // auditable result, so no artifacts / verification / judgment /
+        // ledger entry are written for it. The session_ref captured above
+        // stays valid (session jsonl on disk) so resume continues on the
+        // same session. Suspend exactly like the other blocking states
+        // (active registration kept → same-loop runs stay serial).
+        if (this.deps.controlPlane?.currentStateOf(runId) === "paused") {
+          blocked = true;
+          this.suspended.set(runId, ctx);
+          return;
+        }
 
         // --- artifacts ---
         if (ctx.turn === 1 && ctx.contractJson) {
@@ -768,9 +892,15 @@ export class LoopRunService {
             adapter: "claude",
             session_ref: outcome.sessionRef,
             mode: ctx.input?.permissionMode ?? "plan",
+            // interrupt=graceful: the Claude SDK AgentSession exposes
+            // interrupt() (Process.interruptFn). 已知能力缺口（00-落地映射
+            // 短板表, 06 偏差）: Codex runtime 无优雅 interrupt —— 其
+            // AgentSession 只有 abort, snapshot 应记 interrupt=kill-only,
+            // pause/cancel 只能杀进程、partial result 丢失。loop 的 pause
+            // 语义在两种 runtime 下统一为杀进程（选项 A, 见文件头）。
             adapter_capability_snapshot: ctx.input?.policyProfile
-              ? `realSdk(agent_sdk);permissionMode=${ctx.input.permissionMode};policy=${ctx.input.policyProfile.policy_profile};selfApproveAudit`
-              : "realSdk(agent_sdk);permissionMode=plan;autoDenyApprovals",
+              ? `realSdk(agent_sdk);permissionMode=${ctx.input.permissionMode};policy=${ctx.input.policyProfile.policy_profile};selfApproveAudit;interrupt=graceful`
+              : "realSdk(agent_sdk);permissionMode=plan;autoDenyApprovals;interrupt=graceful",
           },
           input_refs: {
             intent: `intent://${loopId}`,
@@ -838,7 +968,16 @@ export class LoopRunService {
           continue;
         }
 
-        if (finalStatus === "needs_human" || finalStatus === "budget_limited") {
+        // Re-widen: the control-plane's idempotent replay can return
+        // "paused" (a PATCH pause that landed between the interception
+        // check above and applyJudgment), which the ControlDecisionKind
+        // assignment narrowed away at the type level.
+        const status = finalStatus as RunState;
+        if (
+          status === "needs_human" ||
+          status === "budget_limited" ||
+          status === "paused"
+        ) {
           // Blocking wait states: keep the active registration (same-loop
           // runs stay serial) and suspend the context; a ResumeSignal from
           // the control-plane continues the run (continueRun).
@@ -853,6 +992,7 @@ export class LoopRunService {
     } catch (error) {
       console.error(`[LoopRunService] run ${runId} failed:`, error);
     } finally {
+      this.executingContexts.delete(runId);
       if (!blocked) {
         this.activeByLoop.delete(loopId);
         this.activeByRunId.delete(runId);
@@ -1055,7 +1195,11 @@ export class LoopRunService {
       };
     }
 
-    return this.watchProcess(result as Process);
+    const proc = result as Process;
+    // Registered so PATCH pause can kill the executing turn (选项 A);
+    // removed again when watchProcess settles.
+    this.executingProcesses.set(ctx.active.runId, proc);
+    return this.watchProcess(ctx.active.runId, proc);
   }
 
   /**
@@ -1065,7 +1209,10 @@ export class LoopRunService {
    * (Claude SDK AdapterOutput, 02 §4: input_tokens + output_tokens); when
    * the runtime does not expose usage it stays null — never fabricated.
    */
-  private async watchProcess(proc: Process): Promise<ExecutionOutcome> {
+  private async watchProcess(
+    runId: string,
+    proc: Process,
+  ): Promise<ExecutionOutcome> {
     return new Promise<ExecutionOutcome>((resolve) => {
       let finalText = "";
       let tokens: number | null = null;
@@ -1078,6 +1225,7 @@ export class LoopRunService {
         }
         settled = true;
         unsubscribe();
+        this.executingProcesses.delete(runId);
         // Free the worker slot; the session jsonl stays on disk, so a
         // later turn can still resumeSession on the same session_ref.
         void proc.abort().catch(() => {});
