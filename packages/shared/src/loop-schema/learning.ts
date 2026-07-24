@@ -17,6 +17,11 @@ import { FailureTagSchema } from "./run-ledger.js";
  *   表格未列出。
  * - ImprovementProposalSchema.created_by：02 §8.5 未列出，但阶段 3 验收 4
  *   （元规则仅人工发起）与提案验证与发布.md 要求区分 worker / human 来源。
+ * - ImprovementProposalSchema.payload：02 §8.5 未列出。管线推进到
+ *   canary/published 后装配层要消费提案内容（memory packet 模板 /
+ *   adapter policy / policy profile 覆盖与 canary 生效范围），02 的
+ *   summary 是自然语言描述，无法机器消费，补结构载荷字段（可选，
+ *   无 payload 的提案只进账本不影响装配）。
  */
 
 /**
@@ -134,6 +139,27 @@ export const ProposalCreatedBySchema = z.enum(["worker", "human"]);
 export type ProposalCreatedBy = z.infer<typeof ProposalCreatedBySchema>;
 
 /**
+ * 提案结构载荷（扩展字段，见文件头注释）——装配层消费 published / canary
+ * 提案时读取的机器可读内容。字段按提案类型取用：
+ * - memory_packet_template_proposal → memory_packet_template
+ * - runtime_adapter_proposal → adapter_policy
+ * - policy_profile_proposal → policy_profile
+ * canary_loops 与类型无关：canary 档只对这些 loop 生效（装配按 loop_id
+ * 匹配）；published 后若仍携带则作为显式范围限制，缺省即全量生效。
+ */
+export const ProposalPayloadSchema = z.object({
+  /** 注入装配 prompt 的 memory packet 模板文本 */
+  memory_packet_template: z.string().optional(),
+  /** adapter 调用策略覆盖键值对（如超时配置），原样带上 RuntimeInput */
+  adapter_policy: z.record(z.string(), z.unknown()).optional(),
+  /** 策略档名覆盖（装配解析出的 PolicyProfile.policy_profile 替换为该值） */
+  policy_profile: z.string().optional(),
+  /** canary 生效范围：命中的 loop id 列表 */
+  canary_loops: z.array(z.string()).optional(),
+});
+export type ProposalPayload = z.infer<typeof ProposalPayloadSchema>;
+
+/**
  * improvement_proposal — 改进提案（02 §8.5）。learning worker 从失败模式 /
  * 反馈 / eval 生成的"未来可能怎么改"候选项；提案不等于规则，未走完发布
  * 管线不得进正式 loop spec。存储：proposals/<proposal_id>.json
@@ -160,6 +186,8 @@ export const ImprovementProposalSchema = z.object({
   status: ProposalStatusSchema,
   /** 提案来源（扩展字段）：worker 自动生成 / 人工发起（元规则仅人工） */
   created_by: ProposalCreatedBySchema,
+  /** 结构载荷（扩展字段）：装配层消费的提案内容；缺省只记账不影响装配 */
+  payload: ProposalPayloadSchema.optional(),
   /** 创建时间 */
   created_at: z.string().datetime(),
 });

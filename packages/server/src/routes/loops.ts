@@ -4,10 +4,12 @@
  * Phase-0 scope: POST /api/loops, GET /api/loops, GET /api/loops/:id,
  * POST /api/loops/:id/runs (manual trigger), GET /api/loops/:id/runs
  * (run list). Phase 2 adds PATCH /api/loops/:id (pause / resume / archive).
- * Proposals endpoints come in later phases.
+ * Phase 3 adds GET /api/loops/:id/proposals (改进提案列表; approve /
+ * publish / rollback 走 routes/proposals.ts).
  */
 
 import { LoopActionRequestSchema, LoopCardSchema } from "@yep-anywhere/shared";
+import type { ProposalStatus } from "@yep-anywhere/shared";
 import { Hono } from "hono";
 import {
   type ControlPlane,
@@ -15,6 +17,7 @@ import {
   type LoopCardStore,
   LoopRunError,
   type LoopRunService,
+  type ProposalStore,
 } from "../loop/index.js";
 
 export interface LoopsRoutesDeps {
@@ -23,6 +26,8 @@ export interface LoopsRoutesDeps {
   runService?: LoopRunService;
   /** Optional so phase-0 tests mounting the registry alone still work */
   controlPlane?: ControlPlane;
+  /** Optional: 阶段 3 提案列表端点 (GET /:id/proposals) */
+  proposalStore?: ProposalStore;
 }
 
 function runErrorStatus(error: LoopRunError): 400 | 404 | 409 {
@@ -51,7 +56,7 @@ function controlErrorStatus(error: ControlPlaneError): 400 | 404 | 409 {
 
 export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
   const app = new Hono();
-  const { loopCardStore, runService, controlPlane } = deps;
+  const { loopCardStore, runService, controlPlane, proposalStore } = deps;
 
   /**
    * POST /api/loops
@@ -343,6 +348,45 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
     const offset = Number(c.req.query("offset")) || 0;
     const runs = await runService.listRuns(loopId);
     return c.json({ runs: runs.slice(offset, offset + limit) });
+  });
+
+  /**
+   * GET /api/loops/:id/proposals — 该 loop 相关改进提案列表
+   * (03-API契约.md; 阶段 3). 关联规则: 提案 target 以 `<loop_id>.` 为前缀
+   * (worker 提案 target=<loop_id>.<hint>), 或 payload.canary_loops 命中
+   * 该 loop。查询参数 status? (7 值) / limit? / offset? (默认 50/0),
+   * 按 created_at 倒序。
+   */
+  app.get("/:id/proposals", (c) => {
+    if (!proposalStore) {
+      return c.json(
+        {
+          error: "proposal_store_unavailable",
+          message: "Proposal store not registered",
+        },
+        503,
+      );
+    }
+    const loopId = c.req.param("id");
+    const stored = loopCardStore.getLoop(loopId);
+    if (!stored || stored.archived) {
+      return c.json(
+        { error: "loop_not_found", message: "Loop not found" },
+        404,
+      );
+    }
+    const status = c.req.query("status") as ProposalStatus | undefined;
+    const limit = Number(c.req.query("limit")) || 50;
+    const offset = Number(c.req.query("offset")) || 0;
+    const proposals = proposalStore
+      .listProposals(status)
+      .filter(
+        (proposal) =>
+          proposal.target.startsWith(`${loopId}.`) ||
+          proposal.payload?.canary_loops?.includes(loopId) === true,
+      )
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    return c.json({ proposals: proposals.slice(offset, offset + limit) });
   });
 
   return app;

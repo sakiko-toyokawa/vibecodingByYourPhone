@@ -1,3 +1,4 @@
+export * from "./assembly/proposal-effects.js";
 export * from "./assembly/runtime-input.js";
 export * from "./contract/intent-contract.js";
 export * from "./control-plane/control-plane.js";
@@ -5,6 +6,8 @@ export * from "./control-plane/decide.js";
 export * from "./control-plane/retry-backoff.js";
 export * from "./control-plane/run-state-store.js";
 export * from "./control-plane/state-machine.js";
+export * from "./learning/eval-runner.js";
+export * from "./learning/pipeline.js";
 export * from "./learning/signature.js";
 export * from "./learning/worker.js";
 export * from "./run-service.js";

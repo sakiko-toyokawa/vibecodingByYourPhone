@@ -19,6 +19,7 @@ import type {
   CronScheduler,
   LearningWorker,
   LoopRunService,
+  ProposalPipeline,
   ProposalStore,
 } from "./loop/index.js";
 import {
@@ -77,6 +78,8 @@ export interface ServicesContainer {
   // 阶段 3 学习侧 (createApp 注册; proposalStore 是提案单写者单例)
   learningWorker?: LearningWorker;
   proposalStore?: ProposalStore;
+  // 阶段 3 第三刀: 发布管线 (worker 自动推进 draft→shadow→canary)
+  proposalPipeline?: ProposalPipeline;
   sessionIndexService: SessionIndexService;
   pushService: PushService;
   browserProfileService: BrowserProfileService;

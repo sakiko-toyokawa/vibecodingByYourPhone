@@ -207,6 +207,17 @@ export class ProposalStore {
   }
 
   /**
+   * List full proposal objects (status filter optional). Used by the
+   * release pipeline (advance candidates) and by assembly (published /
+   * canary proposals consumed into RuntimeInput).
+   */
+  listProposals(status?: ProposalStatus): ImprovementProposal[] {
+    return [...this.proposals.values()]
+      .map((file) => file.proposal)
+      .filter((proposal) => !status || proposal.status === status);
+  }
+
+  /**
    * Create a proposal in draft status (worker-generated or human-initiated).
    * Overwrites an existing id — callers must check get() first.
    */

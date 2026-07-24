@@ -9,10 +9,12 @@ import {
 import {
   ControlPlane,
   CronScheduler,
+  EvalRunner,
   FailurePatternStore,
   LearningEventStore,
   LearningWorker,
   LoopRunService,
+  ProposalPipeline,
   ProposalStore,
   RunLedgerStore,
   RunStateStore,
@@ -232,11 +234,20 @@ export function createApp(
       eventBus: options.eventBus,
       learningEventStore,
     });
+    // 阶段 3 学习侧: proposalStore 是 server 进程单例 (提案单写者) —
+    // run-service 装配消费、learning worker、提案 API 都经同一个实例,
+    // 不能另开实例直写文件.
+    const failurePatternStore = new FailurePatternStore({
+      dataDir: options.dataDir,
+    });
+    const proposalStore = new ProposalStore({ dataDir: options.dataDir });
     const loopRunService = new LoopRunService({
       supervisor,
       loopCardStore,
       runLedgerStore,
       controlPlane: loopControlPlane,
+      // 阶段 3 装配消费: 新 run 装配读取 published / canary 提案
+      proposalStore,
     });
     const cronScheduler = new CronScheduler({
       loopCardStore,
@@ -255,17 +266,21 @@ export function createApp(
     // 阶段 3 学习侧: 异步 learning worker, 与主链路同进程但崩溃隔离
     // (tick 整体 try/catch + 健康记录, 见 learning/worker.ts). 只读
     // events.jsonl + runs/, 只写 failure-patterns.json / proposals/ /
-    // cursor.json (04 单写者表). proposalStore 是 server 进程单例 —
-    // 后续提案 API 也必须经它, 不能另开实例直写文件.
-    const failurePatternStore = new FailurePatternStore({
-      dataDir: options.dataDir,
+    // cursor.json (04 单写者表).
+    // 第三刀: 发布管线 —— worker 每轮 tick 自动推进 draft→shadow→canary
+    // (regression 档复跑 eval 最小集, fail-closed); approved/published
+    // 无自动路径, 只有 routes/proposals.ts 的人工端点.
+    const evalRunner = new EvalRunner({ dataDir: options.dataDir });
+    const proposalPipeline = new ProposalPipeline({
+      proposalStore,
+      evalRunner,
     });
-    const proposalStore = new ProposalStore({ dataDir: options.dataDir });
     const learningWorker = new LearningWorker({
       learningEventStore,
       failurePatternStore,
       proposalStore,
       runLedgerStore,
+      pipeline: proposalPipeline,
     });
     learningWorker.start();
     registerValue("loopRunService", loopRunService);
@@ -273,6 +288,7 @@ export function createApp(
     registerValue("cronScheduler", cronScheduler);
     registerValue("learningWorker", learningWorker);
     registerValue("proposalStore", proposalStore);
+    registerValue("proposalPipeline", proposalPipeline);
   }
 
   // Register all API routes

@@ -34,6 +34,7 @@
  */
 
 import type {
+  ImprovementProposal,
   IntentContract,
   LoopCard,
   PermissionMode,
@@ -42,6 +43,7 @@ import type {
   PolicyProjection,
 } from "@yep-anywhere/shared";
 import { resolvePolicyProfile } from "../policy/profiles.js";
+import { resolveProposalEffects } from "./proposal-effects.js";
 
 export interface RuntimeInput {
   prompt: string;
@@ -60,6 +62,15 @@ export interface RuntimeInput {
    * artifact）。仅在策略投影模式下存在。
    */
   policyProjection?: PolicyProjection;
+  /**
+   * adapter 调用策略覆盖（阶段 3：来自 published / canary 的
+   * runtime_adapter_proposal 的 payload.adapter_policy，原样透传）。
+   */
+  adapterPolicy?: Record<string, unknown>;
+  /**
+   * 本次装配实际生效的提案 id（阶段 3 装配消费，审计/观测用）。
+   */
+  appliedProposals?: string[];
 }
 
 /** File-mutating tools denied outright in legacy read-only runs. */
@@ -88,6 +99,12 @@ function policyPromptLines(profile: PolicyProfile): string[] {
 export function assembleRuntimeInput(
   card: LoopCard,
   contract: IntentContract,
+  /**
+   * 阶段 3 装配消费：published / canary 提案（proposalStore.listProposals()
+   * 原样传入即可，生效范围与槽位选择由 proposal-effects 按 loop_id 解析）。
+   * 缺省为空 —— 无提案时装配行为与阶段 2 完全一致。
+   */
+  proposals: ImprovementProposal[] = [],
 ): RuntimeInput {
   const loop = card.loop;
   const cwd = loop.workspace.path;
@@ -101,7 +118,17 @@ export function assembleRuntimeInput(
   const handoff = loop.handoff ?? {};
   const maxItems = handoff.max_items_per_run;
 
-  const profile = resolvePolicyProfile(card);
+  // 阶段 3：消费 published / canary 提案（published 全量生效；canary 只
+  // 对打了标记的 loop 生效）。rolled_back 的最新版本被过滤后旧 published
+  // 版本自动回补（回滚即回到旧行为，版本记录不删）。
+  const effects = resolveProposalEffects(loop.id, proposals);
+
+  let profile = resolvePolicyProfile(card);
+  // policy_profile_proposal 的策略档名覆盖只在策略投影模式下生效（card
+  // 未声明 policy 时不为单个提案开启整条策略管线）。
+  if (profile && effects.policyProfileOverride) {
+    profile = { ...profile, policy_profile: effects.policyProfileOverride };
+  }
   // manual 无人值守 = 只读兜底（无法等待人工确认），走 legacy 形状。
   const policyActive = profile !== null && profile.approval_mode !== "manual";
 
@@ -116,6 +143,15 @@ export function assembleRuntimeInput(
           "- Do NOT call ExitPlanMode or AskUserQuestion — every approval request is auto-denied; finish by writing the report as plain text.",
           "- Use only read-only tools (Read, Glob, Grep, etc.).",
         ]),
+    // published / canary 的 memory packet 模板注入 prompt（装配消费的
+    // 主落点，05 阶段 3 验收 5：新 run 装配确实使用新提案内容）。
+    ...(effects.memoryPacketTemplate
+      ? [
+          "",
+          "Memory packet (published improvement proposal):",
+          effects.memoryPacketTemplate,
+        ]
+      : []),
     "",
     "Task:",
     `- Task type: ${contract.task_type.primary}`,
@@ -141,6 +177,12 @@ export function assembleRuntimeInput(
       cwd,
       permissionMode: "plan",
       permissions: { deny: [...READ_ONLY_DENY] },
+      ...(effects.adapterPolicy
+        ? { adapterPolicy: effects.adapterPolicy }
+        : {}),
+      ...(effects.applied.length > 0
+        ? { appliedProposals: effects.applied.map((a) => a.proposal_id) }
+        : {}),
     };
   }
 
@@ -161,5 +203,9 @@ export function assembleRuntimeInput(
       disallowed_tools: [],
       hard_gates: [...profile.hard_gates],
     },
+    ...(effects.adapterPolicy ? { adapterPolicy: effects.adapterPolicy } : {}),
+    ...(effects.applied.length > 0
+      ? { appliedProposals: effects.applied.map((a) => a.proposal_id) }
+      : {}),
   };
 }

@@ -550,6 +550,8 @@ export {
   LearningEventSchema,
   type ProposalCreatedBy,
   ProposalCreatedBySchema,
+  type ProposalPayload,
+  ProposalPayloadSchema,
   type ProposalPipelineStage,
   ProposalPipelineStageSchema,
   type ProposalRisk,

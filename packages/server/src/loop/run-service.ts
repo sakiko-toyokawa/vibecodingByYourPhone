@@ -104,6 +104,7 @@ import {
   createLoopToolApprovalHook,
 } from "./policy/approval-hook.js";
 import type { LoopCardStore } from "./state/loop-card-store.js";
+import type { ProposalStore } from "./state/proposal-store.js";
 import type { RunLedgerStore } from "./state/run-ledger-store.js";
 import { type VerificationRefs, verifyRun } from "./verification/verify-run.js";
 
@@ -202,6 +203,12 @@ export interface LoopRunServiceDeps {
    *  orchestration (single-turn, verdicts map straight to complete/failed,
    *  no budget enforcement). */
   controlPlane?: ControlPlane;
+  /**
+   * 阶段 3 装配消费：装配时读取 published / canary 提案（memory packet
+   * 模板 / adapter policy / policy profile 覆盖），05 阶段 3 验收 5。
+   * 缺席时装配行为与阶段 2 一致（proposals 默认空数组）。
+   */
+  proposalStore?: ProposalStore;
   /** Backoff wait between retry turns; injectable for tests. */
   sleep?: (ms: number) => Promise<void>;
   /** Verification seam for tests; defaults to the real verifyRun. */
@@ -667,7 +674,13 @@ export class LoopRunService {
     try {
       ctx.contract = buildIntentContract(card, { runId, source });
       ctx.contractJson = JSON.stringify(ctx.contract, null, 2);
-      ctx.input = assembleRuntimeInput(card, ctx.contract);
+      // 阶段 3 装配消费：published / canary 提案在此进入 RuntimeInput
+      // （每次新 run 重新装配 → 发布后新 run 即生效，rollback 后回到旧行为）。
+      ctx.input = assembleRuntimeInput(
+        card,
+        ctx.contract,
+        this.deps.proposalStore?.listProposals() ?? [],
+      );
     } catch (error) {
       ctx.setupError =
         error instanceof Error ? error : new Error(String(error));

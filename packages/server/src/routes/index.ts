@@ -7,6 +7,7 @@ import type {
   ControlPlane,
   LoopCardStore,
   LoopRunService,
+  ProposalStore,
 } from "../loop/index.js";
 import { updateAllowedHosts } from "../middleware/allowed-hosts.js";
 import type { CodexSessionScanner } from "../projects/codex-scanner.js";
@@ -43,6 +44,7 @@ import { createNetworkBindingRoutes } from "./network-binding.js";
 import { createOnboardingRoutes } from "./onboarding.js";
 import { createProcessesRoutes } from "./processes.js";
 import { createProjectsRoutes } from "./projects.js";
+import { createProposalsRoutes } from "./proposals.js";
 import { createProvidersRoutes } from "./providers.js";
 import { createRecentsRoutes } from "./recents.js";
 import { createRunsRoutes } from "./runs.js";
@@ -66,6 +68,7 @@ export interface RouteDependencies {
   loopCardStore: LoopCardStore;
   loopRunService?: LoopRunService;
   loopControlPlane?: ControlPlane;
+  proposalStore?: ProposalStore;
 }
 
 export function registerRoutes(
@@ -84,6 +87,7 @@ export function registerRoutes(
     loopCardStore,
     loopRunService,
     loopControlPlane,
+    proposalStore,
   } = container.cradle as unknown as RouteDependencies;
 
   // Auth routes (always mounted if authService is provided)
@@ -334,6 +338,7 @@ export function registerRoutes(
       loopCardStore,
       runService: loopRunService,
       controlPlane: loopControlPlane,
+      proposalStore,
     }),
   );
   if (loopRunService) {
@@ -342,6 +347,16 @@ export function registerRoutes(
       createRunsRoutes({
         runService: loopRunService,
         controlPlane: loopControlPlane,
+      }),
+    );
+  }
+  // 阶段 3 提案 API (approve / publish 人工闸门 + rollback; publish 仅人工)
+  if (proposalStore) {
+    app.route(
+      "/api/proposals",
+      createProposalsRoutes({
+        proposalStore,
+        eventBus: options.eventBus,
       }),
     );
   }

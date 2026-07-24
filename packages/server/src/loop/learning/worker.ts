@@ -49,6 +49,7 @@ import type { FailurePatternStore } from "../state/failure-pattern-store.js";
 import type { LearningEventStore } from "../state/learning-event-store.js";
 import type { ProposalStore } from "../state/proposal-store.js";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
+import type { ProposalPipeline } from "./pipeline.js";
 import { buildSignature, patternIdFor, proposalIdFor } from "./signature.js";
 
 /** 归因类别 → 提案类型 / 风险 / target 提示 (映射表, 改进提案.md 7 类型). */
@@ -111,6 +112,12 @@ export interface LearningWorkerDeps {
   failurePatternStore: FailurePatternStore;
   proposalStore: ProposalStore;
   runLedgerStore: RunLedgerStore;
+  /**
+   * 阶段 3 第三刀: 发布管线 (可选)。挂上后每轮 tick 在提案生成之后自动
+   * 推进档位 draft→shadow→canary (regression 档复跑 eval 最小集);
+   * approved/published 无自动路径 (人工闸门在 routes/proposals.ts)。
+   */
+  pipeline?: ProposalPipeline;
 }
 
 export interface LearningWorkerConfig {
@@ -242,6 +249,9 @@ export class LearningWorker {
         await this.deps.learningEventStore.writeCursor(nextOffset);
       }
       await this.generateProposals();
+      // 发布管线自动推进 (draft→shadow→canary; 元规则保护与 fail-closed
+      // regression 都在 pipeline 内)。异常由外层 tick catch 隔离。
+      await this.deps.pipeline?.advanceEligible();
       this.health.consecutiveFailures = 0;
       this.health.lastTickFinishedAt = this.now().toISOString();
     } catch (error) {

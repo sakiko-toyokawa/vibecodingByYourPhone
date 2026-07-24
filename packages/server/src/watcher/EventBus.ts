@@ -264,6 +264,27 @@ export interface RunDecisionRequiredEvent {
   timestamp: string;
 }
 
+/**
+ * Loop learning: emitted when a proposal is published via
+ * POST /api/proposals/:id/publish (spec: docs/spec/03-API契约.md
+ * "proposal-published"). publish 仅人工 — published_by is always "human".
+ * Deviation vs 03: the proposal type field is named `proposal_type` here
+ * because BusEvent members are flat and `type` is the event discriminator
+ * (03's `type` lives in the WS data payload).
+ */
+export interface ProposalPublishedEvent {
+  type: "proposal-published";
+  loop_id: string;
+  proposal_id: string;
+  /** 提案类型 (02 §8.5 7 值; 03 data.type, 改名原因见上) */
+  proposal_type: string;
+  from_status: "approved";
+  to_status: "published";
+  published_by: "human";
+  published_at: string;
+  timestamp: string;
+}
+
 /** Union of all event types that can be emitted through the bus */
 export type BusEvent =
   | FileChangeEvent
@@ -285,7 +306,8 @@ export type BusEvent =
   | BrowserTabConnectedEvent
   | BrowserTabDisconnectedEvent
   | LoopStateChangedEvent
-  | RunDecisionRequiredEvent;
+  | RunDecisionRequiredEvent
+  | ProposalPublishedEvent;
 
 export type EventHandler<T = BusEvent> = (event: T) => void;
 
