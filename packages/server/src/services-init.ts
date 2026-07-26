@@ -7,6 +7,12 @@ import { loadConfig } from "./config.js";
 import { registerValue } from "./container.js";
 import { DeviceBridgeService } from "./device/DeviceBridgeService.js";
 import { detectAdb } from "./device/adb.js";
+import {
+  GitHubClient,
+  GitHubCredentialStore,
+  type GitHubIssueLoopService,
+  GitHubToolProvisioner,
+} from "./github/index.js";
 import { SessionIndexService } from "./indexes/index.js";
 import {
   getLogFilePath,
@@ -95,6 +101,10 @@ export interface ServicesContainer {
   sharingService: SharingService;
   modelInfoService: ModelInfoService;
   deviceBridgeService?: DeviceBridgeService;
+  githubCredentialStore: GitHubCredentialStore;
+  githubToolProvisioner: GitHubToolProvisioner;
+  githubClient: GitHubClient;
+  githubIssueLoopService?: GitHubIssueLoopService;
   // App-level dependencies registered in createApp
   scanner?: ProjectScanner;
   readerFactory?: (project: Project) => ISessionReader;
@@ -304,6 +314,16 @@ export async function initializeServices(): Promise<ServicesContainer> {
   const sharingService = new SharingService({
     dataDir: config.dataDir,
   });
+  const githubCredentialStore = new GitHubCredentialStore({
+    dataDir: config.dataDir,
+  });
+  const githubToolProvisioner = new GitHubToolProvisioner({
+    dataDir: config.dataDir,
+  });
+  const githubClient = new GitHubClient({
+    ghPath: githubToolProvisioner.getGhPath(),
+    tokenProvider: () => githubCredentialStore.getToken(),
+  });
 
   // Initialize services (loads state from disk)
   await installService.initialize();
@@ -319,6 +339,7 @@ export async function initializeServices(): Promise<ServicesContainer> {
   await remoteAccessService.initialize();
   await serverSettingsService.initialize();
   await sharingService.initialize();
+  await githubCredentialStore.initialize();
   await remoteSessionService.setDiskPersistenceEnabled(
     serverSettingsService.getSetting("persistRemoteSessionsToDisk"),
   );
@@ -407,6 +428,9 @@ export async function initializeServices(): Promise<ServicesContainer> {
     sharingService,
     modelInfoService,
     deviceBridgeService,
+    githubCredentialStore,
+    githubToolProvisioner,
+    githubClient,
   };
 
   // Register all services in the DI container

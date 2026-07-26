@@ -82,6 +82,8 @@ export interface ModelSettings {
   executor?: string;
   /** Environment variables to set on remote (for testing: CLAUDE_SESSIONS_DIR) */
   remoteEnv?: Record<string, string>;
+  /** Extra environment variables for the local provider process. */
+  env?: Record<string, string>;
   /** Global instructions to append to system prompt (from server settings) */
   globalInstructions?: string;
   /** Permission rules for tool filtering (deny/allow patterns) */
@@ -466,6 +468,7 @@ export class Supervisor {
       effort: modelSettings?.effort,
       executor: modelSettings?.executor,
       remoteEnv: modelSettings?.remoteEnv,
+      env: modelSettings?.env,
       globalInstructions: modelSettings?.globalInstructions,
       onToolApproval: async (toolName, input, opts) => {
         // Delegate to the process's handleToolApproval
@@ -564,6 +567,7 @@ export class Supervisor {
       effort: modelSettings?.effort,
       executor: modelSettings?.executor,
       remoteEnv: modelSettings?.remoteEnv,
+      env: modelSettings?.env,
       globalInstructions: modelSettings?.globalInstructions,
       onToolApproval: async (toolName, input, opts) => {
         if (!processHolder.process) {
@@ -666,6 +670,7 @@ export class Supervisor {
       effort: modelSettings?.effort,
       executor: modelSettings?.executor,
       remoteEnv: modelSettings?.remoteEnv,
+      env: modelSettings?.env,
       globalInstructions: modelSettings?.globalInstructions,
       onToolApproval: async (toolName, input, opts) => {
         if (!processHolder.process) {
