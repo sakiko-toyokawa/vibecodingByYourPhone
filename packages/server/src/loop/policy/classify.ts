@@ -151,9 +151,8 @@ function extractWriteTargets(segment: string): string[] {
     targets.push(match[1] as string);
   }
   // node/python/bun/deno -e 内联脚本里的绝对路径
-  const inline = /^(?:node|python|python3|bun|deno)\s+-e\s+(["'])([\s\S]*)\1/.exec(
-    segment,
-  );
+  const inline =
+    /^(?:node|python|python3|bun|deno)\s+-e\s+(["'])([\s\S]*)\1/.exec(segment);
   if (inline) {
     for (const match of (inline[2] as string).matchAll(
       /([A-Za-z]:[\\/][^\s"';|]+|\/[^\s"';|]+)/g,

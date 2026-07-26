@@ -254,20 +254,25 @@ export function assembleRuntimeInput(
   // manual 无人值守 = 只读兜底（无法等待人工确认），走 legacy 形状。
   const policyActive = profile !== null && profile.approval_mode !== "manual";
 
-  // Fail-closed 守卫（06 偏差 #24）：策略钩子的唯一已验证规则来源是
-  // Claude 桥的 canUseTool（agent_sdk，claude.ts 逐调用触发）。Codex 桥
-  // 把 bypassPermissions 映射为 approvalPolicy "never" + danger-full-
-  // access（codex.ts mapPermissionModeToThreadPolicy），app-server 不发
-  // 审批反向请求——硬闸门、bypass 审计整段失效；其余 provider 的审批
-  // 路径未经同样验证。未知 = 不安全：policy run 落在非 Claude 桥上直接
+  // Fail-closed 守卫（06 偏差 #24/#39）：策略钩子的已验证规则来源是
+  // Claude 桥的 canUseTool（agent_sdk）与 Codex 桥的策略投影映射
+  // （policyHookWired → approvalPolicy on-request + sandbox read-only,
+  // 一切变更都发审批反向请求到钩子, codex.ts）。其余 provider 的审批
+  // 路径未经同样验证。未知 = 不安全：policy run 落在未接线桥上直接
   // 拒绝装配，不静默退化为无策略执行。
   const provider =
     (card.loop as { runtime?: { provider?: string } }).runtime?.provider ??
     DEFAULT_PROVIDER;
   if (policyActive && profile) {
-    if (provider !== "claude" && provider !== "claude-ollama") {
+    const POLICY_CAPABLE_PROVIDERS = new Set([
+      "claude",
+      "claude-ollama",
+      "codex",
+      "codex-oss",
+    ]);
+    if (!POLICY_CAPABLE_PROVIDERS.has(provider)) {
       throw new AssemblyError(
-        `Loop '${loop.id}' declares a policy (approval_mode=${profile.approval_mode}) but provider '${provider}' cannot enforce it: the policy hook is only a verified rule source on the Claude bridge (agent_sdk canUseTool fires per tool call). On '${provider}' the runtime would bypass approvals (codex maps bypassPermissions to approvalPolicy "never"), so hard gates and bypass auditing would silently not apply. Use provider 'claude' or drop loop.policy.`,
+        `Loop '${loop.id}' declares a policy (approval_mode=${profile.approval_mode}) but provider '${provider}' cannot enforce it: the policy hook is only a verified rule source on the Claude bridge (agent_sdk canUseTool) and the Codex bridge (policyHookWired maps approvals to on-request/read-only). Use provider 'claude' or 'codex', or drop loop.policy.`,
       );
     }
   }
@@ -407,6 +412,18 @@ export function assembleRuntimeInput(
       permissionMode: "plan",
       permissions: { deny: [...READ_ONLY_DENY] },
       ...bundleExtras,
+      // github_prompt 的 legacy (无 policy) 分支同样注入 GH_TOKEN/gh PATH —
+      // 此前 env 只在策略分支返回, 无 policy 的 github 卡拿到 gh 指令却拿
+      // 不到 token (修复计划留档项)。
+      ...(isGitHubPromptLoop(card) && context.github
+        ? {
+            env: {
+              GH_TOKEN: context.github.token,
+              GITHUB_TOKEN: context.github.token,
+              PATH: `${path.dirname(context.github.ghPath)}${path.delimiter}${process.env.PATH ?? ""}`,
+            },
+          }
+        : {}),
       ...(effects.adapterPolicy
         ? { adapterPolicy: effects.adapterPolicy }
         : {}),
@@ -437,10 +454,10 @@ export function assembleRuntimeInput(
     policyProfile: profile,
     policyProjection: {
       policy_intent_ref: `policy://${profile.policy_profile}`,
-      // 06 #24 守卫后策略 run 只落在 Claude 桥 (agent_sdk): 该桥没有
-      // OS 级沙盒, 写边界由策略钩子逐调用强制 —— 如实记 "none", 不再
-      // 写死 "workspace-write" (与实际执行面不符的假记录)。
-      sandbox: "none",
+      // 06 #24/#39: Claude 桥无 OS 沙盒 (写边界由策略钩子强制, 记
+      // "none"); Codex 桥策略投影映射 read-only 沙盒 (一切变更走审批
+      // 反向请求到钩子) —— 两桥如实记录, 不写死单一值。
+      sandbox: adapterInfo.bridge === "app_server" ? "read-only" : "none",
       approval_or_permission_mode: "bypass_self_approve_with_audit",
       // 显式 allow/deny 清单为空是设计使然: 一切工具调用都经策略钩子
       // 裁决 (钩子即规则来源), 不是"未配置"。

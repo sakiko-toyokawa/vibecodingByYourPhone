@@ -174,6 +174,10 @@ webhook/issue/resume 触发源；interaction/review 两段验证（05 阶段 1/2
 
 ## 真实冒烟验证（2026-07-26，dev server + 真实 codex runtime）
 
+**Codex 桥策略投影（06 #39，本轮新增）**：`policyHookWired`（钩子经 ModelSettings.toolApprovalHook → Supervisor → StartSessionOptions 透传）时 codex thread policy 映射为 `on-request + read-only`，一切变更经审批反向请求到 loop 策略钩子；装配守卫放开 codex/codex-oss，legacy（无 policy）github_prompt 分支补 GH_TOKEN/gh PATH 注入。单测/集成全绿。决定性端到端（真实 fileChange 审批请求被钩子裁决）**被本机 codex 账号余额阻断**（app-server 报 403 INSUFFICIENT_BALANCE）——接线各段已验，真实裁决待有余额环境复验。
+
+**冒烟二次发现（已记录，未修）**：executor 因 403/空产出结束时，run 仍被判 complete（finalText 空 + static lint 通过 → judgment passed）——验证层缺"executor 无产出"信号，空 stdout 应让结论倾向 inconclusive 而非看命令退出码判过。留待后续（与 verification_error 归因分类一起设计）。
+
 在真实 server（dist 直跑）上以 codex provider 完成端到端 run 验证：
 memory packet 注入 prompt 并落 artifact、native_invocation 真实投影（adapter=codex/bridge=app_server/mode=exec，快照 `interrupt=kill-only` 与 06 #17 一致）、budget_remaining、verification-input 的 known_failure_patterns 与 runtime_event_refs 真实填充、账本 source 如实、learning events 落盘、eval 内置 9 个 behavior case 在生产数据目录播种成功。
 
@@ -182,3 +186,37 @@ memory packet 注入 prompt 并落 artifact、native_invocation 真实投影（a
 2. **GET /api/runs/:id 显示串台**：活跃 run 首个判定落账前，run_state 展示的是上个 run 的记录。修复：run_state 的 run_id 与请求不符时返回 null（`routes/runs.ts`，测试 `routes/runs.test.ts`）。
 
 环境备忘（非代码问题）：本机 claude SDK 的 cli.js 路径解析与 codex 经 cmd.exe 的 spawn 在该 shell 环境下失败（00 短板表"Claude CLI 检测是假实现"的实证）；workspace.path 必须是 Windows 路径（MSYS `/tmp` 形式会导致 spawn cwd ENOENT）；codex runtime 路径下全链路验证通过。
+
+## 问题与解决方案总结（全过程）
+
+### 审计方法
+8 个并行审计代理对照 spec（00–06）逐模块核对，判定分四档：已实现 / 壳子（有定义无消费者、硬编码假数据、绕过 spec 机制）/ 偏差 / 未实现（注明是否计划内）。每条判定带文件:行号证据。最恶劣的三类壳子：机制全真但首尾不接（学习闭环）、假数据（账本 runtime 块）、兜底方向反了（验证崩溃判过）。
+
+### 修复过程中遇到的真实问题与解法
+
+| 问题 | 解法 |
+|---|---|
+| Codex 桥 `approvalPolicy:"never"` + `danger-full-access` 让策略引擎整段失效（最严重安全缺口） | 不做半吊子 codex 适配，装配层 fail-closed：policy × 非 Claude 桥直接拒绝（06 #24），真适配另立任务 |
+| 验证层自身崩溃 = 静默判过（verifier theater） | catch 分支合成 `inconclusive + requires_human` judgment 升级人工，错误落 artifact——判不清给机器不如给人 |
+| 学习闭环"机制全真、效果空转"（提案无 payload、eval 不应用提案、用例空转） | worker 按类型生成 payload + 人工创建端点；eval 重写为 behavior case（调用真实子系统函数）+ scorecard.applied 记录"评估了什么" |
+| `policy_profile` 覆盖只换标签不换规则（profiles 无注册表） | NAMED_PROFILES 注册表，档名解析出真实规则差异；eval 的 strict 档 regression 真拦截成为有牙证据 |
+| `node -e fs.writeFileSync('/etc/...')` 借 medium 档被 bypass 自批准 | classify 启发式提取写目标（重定向/tee/cp/mv/dd/sed -i/内联绝对路径），越界按 write+high（宁漏不误） |
+| 冒烟：同 loop 第二个 run 必崩且伪装成成功 | applyJudgment 只在 run_id 匹配时继承 from-state/预算快照（run_state 按 loop 存储的设计陷阱） |
+| 冒烟：GET /api/runs/:id 展示上个 run 的 run_state | run_id 不符返回 null |
+| `isRunActive` 瞬时断言全套件负载下 50% 抖动（既有竞态） | 状态转移先于 finally 释放注册是设计时序，测试改轮询 `waitForInactive` |
+| spec 内部张力（03"账本不开放"vs 05"读回完整账本"；私加 max_retries<max_turns） | 不回代码猜口径，回 spec 裁决登记（06 #30/#31），再按裁决改代码 |
+
+### 环境类问题（非代码，但影响本机运行）
+
+| 问题 | 解法/备忘 |
+|---|---|
+| claude SDK 的 cli.js 解析与 codex 经 cmd.exe 的 spawn 在本机 shell 失败（00 短板"Claude CLI 检测是假实现"的实证） | claude 链路暂不可用（无 token 也无需再试）；codex 链路可用 |
+| workspace.path 用 MSYS `/tmp` 形式 → spawn cwd ENOENT | **workspace.path 必须写 Windows 路径**（`C:/...`） |
+| 后台任务 kill 只杀父进程，tsx 子进程残留占端口导致 EADDRINUSE | 重启前先 `taskkill //PID <pid> //T //F`，确认端口空了再起 |
+| `YEP_ANYWHERE_DATA_DIR=/tmp/...` 在 Windows 被映射到 Temp 目录 | 数据目录直接用 Windows 路径，避免 MSYS 路径歧义 |
+
+### 方法论沉淀
+- **"壳子"的四个信号**（审计时按此查）：配置/枚举定义了但运行时无消费者；类型在但运行时写编造值；接口在但数据没接线；兜底方向反了（故障路径比正常路径更宽松）。
+- **修壳子优先接线而不是新建**：本过程 80% 的修复是把已有的真机制接到真实消费者上（payload、permission events、失败模式回流、注册表解析），而不是写新代码。
+- **eval 的牙 = 能检出被测对象的真实行为差异**：空转用例（exit 0/1）让管线形式上 fail-closed、实质上无牙——behavior case + applied 记录是解法模板。
+- **冒烟 > 单测**：两个最高危 bug（complete→complete、状态串台）单测全绿也漏，真实环境第二轮必现。

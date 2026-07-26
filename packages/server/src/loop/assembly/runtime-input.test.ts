@@ -109,22 +109,39 @@ test("extractExecutorSummary: extracts the marked block, null when absent", () =
   );
 });
 
-test("policy × non-Claude bridge is fail-closed (06 偏差 #24)", () => {
+test("policy bridge guard: codex allowed (06 #39), unverified bridges fail-closed (06 #24)", () => {
+  // codex 桥策略投影已接线 (policyHookWired → on-request/read-only)——
+  // 装配放行, 且 policyProjection.sandbox 如实记 read-only
   const codexCard = {
     loop: {
       ...githubPromptCard().loop,
       runtime: { provider: "codex" },
     },
   } as LoopCard;
-  const contract = buildIntentContract(codexCard, {
-    runId: "run-1",
-    source: "manual",
-  });
+  const codexInput = assembleRuntimeInput(
+    codexCard,
+    buildIntentContract(codexCard, { runId: "run-1", source: "manual" }),
+  );
+  assert.equal(
+    codexInput.policyProfile?.policy_profile,
+    "github_issue_local_fix",
+  );
+  assert.equal(codexInput.policyProjection?.sandbox, "read-only");
+  assert.equal(codexInput.nativeInvocation.bridge, "app_server");
 
-  // codex 桥会把 bypassPermissions 映射成 approvalPolicy "never"——策略
-  // 钩子不会触发，装配必须拒绝而不是产出无策略的 RuntimeInput
+  // 未接线桥 (gemini 等) 仍 fail-closed
+  const geminiCard = {
+    loop: {
+      ...githubPromptCard().loop,
+      runtime: { provider: "gemini" },
+    },
+  } as LoopCard;
   assert.throws(
-    () => assembleRuntimeInput(codexCard, contract),
+    () =>
+      assembleRuntimeInput(
+        geminiCard,
+        buildIntentContract(geminiCard, { runId: "run-2", source: "manual" }),
+      ),
     (error: unknown) =>
       error instanceof AssemblyError &&
       /cannot enforce it/.test((error as Error).message),
@@ -143,6 +160,7 @@ test("policy × non-Claude bridge is fail-closed (06 偏差 #24)", () => {
     buildIntentContract(claudeCard, { runId: "run-1", source: "manual" }),
   );
   assert.equal(ok.permissionMode, "bypassPermissions");
+  assert.equal(ok.policyProjection?.sandbox, "none");
 });
 
 test("execution contract / native_invocation / observability structured (02 §3)", () => {
@@ -283,4 +301,21 @@ test("policy_profile override resolves real rule differences from the registry (
     defaultInput.policyProfile?.bypass_scope?.allow_local_commands,
     true,
   );
+});
+
+test("github_prompt legacy (no policy) branch also injects GitHub env", () => {
+  const card = githubPromptCard();
+  card.loop.policy = undefined;
+  const input = assembleRuntimeInput(
+    card,
+    buildIntentContract(card, { runId: "run-1", source: "cron" }),
+    [],
+    {
+      github: { ghPath: "E:/tools/gh/bin/gh.exe", token: "github_pat_secret" },
+    },
+  );
+  assert.equal(input.permissionMode, "plan");
+  assert.equal(input.env?.GH_TOKEN, "github_pat_secret");
+  assert.equal(input.env?.GITHUB_TOKEN, "github_pat_secret");
+  assert.match(input.env?.PATH ?? "", /E:[/\\]tools[/\\]gh[/\\]bin/);
 });

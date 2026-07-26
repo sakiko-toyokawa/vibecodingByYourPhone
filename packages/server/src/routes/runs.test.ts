@@ -370,7 +370,12 @@ test("GET /:id — 活跃 run 的首个判定落账前, 不展示上个 run 的 
       },
       judgmentRef: "artifact://run-old/judgment-report.json",
       createdAt: new Date().toISOString(),
-      budget: { max_tokens: 0, max_time_minutes: 30, max_turns: 3, max_retries: 2 },
+      budget: {
+        max_tokens: 0,
+        max_time_minutes: 30,
+        max_turns: 3,
+        max_retries: 2,
+      },
       usage: { tokens: null, timeMinutes: 1 },
     });
 

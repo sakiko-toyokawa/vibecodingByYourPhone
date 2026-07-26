@@ -366,6 +366,9 @@ export class Supervisor {
       thinking: modelSettings?.thinking,
       effort: modelSettings?.effort,
       globalInstructions: modelSettings?.globalInstructions,
+      // loop 策略钩子的存在透传给 provider: codex 桥据此把审批模式映射
+      // 为 on-request + read-only (策略投影生效, 06 #39), 交互会话恒 false
+      policyHookWired: Boolean(modelSettings?.toolApprovalHook),
       onToolApproval: async (toolName, input, opts) => {
         if (!processHolder.process) {
           return { behavior: "deny", message: "Process not ready" };
@@ -470,6 +473,9 @@ export class Supervisor {
       remoteEnv: modelSettings?.remoteEnv,
       env: modelSettings?.env,
       globalInstructions: modelSettings?.globalInstructions,
+      // loop 策略钩子的存在透传给 provider: codex 桥据此把审批模式映射
+      // 为 on-request + read-only (策略投影生效, 06 #39), 交互会话恒 false
+      policyHookWired: Boolean(modelSettings?.toolApprovalHook),
       onToolApproval: async (toolName, input, opts) => {
         // Delegate to the process's handleToolApproval
         if (!processHolder.process) {
@@ -569,6 +575,9 @@ export class Supervisor {
       remoteEnv: modelSettings?.remoteEnv,
       env: modelSettings?.env,
       globalInstructions: modelSettings?.globalInstructions,
+      // loop 策略钩子的存在透传给 provider: codex 桥据此把审批模式映射
+      // 为 on-request + read-only (策略投影生效, 06 #39), 交互会话恒 false
+      policyHookWired: Boolean(modelSettings?.toolApprovalHook),
       onToolApproval: async (toolName, input, opts) => {
         if (!processHolder.process) {
           return { behavior: "deny", message: "Process not ready" };
@@ -672,6 +681,9 @@ export class Supervisor {
       remoteEnv: modelSettings?.remoteEnv,
       env: modelSettings?.env,
       globalInstructions: modelSettings?.globalInstructions,
+      // loop 策略钩子的存在透传给 provider: codex 桥据此把审批模式映射
+      // 为 on-request + read-only (策略投影生效, 06 #39), 交互会话恒 false
+      policyHookWired: Boolean(modelSettings?.toolApprovalHook),
       onToolApproval: async (toolName, input, opts) => {
         if (!processHolder.process) {
           return { behavior: "deny", message: "Process not ready" };

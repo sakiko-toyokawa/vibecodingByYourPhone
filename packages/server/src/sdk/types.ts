@@ -132,6 +132,11 @@ export interface StartSessionOptions {
   /** Effort level for response quality (undefined = SDK default) */
   effort?: import("@yep-anywhere/shared").EffortLevel;
   onToolApproval?: CanUseTool;
+  /** Loop 策略钩子已接线 (run-service 经 ModelSettings.toolApprovalHook
+   *  传入): provider 必须把审批模式映射为"所有变更都发审批请求", 让
+   *  策略裁决能经 onToolApproval 到达钩子 (codex 桥策略投影, 06 #39)。
+   *  交互会话永远为 false。 */
+  policyHookWired?: boolean;
   /** SSH host for remote execution (undefined = local) */
   executor?: string;
   /** Environment variables to set on remote (for testing: CLAUDE_SESSIONS_DIR) */

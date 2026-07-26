@@ -76,9 +76,8 @@ export function createRunsRoutes(deps: RunsRoutesDeps): Hono {
     // run_state 按 loop 存储: 活跃 run 的首个判定落账前, 文件里还是上
     // 一个 run 的终态记录 —— run_id 不匹配时如实返回 null, 不把上个
     // run 的状态展示成这个 run 的 (冒烟实测踩到的显示 bug)。
-    const runState = record && record.run_id === c.req.param("id")
-      ? record
-      : null;
+    const runState =
+      record && record.run_id === c.req.param("id") ? record : null;
     return c.json({
       run: found.run,
       run_state: runState,

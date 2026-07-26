@@ -1104,6 +1104,7 @@ export class CodexProvider implements AgentProvider {
 
   private mapPermissionModeToThreadPolicy(
     permissionMode?: StartSessionOptions["permissionMode"],
+    policyHookWired?: boolean,
   ): {
     approvalPolicy: CodexAskForApproval;
     sandbox: CodexSandboxMode;
@@ -1116,6 +1117,18 @@ export class CodexProvider implements AgentProvider {
         CODEX_POLICY_OVERRIDES.approvalPolicy ?? policy.approvalPolicy,
       sandbox: CODEX_POLICY_OVERRIDES.sandbox ?? policy.sandbox,
     });
+
+    // loop 策略投影 (06 #39): 策略钩子已接线时, 一切变更都经审批反向
+    // 请求到达 loop/policy 裁决 —— 不再映射为 never + danger-full-access
+    // (那会让 app-server 不发审批请求, 硬闸门静默失效, 06 #24)。沙盒取
+    // read-only: 写操作与非只读命令都会触发 requestApproval → 策略钩子
+    // (硬闸门/bypass 审计/拒绝), 与 Claude 桥的 canUseTool 语义对齐。
+    if (policyHookWired) {
+      return applyOverrides({
+        approvalPolicy: "on-request",
+        sandbox: "read-only",
+      });
+    }
 
     if (permissionMode === "bypassPermissions") {
       return applyOverrides({
@@ -1259,6 +1272,7 @@ export class CodexProvider implements AgentProvider {
 
       const policy = this.mapPermissionModeToThreadPolicy(
         options.permissionMode,
+        options.policyHookWired,
       );
 
       const threadResumeParams: ThreadResumeParams = {
