@@ -232,3 +232,46 @@ test("短路规则: static 硬失败后 runtime 段跳过且注明原因 (四段
     assert.equal(result2.reports.length, 2);
   });
 });
+
+test("review 段真实报告参与聚合, requires_human 透传不再被丢弃 (#12)", async () => {
+  await withStore(async ({ store, workspace, runId }) => {
+    const card = makeCard(workspace);
+    card.loop.verification = { required: ["review"] };
+    const contract = buildIntentContract(card, { runId, source: "manual" });
+
+    const result = await verifyRun(
+      {
+        card,
+        contract,
+        runId,
+        workspacePath: workspace,
+        exitStatus: 0,
+        stdoutRef: null,
+        reviewReport: {
+          verifier_phase: "review",
+          status: "inconclusive",
+          evidence_refs: [`artifact://${runId}/collector-report.json`],
+          unresolved_risks: [
+            "collector did not complete with a successful result",
+          ],
+          recommendation: "escalate",
+          confidence: 0.2,
+          requires_human: true,
+        },
+      },
+      { store },
+    );
+
+    assert.equal(result.reports.length, 1);
+    assert.equal(result.reports[0]?.verifier_phase, "review");
+    // 02 §6: 人工透传优先级最高 —— collector 的 requires_human 生效
+    assert.equal(result.judgment.requires_human, true);
+    assert.notEqual(result.judgment.next_action, "complete");
+    // 真报告落盘 (不是 not_applicable 占位)
+    const review = JSON.parse(
+      (await store.readArtifact(runId, "verifier-report-review.json")) ?? "",
+    );
+    assert.equal(review.status, "inconclusive");
+    assert.equal(review.requires_human, true);
+  });
+});

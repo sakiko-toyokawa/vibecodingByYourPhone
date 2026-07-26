@@ -66,9 +66,16 @@
 - 证据：`run-service.ts:949-954` 注释自认；历史轮账本条目的 `artifact://` 引用悬空。
 - 修复（2026-07-26）：验证产物经 `verificationArtifactName` 按轮命名（turn 1 保持规范名，turn N>1 带 `-turnN` 后缀）；stdout/runtime-events/diff/permission-events 同步按轮命名。
 
-### 12. collector 冒名 review 段、升级信号被丢弃【壳子/偏差】
+### 12. collector 冒名 review 段、升级信号被丢弃【壳子/偏差】✅ 已修
 - 证据：`run-service.ts:1332-1436`：CollectorReport 不进 `aggregateVerifierReports`，`requires_human` 落地即丢（`:1423`）；`CollectorReportSchema`（`verification.ts:105-115`）是 spec 外私造 schema，冒用 "review" 段名，未登记 06。
-- 修复方向：collector 的 requires_human 接入 judgment 聚合，或降级为纯证据并在 06 登记。
+- 修复（2026-07-26）：card 的 verifier_chain 声明 `review` 时，collector 报告转成 review 段 verifier_report 经 `verifyRun` 的 `reviewReport` 入聚合（落 per-turn `verifier-report-review.json`，requires_human 按 02 §6 透传生效）；未声明 review 的卡维持证据级 merge（collector 仅采集不判定）。已登记 06 偏差 #33（CollectorReport 为 review 报告内部超集）。测试：`verify-run.test.ts`（真报告参与聚合 + requires_human 透传 + 落盘非占位）。
+
+## 后续加深（2026-07-26 第二批，超出本清单的"最小实现"项）
+
+- **memory packet 真机制**（原"二档最小"）：run-service 从失败模式账本取本 loop 相关 open 模式（occurrence 前 5）构建确定性摘要注入装配 prompt，落 `memory-packet.json` artifact，`input_refs.memory_packet` 如实引用（不再恒 null）；重启续跑轮引用 turn 1 原件。已登记 06 #34。测试：`run-service-verification.test.ts`（prompt 含账本摘要 + artifact + 账本引用）。
+- **eval golden tasks**（原"二档最小"）：learning worker 每 tick 把 open 失败模式衍生为 `golden-<pattern_id>` command case 同步进 eval 集（钉死验证命令复跑，expect=fail 如实记录，修复转绿后人工翻转 expect=pass 完成基线更替；只增不改）。已登记 06 #34。测试：`worker.test.ts`（衍生入集 + 二次 tick 不重复）。
+- **RuntimeInputBundle 结构化（02 §3）**：`execution_contract` 五字段结构化（goal/scope/success_criteria/constraints/required_output——constraints 与 required_output 随之进 prompt，修复"constraints 从不读"），`native_invocation`（describeAdapter 移至 `loop/assembly/adapter-info.ts` 共用投影，timeout_seconds 仅 adapter_policy 提供）、`observability` 如实声明（stderr/transcript 记 false）、`budget_remaining`（首轮全量，续跑轮从 run_state 快照算剩余）；turn 1 落 `runtime-input-bundle.json` + `prompt.md`（context_injection.prompt_ref 引用）。已登记 06 #35。测试：`runtime-input.test.ts`（五字段/投影/超时）、`run-service-verification.test.ts`（bundle + prompt 落盘）。
+- **policy 命名档注册表**：`profiles.ts` 新增 `NAMED_PROFILES`——`resolvePolicyProfile(card, nameOverride?)` 按档名解析真实规则差异（risk_rules/hard_gates/bypass_scope），`policy_profile_proposal` 覆盖从"只换标签"变成真换行为；首批 `loop_strict_review`（medium 升级 review_or_policy、本地命令不自批准），未注册档名回落默认值。eval `hard_gate_enforced` 与装配层共用注册表，strict 档 regression 真实拦截。已登记 06 #36。测试：`runtime-input.test.ts`（strict 规则差异 + 未注册回落）、`eval-runner.test.ts`（strict → 闸门 fail + write verdict=hard_gate；默认档 → 放行）。
 
 ## P1 接口/字段级壳子
 
@@ -151,7 +158,8 @@
 - 修复（2026-07-26）：
   - **验证短路规则**（四段验证模型.md）：verify-run 在某段硬失败后跳过后续段（后续结果不改变聚合结论），跳过段写 not_applicable 并注明 short-circuited 原因；测试覆盖（static 失败 → runtime 不执行且无输出日志；static 通过 → runtime 正常执行）。
   - **run 级 trace correlation 载体**：run_state 新增 `session_ref`（06 偏差 #32），control-plane 每轮写入，GET /api/runs/:id 的 run_state 携带——前端可按 03 设计订阅对应 session 消息流。
-- 留档（独立任务，非壳子）：workspace 边界对 Bash 的写目标检查（分类层固有限度，需重定向解析）；02 §3 native_invocation 整段（timeout 已由 adapter_policy 部分承载）；cron 幂等键持久化（当前内存 + run_active 兜底）；模型清单外置（00 短板表遗留，05 未排期）；full_auto 与 assisted 语义分化（风险模型.md 层问题）；legacy 分支丢失 github env（github_prompt 卡无 policy 时拿不到 GH_TOKEN，实际路径都带 policy）；execution contract 结构化五字段（prompt 投影已是当前形态）。
+- 留档（独立任务，非壳子）：~~workspace 边界对 Bash 的写目标检查~~（已修，06 #37，见下）；02 §3 native_invocation 整段（已由 06 #35 落地）；cron 幂等键持久化（当前内存 + run_active 兜底）；模型清单外置（00 短板表遗留，05 未排期）；full_auto 与 assisted 语义分化（风险模型.md 层问题）；legacy 分支丢失 github env（github_prompt 卡无 policy 时拿不到 GH_TOKEN，实际路径都带 policy）；execution contract 结构化五字段（已由 06 #35 落地）。
+- 追加（2026-07-26 第三批）：**Bash 命令通道 workspace 边界**——`classify.ts` 启发式提取写目标（重定向/tee/cp/mv/rsync/install/dd of=/sed -i/node -e 内联绝对路径），越界按 write+high 分类，`node -e "fs.writeFileSync('/etc/...')"` 类逃逸不再被 bypass 自批准（06 #37）。测试：`classify.test.ts` 三例（越界各形态、workspace 内不误报、无上下文不启用）。
 
 ## 计划内未做（不算壳，记录备查）
 

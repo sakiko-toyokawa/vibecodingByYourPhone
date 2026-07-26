@@ -199,3 +199,48 @@ test("isInsideWorkspace path containment", () => {
   assert.equal(isInsideWorkspace("", WS), false);
   assert.equal(isInsideWorkspace("a.ts", undefined), false);
 });
+
+test("bash workspace boundary: outside write targets escalate to high/write", () => {
+  // 重定向越界
+  const redirect = bash("echo pwned > /etc/cron.d/evil");
+  assert.equal(redirect.action, "write");
+  assert.equal(redirect.risk, "high");
+  assert.equal(redirect.locallyRollbackable, false);
+  assert.match(redirect.summary, /outside workspace/);
+
+  // 相对路径 .. 逃逸
+  assert.equal(bash("echo x > ../escape.txt").risk, "high");
+
+  // tee / cp 目标位 / dd of= / sed -i
+  assert.equal(bash("cat a.log | tee /etc/b.log").risk, "high");
+  assert.equal(bash("cp report.md /etc/nginx/").risk, "high");
+  assert.equal(bash("dd if=a.img of=/dev/null").risk, "high");
+  assert.equal(bash("sed -i 's/a/b/' /etc/hosts").risk, "high");
+
+  // node -e 内联脚本里的越界绝对路径 (修复计划 #25 的标志性案例)
+  const inline = bash(`node -e "fs.writeFileSync('/etc/pwned','x')"`);
+  assert.equal(inline.action, "write");
+  assert.equal(inline.risk, "high");
+});
+
+test("bash workspace boundary: inside-workspace writes keep their original grade", () => {
+  // echo 是只读命令, workspace 内重定向不改变既有分级 (既有语义)
+  assert.equal(bash("echo hi > out.txt").risk, "low");
+  assert.equal(bash("pnpm test > result.log").risk, "medium");
+  // cp/sed 本就不在本地可回滚清单, 默认 high (与边界检查无关, 不因
+  // 目标在内而降低, 也不因目标在内而误报为 write)
+  const cpInside = bash("cp a.txt b.txt");
+  assert.equal(cpInside.risk, "high");
+  assert.equal(cpInside.action, "execute");
+  // 只读命令不扫参数路径
+  assert.equal(bash("cat /etc/hosts").risk, "low");
+  // 内联脚本无越界路径
+  assert.equal(bash('node -e "console.log(1+1)"').risk, "medium");
+});
+
+test("bash workspace boundary: no workspace context = no boundary check (不误报)", () => {
+  const verdict = classifyToolCall("Bash", {
+    command: "echo x > /etc/cron.d/evil",
+  });
+  assert.equal(verdict.risk, "low");
+});

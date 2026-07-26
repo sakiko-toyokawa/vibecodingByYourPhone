@@ -3,11 +3,17 @@ import { appendFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { DecisionEntry, LearningEvent } from "@yep-anywhere/shared";
+import type {
+  DecisionEntry,
+  LearningEvent,
+  LoopCard,
+} from "@yep-anywhere/shared";
 import { FailurePatternStore } from "../state/failure-pattern-store.js";
 import { LearningEventStore } from "../state/learning-event-store.js";
+import type { LoopCardStore } from "../state/loop-card-store.js";
 import { ProposalStore } from "../state/proposal-store.js";
 import { RunLedgerStore } from "../state/run-ledger-store.js";
+import { EvalRunner } from "./eval-runner.js";
 import {
   buildSignature,
   normalizeErrorText,
@@ -65,6 +71,7 @@ interface Ctx {
 async function withWorker(
   fn: (ctx: Ctx) => Promise<void>,
   workerConfig: ConstructorParameters<typeof LearningWorker>[1] = {},
+  extraDeps: Partial<ConstructorParameters<typeof LearningWorker>[0]> = {},
 ): Promise<void> {
   const dataDir = await mkdtemp(join(tmpdir(), "yep-learning-worker-"));
   try {
@@ -78,6 +85,7 @@ async function withWorker(
         failurePatternStore: patternStore,
         proposalStore,
         runLedgerStore,
+        ...extraDeps,
       },
       { now: () => new Date("2026-07-23T12:00:00.000Z"), ...workerConfig },
     );
@@ -428,4 +436,78 @@ test("生命周期收口: 来源提案 published 后 pattern 标记 resolved (02
       assert.equal(patternStore.get(pattern.pattern_id)?.last_seen_at, before);
     },
   );
+});
+
+test("golden tasks 同步: open 失败模式 → golden case 入 eval 集 (只增不改)", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-golden-"));
+  try {
+    const card: LoopCard = {
+      loop: {
+        id: "loop-1",
+        trigger: { type: "manual" },
+        workspace: { strategy: "direct", path: "/tmp/golden-ws" },
+        verification: {
+          required: ["static"],
+          commands: { static: ["pnpm lint"] },
+        },
+        persistence: { state_file: ".loop/STATE.md" },
+        stop_rules: { max_turns: 3, max_time_minutes: 10, max_retries: 2 },
+      },
+    };
+    const loopCardStore = {
+      getLoop: (id: string) =>
+        id === "loop-1"
+          ? {
+              id,
+              card,
+              created_at: "2026-07-01T00:00:00.000Z",
+              updated_at: "2026-07-01T00:00:00.000Z",
+              archived: false,
+            }
+          : undefined,
+    } as LoopCardStore;
+    const eventStore = new LearningEventStore({ dataDir });
+    const patternStore = new FailurePatternStore({ dataDir });
+    const evalRunner = new EvalRunner({ dataDir });
+    const worker = new LearningWorker(
+      {
+        learningEventStore: eventStore,
+        failurePatternStore: patternStore,
+        proposalStore: new ProposalStore({ dataDir }),
+        runLedgerStore: new RunLedgerStore({ dataDir }),
+        loopCardStore,
+        evalRunner,
+      },
+      { now: () => new Date("2026-07-23T12:00:00.000Z") },
+    );
+
+    for (const runId of ["run-1", "run-2"]) {
+      await eventStore.appendEvent(
+        makeEvent({ event_id: `e-${runId}`, run_id: runId }),
+      );
+    }
+    await worker.tick();
+    const pattern = only(patternStore.list());
+
+    const cases = await evalRunner.loadCases();
+    const golden = cases.find(
+      (c) => c.case_id === `golden-${pattern.pattern_id}`,
+    );
+    assert.ok(golden, "golden case added from failure pattern");
+    assert.equal(golden.kind, "command");
+    assert.equal(golden.command, "pnpm");
+    assert.deepEqual(golden.args, ["lint"]);
+    assert.equal(golden.expect, "fail");
+    assert.equal(golden.category, "tool_error");
+    assert.equal(golden.loop_id, "loop-1");
+    assert.equal(golden.workspace, "/tmp/golden-ws");
+
+    // 二次 tick: 只增不改, 不重复入集
+    const before = cases.length;
+    await worker.tick();
+    assert.equal((await evalRunner.loadCases()).length, before);
+    worker.stop();
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
 });

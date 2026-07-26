@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { LoopCard } from "@yep-anywhere/shared";
+import type { ImprovementProposal, LoopCard } from "@yep-anywhere/shared";
 import { buildIntentContract } from "../contract/intent-contract.js";
 import {
   AssemblyError,
@@ -143,4 +143,144 @@ test("policy × non-Claude bridge is fail-closed (06 偏差 #24)", () => {
     buildIntentContract(claudeCard, { runId: "run-1", source: "manual" }),
   );
   assert.equal(ok.permissionMode, "bypassPermissions");
+});
+
+test("execution contract / native_invocation / observability structured (02 §3)", () => {
+  const card = githubPromptCard();
+  const contract = buildIntentContract(card, {
+    runId: "run-1",
+    source: "cron",
+  });
+  const input = assembleRuntimeInput(card, contract, [], {
+    github: { ghPath: "E:/tools/gh/bin/gh.exe", token: "t" },
+  });
+
+  // execution_contract 五字段: goal/scope 投影, constraints 进 prompt
+  assert.equal(input.executionContract.goal, contract.raw_goal);
+  assert.deepEqual(input.executionContract.success_criteria, [
+    ...contract.success_criteria,
+  ]);
+  assert.ok(input.executionContract.constraints.length > 0);
+  assert.ok(input.prompt.includes("Constraints:"));
+  assert.ok(input.prompt.includes("Required output (leave this evidence):"));
+  // policy 写卡 → changed_files/commands_run; 该卡验证段为 review
+  // (无 static/runtime) → 无 test_results
+  assert.deepEqual(input.executionContract.required_output, [
+    "summary",
+    "known_risks",
+    "changed_files",
+    "commands_run",
+  ]);
+
+  // native_invocation: claude → agent_sdk/sdk/print 真实投影
+  assert.equal(input.nativeInvocation.adapter, "claude");
+  assert.equal(input.nativeInvocation.bridge, "agent_sdk");
+  assert.equal(input.nativeInvocation.surface, "sdk");
+  assert.equal(input.nativeInvocation.mode, "print");
+  assert.equal(input.nativeInvocation.resume_ref, null);
+  assert.equal(input.nativeInvocation.timeout_seconds, null);
+
+  // observability 如实声明: stderr/transcript 无通道记 false
+  assert.equal(input.observability.capture_stdout, true);
+  assert.equal(input.observability.capture_stderr, false);
+  assert.equal(input.observability.capture_structured_output, true);
+  assert.equal(input.observability.capture_transcript, false);
+});
+
+test("legacy read-only card: required_output 精简且无 changed_files", () => {
+  const card: LoopCard = {
+    loop: {
+      id: "plain-loop",
+      trigger: { type: "manual" },
+      workspace: { strategy: "direct", path: "/tmp/x" },
+      verification: { required: ["static"] },
+      persistence: { state_file: ".loop/STATE.md" },
+      stop_rules: { max_turns: 3, max_time_minutes: 10, max_retries: 2 },
+    },
+  };
+  const input = assembleRuntimeInput(
+    card,
+    buildIntentContract(card, { runId: "run-1", source: "manual" }),
+  );
+  assert.deepEqual(input.executionContract.required_output, [
+    "summary",
+    "known_risks",
+    "test_results",
+  ]);
+  // adapter_policy 提供超时时 native_invocation 如实投影
+  const withTimeout = assembleRuntimeInput(
+    card,
+    buildIntentContract(card, { runId: "run-2", source: "manual" }),
+    [
+      {
+        proposal_id: "p-1",
+        type: "runtime_adapter_proposal",
+        source_patterns: [],
+        summary: "s",
+        target: "plain-loop.adapter.timeout_config",
+        expected_effect: "e",
+        risk: "low",
+        validation_plan: "v",
+        status: "published",
+        created_by: "human",
+        payload: { adapter_policy: { timeout_seconds: 600 } },
+        created_at: "2026-01-01T00:00:00.000Z",
+      },
+    ],
+  );
+  assert.equal(withTimeout.nativeInvocation.timeout_seconds, 600);
+});
+
+test("policy_profile override resolves real rule differences from the registry (profiles.ts)", () => {
+  const card = githubPromptCard();
+  const strictProposal: ImprovementProposal = {
+    proposal_id: "p-strict",
+    type: "policy_profile_proposal",
+    source_patterns: [],
+    summary: "use strict review profile",
+    target: "github-agent-bugs.policy_profile",
+    expected_effect: "e",
+    risk: "high",
+    validation_plan: "v",
+    status: "published",
+    created_by: "human",
+    payload: { policy_profile: "loop_strict_review" },
+    created_at: "2026-01-01T00:00:00.000Z",
+  };
+
+  const input = assembleRuntimeInput(
+    card,
+    buildIntentContract(card, { runId: "run-1", source: "cron" }),
+    [strictProposal],
+    { github: { ghPath: "E:/tools/gh/bin/gh.exe", token: "t" } },
+  );
+
+  // 覆盖档名经注册表解析出真实规则差异, 不只是换标签
+  assert.equal(input.policyProfile?.policy_profile, "loop_strict_review");
+  assert.equal(input.policyProfile?.risk_rules.medium, "review_or_policy");
+  assert.equal(input.policyProfile?.risk_rules.high, "human_required");
+  assert.equal(input.policyProfile?.risk_rules.low, "auto");
+  assert.equal(input.policyProfile?.bypass_scope?.allow_local_commands, false);
+
+  // 未注册档名回落风险模型.md 默认值
+  const defaultInput = assembleRuntimeInput(
+    card,
+    buildIntentContract(card, { runId: "run-2", source: "cron" }),
+    [
+      {
+        ...strictProposal,
+        proposal_id: "p-unknown",
+        payload: { policy_profile: "no_such_profile" },
+      },
+    ],
+    { github: { ghPath: "E:/tools/gh/bin/gh.exe", token: "t" } },
+  );
+  assert.equal(
+    defaultInput.policyProfile?.risk_rules.medium,
+    "auto_if_in_workspace",
+  );
+  assert.equal(
+    defaultInput.policyProfile?.bypass_scope?.allow_local_commands,
+    true,
+  );
 });

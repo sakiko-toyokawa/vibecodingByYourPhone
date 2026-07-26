@@ -70,6 +70,8 @@ const PASSED_JUDGMENT: JudgmentReport = {
 class VerifyFakeSupervisor {
   /** 每次 startSession 的 settings 快照 (model 覆盖断言用)。 */
   readonly settingsSeen: ({ model?: string } | undefined)[] = [];
+  /** 每次 startSession 的 prompt 文本 (memory packet / 装配断言用)。 */
+  readonly textsSeen: string[] = [];
 
   constructor(
     private readonly scripted: { tool: string; input: unknown }[],
@@ -83,6 +85,7 @@ class VerifyFakeSupervisor {
     settings?: { toolApprovalHook?: ToolApprovalHook; model?: string },
   ): Promise<Process> {
     this.settingsSeen.push(settings);
+    this.textsSeen.push(_message.text);
     if (settings?.toolApprovalHook) {
       for (const call of this.scripted) {
         await settings.toolApprovalHook(call.tool, call.input);
@@ -501,6 +504,86 @@ test("adapter_policy: timeout_seconds kills a hanging turn as adapter timeout (#
         latest?.runtime.adapter_capability_snapshot ?? "",
         /adapterPolicy\[timeout_seconds=0.05\]/,
       );
+    },
+  );
+});
+
+test("memory packet: open failure patterns are assembled into prompt and ledgered (02 §3)", async () => {
+  await withFixture(
+    {
+      withPolicy: false,
+      scripted: [],
+      seedPattern: true,
+      verifyRunFn: PASSED_VERIFY,
+    },
+    async ({ service, controlPlane, ledgerStore, supervisor }) => {
+      const summary = await service.startRun("loop-verify", "manual");
+      const state = await waitForState(controlPlane, summary.run_id, [
+        "complete",
+      ]);
+      assert.equal(state, "complete");
+
+      // executor prompt 携带失败模式账本摘要 (04 单写者表: assembly 读
+      // failure-patterns)
+      const executorPrompt = supervisor.textsSeen[0] ?? "";
+      assert.match(executorPrompt, /Known failure patterns/);
+      assert.match(executorPrompt, /pattern-flaky-test/);
+      assert.match(executorPrompt, /flaky test under load/);
+
+      // memory-packet.json 落盘, 账本 input_refs.memory_packet 不再恒 null
+      const packet = await ledgerStore.readArtifact(
+        summary.run_id,
+        "memory-packet.json",
+      );
+      assert.ok(packet, "memory packet artifact written");
+      assert.ok(packet.includes("pattern-flaky-test"));
+      const latest = await ledgerStore.readEntry(summary.run_id);
+      assert.equal(
+        latest?.input_refs.memory_packet,
+        `artifact://${summary.run_id}/memory-packet.json`,
+      );
+    },
+  );
+});
+
+test("turn 1 lands runtime-input-bundle.json + prompt.md with structured execution contract (02 §3)", async () => {
+  await withFixture(
+    {
+      withPolicy: false,
+      scripted: [],
+      verifyRunFn: PASSED_VERIFY,
+    },
+    async ({ service, controlPlane, ledgerStore }) => {
+      const summary = await service.startRun("loop-verify", "manual");
+      const state = await waitForState(controlPlane, summary.run_id, [
+        "complete",
+      ]);
+      assert.equal(state, "complete");
+
+      const bundle = JSON.parse(
+        (await ledgerStore.readArtifact(
+          summary.run_id,
+          "runtime-input-bundle.json",
+        )) ?? "",
+      );
+      assert.equal(bundle.turn, 1);
+      assert.equal(bundle.execution_contract.scope.length, 1);
+      assert.ok(Array.isArray(bundle.execution_contract.constraints));
+      assert.deepEqual(bundle.native_invocation.adapter, "claude");
+      assert.equal(bundle.native_invocation.bridge, "agent_sdk");
+      assert.equal(bundle.observability.capture_stderr, false);
+      assert.equal(bundle.policy_projection, "not_applicable");
+      assert.ok(bundle.budget_remaining);
+      assert.equal(
+        bundle.context_injection.prompt_ref,
+        `artifact://${summary.run_id}/prompt.md`,
+      );
+      // 主 prompt 文本落盘且与 bundle 引用一致
+      const prompt = await ledgerStore.readArtifact(
+        summary.run_id,
+        "prompt.md",
+      );
+      assert.ok(prompt?.includes("Required output"));
     },
   );
 });

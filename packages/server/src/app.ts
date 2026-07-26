@@ -290,6 +290,9 @@ export function createApp(
       pipeline: proposalPipeline,
       // 04 容量与清理: 顺带清理需要扫描活跃 run 状态
       runStateStore,
+      // golden tasks: 失败模式 → eval 集 (基准与回归.md)
+      loopCardStore,
+      evalRunner,
     });
     learningWorker.start();
     registerValue("loopRunService", loopRunService);

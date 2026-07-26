@@ -203,11 +203,42 @@ test("policy_profile 提案: 覆盖档名真实进裁决 (hard_gate_enforced 应
         created_at: "2026-07-24T10:00:00.000Z",
       },
     });
-    assert.equal(scorecard.ok, true);
     assert.deepEqual(scorecard.applied?.slots, ["policy_profile"]);
     const gate = scorecard.results.find(
       (r) => r.case_id === "builtin-hard_gate_enforced",
     );
-    assert.match(gate?.detail ?? "", /profile=loop_strict_review/);
+    // 注册表使覆盖有真实规则差异: loop_strict_review 把 medium 动作升级
+    // 为 review_or_policy → workspace 写不再是自批准, behavior 检出,
+    // regression 闸门对 strict 档不放行 (eval 有牙的证据)
+    assert.equal(gate?.actual, "fail");
+    assert.match(gate?.detail ?? "", /write verdict=hard_gate/);
+    assert.equal(scorecard.ok, false);
+  });
+});
+
+test("policy_profile 提案: 未注册档名回落默认规则, regression 放行", async () => {
+  await withRunner(async ({ runner }) => {
+    const scorecard = await runner.run({
+      mode: "regression",
+      proposal: {
+        proposal_id: "prop-policy-default",
+        type: "policy_profile_proposal",
+        source_patterns: ["fp-2"],
+        summary: "s",
+        target: "loop-1.policy_profile",
+        expected_effect: "e",
+        risk: "high",
+        validation_plan: "v",
+        status: "shadow",
+        created_by: "human",
+        payload: { policy_profile: "no_such_profile" },
+        created_at: "2026-07-24T10:00:00.000Z",
+      },
+    });
+    assert.equal(scorecard.ok, true);
+    const gate = scorecard.results.find(
+      (r) => r.case_id === "builtin-hard_gate_enforced",
+    );
+    assert.match(gate?.detail ?? "", /profile=no_such_profile/);
   });
 });

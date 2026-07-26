@@ -73,6 +73,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import type {
+  CollectorReport,
   IntentContract,
   JudgmentReport,
   LoopCard,
@@ -94,6 +95,7 @@ import {
 import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { QueuedResponse } from "../supervisor/WorkerQueue.js";
+import { describeAdapter } from "./assembly/adapter-info.js";
 import { resolveAdapterPolicy } from "./assembly/adapter-policy.js";
 import {
   AssemblyError,
@@ -211,6 +213,9 @@ interface CollectorOutcome {
   reportRef: string | null;
   outputRef: string | null;
   inputRef: string | null;
+  /** collector session 的报告本体 (修复计划 #12: card 要求 review 段时
+   *  转成 verifier_report 参与聚合)。 */
+  report: CollectorReport | null;
 }
 
 /** Everything a suspended (needs_human / budget_limited / paused) run needs
@@ -239,6 +244,9 @@ interface RunExecutionContext {
   permissionEvents: PermissionEvent[];
   /** Set when contract/assembly setup failed before turn 1 could start. */
   setupError?: Error;
+  /** 02 §3 memory packet 的 artifact 内容 (turn 1 落盘; 无 open 模式时
+   *  为 null, input_refs.memory_packet 随之 null)。 */
+  memoryPacketJson?: string | null;
 }
 
 export interface LoopRunServiceDeps {
@@ -303,59 +311,9 @@ function loopRuntime(
     .runtime;
 }
 
-/**
- * 02 §8.1 运行账本 runtime 块的真实投影：从 card 的 provider 推导
- * adapter 标识 / bridge / runtime 原生 mode / 能力快照，不再硬编码
- * claude + agent_sdk + graceful（Codex run 的账本曾是编造值）。
- *
- * 映射依据：00-落地映射 bridge 表（Claude=agent_sdk、Codex=app_server）、
- * 06 偏差 #17（Codex 无优雅 interrupt → kill-only；只有 Claude SDK 的
- * AgentSession 暴露 interrupt() → graceful）。mode 是 runtime 原生模式
- * （02 §8.1：claude=print / codex=exec），permissionMode 记入能力快照。
- */
-export function describeAdapter(provider?: string): {
-  adapter: string;
-  bridge: string;
-  /** runtime 原生模式（02 §8.1 runtime.mode）。 */
-  mode: string;
-  interrupt: "graceful" | "kill-only";
-} {
-  const p = (provider as ProviderName | undefined) ?? DEFAULT_PROVIDER;
-  switch (p) {
-    case "claude":
-    case "claude-ollama":
-      return {
-        adapter: p,
-        bridge: "agent_sdk",
-        mode: "print",
-        interrupt: "graceful",
-      };
-    case "codex":
-    case "codex-oss":
-      return {
-        adapter: p,
-        bridge: "app_server",
-        mode: "exec",
-        interrupt: "kill-only",
-      };
-    case "gemini":
-    case "gemini-acp":
-      return {
-        adapter: p,
-        bridge: "acp",
-        mode: "acp",
-        interrupt: "kill-only",
-      };
-    default:
-      // 未知 provider 如实记录标识，能力按最保守口径（只能杀进程）。
-      return {
-        adapter: p,
-        bridge: "unknown",
-        mode: "unknown",
-        interrupt: "kill-only",
-      };
-  }
-}
+// describeAdapter 已移至 loop/assembly/adapter-info.ts (装配层与账本共用
+// 02 §3 native_invocation / §8.1 runtime 块的同一投影), 此处再导出兼容。
+export { describeAdapter } from "./assembly/adapter-info.js";
 
 /** Retry = 证据传递：the next turn gets the previous judgment verbatim. */
 function buildRetryContext(
@@ -897,6 +855,15 @@ export class LoopRunService {
       ctx.contractJson = JSON.stringify(ctx.contract, null, 2);
       const runtimeContext =
         await this.resolveRuntimeAssemblyContext(executableCard);
+      // 02 §3 memory packet: 失败模式账本 open 模式的摘要进装配
+      // (04 单写者表: assembly 读 failure-patterns)。
+      const memoryPacket = this.buildMemoryPacket(executableCard);
+      if (memoryPacket) {
+        runtimeContext.memoryPacket = memoryPacket.promptText;
+        ctx.memoryPacketJson = memoryPacket.artifactJson;
+      }
+      // 02 §3 budget_remaining: 首轮即合约全量 (used_* 均为 0)。
+      runtimeContext.budgetRemaining = ctx.contract.budget;
       // 阶段 3 装配消费：published / canary 提案在此进入 RuntimeInput
       // （每次新 run 重新装配 → 发布后新 run 即生效，rollback 后回到旧行为）。
       ctx.input = assembleRuntimeInput(
@@ -910,6 +877,58 @@ export class LoopRunService {
         error instanceof Error ? error : new Error(String(error));
     }
     await this.runTurns(ctx);
+  }
+
+  /**
+   * 02 §3 memory packet: 从失败模式账本构建本轮的记忆包——本 loop 相关
+   *  (affected_loop_specs 命中或全局) 的 open 模式按出现次数取前 5,
+   *  确定性文本注入 prompt, 完整结构落 memory-packet.json artifact
+   *  (账本 input_refs.memory_packet 的真实来源, 不再恒 null)。
+   * 无 open 模式 / store 未接线时返回 null。
+   */
+  private buildMemoryPacket(
+    card: LoopCard,
+  ): { promptText: string; artifactJson: string } | null {
+    const store = this.deps.failurePatternStore;
+    if (!store) {
+      return null;
+    }
+    const patterns = store
+      .list()
+      .filter(
+        (pattern) =>
+          pattern.status === "open" &&
+          (pattern.affected_loop_specs.length === 0 ||
+            pattern.affected_loop_specs.includes(card.loop.id)),
+      )
+      .sort((a, b) => b.occurrence_count - a.occurrence_count)
+      .slice(0, 5);
+    if (patterns.length === 0) {
+      return null;
+    }
+    return {
+      promptText: patterns
+        .map(
+          (pattern) =>
+            `- [${pattern.type}] ${pattern.summary} (seen ${pattern.occurrence_count}x, pattern ${pattern.pattern_id})`,
+        )
+        .join("\n"),
+      artifactJson: `${JSON.stringify(
+        {
+          loop_id: card.loop.id,
+          built_at: new Date().toISOString(),
+          patterns: patterns.map((pattern) => ({
+            pattern_id: pattern.pattern_id,
+            type: pattern.type,
+            summary: pattern.summary,
+            occurrence_count: pattern.occurrence_count,
+            signature: pattern.signature,
+          })),
+        },
+        null,
+        2,
+      )}\n`,
+    };
   }
 
   private async resolveExecutableCard(card: LoopCard): Promise<LoopCard> {
@@ -1041,6 +1060,15 @@ export class LoopRunService {
             ctx.contractJson,
           );
         }
+        // 02 §3 memory packet: 本轮的记忆包落 artifact, 账本
+        // input_refs.memory_packet 引用它。
+        if (ctx.turn === 1 && ctx.memoryPacketJson) {
+          await store.writeArtifact(
+            runId,
+            "memory-packet.json",
+            ctx.memoryPacketJson,
+          );
+        }
         // 02 §3 policy_projection 段：策略投影的 run 在 turn 1 落投影快照，
         // 与 intent-contract 同级可审计。
         if (ctx.turn === 1 && ctx.input?.policyProjection) {
@@ -1048,6 +1076,40 @@ export class LoopRunService {
             runId,
             "policy-projection.json",
             JSON.stringify(ctx.input.policyProjection, null, 2),
+          );
+        }
+        // 02 §3 RuntimeInputBundle: turn 1 落完整 bundle 快照
+        // (execution_contract / native_invocation / context_injection /
+        // observability / budget_remaining) 与主 prompt 文本。
+        if (ctx.turn === 1 && ctx.input) {
+          await store.writeArtifact(runId, "prompt.md", ctx.input.prompt);
+          await store.writeArtifact(
+            runId,
+            "runtime-input-bundle.json",
+            `${JSON.stringify(
+              {
+                goal_id: ctx.contract?.intent_id ?? "unknown",
+                run_id: runId,
+                turn: ctx.turn,
+                execution_contract: ctx.input.executionContract,
+                native_invocation: ctx.input.nativeInvocation,
+                context_injection: {
+                  prompt_ref: `artifact://${runId}/prompt.md`,
+                  instruction_overlay_ref: null,
+                  memory_packet_ref: ctx.memoryPacketJson
+                    ? `artifact://${runId}/memory-packet.json`
+                    : null,
+                  mcp_config_ref: null,
+                },
+                policy_projection:
+                  ctx.input.policyProjection ?? "not_applicable",
+                observability: ctx.input.observability,
+                budget_remaining: ctx.input.budgetRemaining ?? null,
+                permission_bridge_ref: null,
+              },
+              null,
+              2,
+            )}\n`,
           );
         }
         // Turn 1 keeps the phase-0/1 name for compatibility; later turns
@@ -1175,6 +1237,23 @@ export class LoopRunService {
             .filter((pattern) => pattern.status === "open")
             .map((pattern) => pattern.pattern_id);
           try {
+            // 修复计划 #12: card 的 verifier_chain 含 review 时, collector
+            // session 的报告转成 review 段 verifier_report 参与聚合
+            // (requires_human 透传不再被丢弃); 未声明 review 的卡保持
+            // 证据级 merge (collector 只作证据采集, 不参与判定)。
+            const reviewInChain = requiredPhases.includes("review");
+            const reviewReport =
+              reviewInChain && collector.report
+                ? {
+                    verifier_phase: "review" as const,
+                    status: collector.report.status,
+                    evidence_refs: collector.report.evidence_refs,
+                    unresolved_risks: collector.report.unresolved_risks,
+                    recommendation: collector.report.recommendation,
+                    confidence: collector.report.confidence,
+                    requires_human: collector.report.requires_human,
+                  }
+                : undefined;
             const verification = await this.verify(
               {
                 card: ctx.card,
@@ -1190,16 +1269,18 @@ export class LoopRunService {
                 permissionEventRefs,
                 policyIntentRef,
                 knownFailurePatterns,
+                reviewReport,
               },
               { store },
             );
             verificationRefs = verification.refs;
             verificationRan = true;
-            judgment = collector.reportRef
-              ? mergeEvidence(verification.judgment, [collector.reportRef])
-              : verification.judgment;
+            judgment =
+              !reviewInChain && collector.reportRef
+                ? mergeEvidence(verification.judgment, [collector.reportRef])
+                : verification.judgment;
             judgmentRef = verification.refs.judgment_report;
-            if (collector.reportRef) {
+            if (!reviewInChain && collector.reportRef) {
               await store.writeArtifact(
                 runId,
                 verificationArtifactName("judgment-report.json", ctx.turn),
@@ -1402,7 +1483,11 @@ export class LoopRunService {
           },
           input_refs: {
             intent: `intent://${loopId}`,
-            memory_packet: null, // no memory packet yet
+            // 02 §3 memory packet: 有 open 失败模式时引用本轮的
+            // memory-packet.json, 无则如实 null
+            memory_packet: ctx.memoryPacketJson
+              ? `artifact://${runId}/memory-packet.json`
+              : null,
             workspace: `workspace://${loopId}/${runId}`,
           },
           verification_refs: verificationRefs,
@@ -1572,6 +1657,30 @@ export class LoopRunService {
       const contract = IntentContractSchema.parse(JSON.parse(contractJson));
       const runtimeContext =
         await this.resolveRuntimeAssemblyContext(executableCard);
+      const memoryPacket = this.buildMemoryPacket(executableCard);
+      if (memoryPacket) {
+        runtimeContext.memoryPacket = memoryPacket.promptText;
+      }
+      // 后续轮的账本 input_refs.memory_packet 仍指向 turn 1 落盘的那份
+      // 记忆包 (内容以 turn 1 为准, 不按当前账本重建)。
+      const memoryPacketJson =
+        (await store
+          .readArtifact(signal.runId, "memory-packet.json")
+          .catch(() => undefined)) ?? null;
+      // 02 §3 budget_remaining: 从 run_state 预算快照算剩余量。
+      if (runState.budget) {
+        const b = runState.budget;
+        runtimeContext.budgetRemaining = {
+          max_tokens:
+            b.max_tokens > 0 ? Math.max(0, b.max_tokens - b.used_tokens) : 0,
+          max_time_minutes: Math.max(
+            0,
+            b.max_time_minutes - b.used_time_minutes,
+          ),
+          max_turns: Math.max(0, b.max_turns - b.used_turns),
+          max_retries: Math.max(0, b.max_retries - b.used_retries),
+        };
+      }
       const input = assembleRuntimeInput(
         executableCard,
         contract,
@@ -1609,6 +1718,7 @@ export class LoopRunService {
         pendingContext: null,
         policyEscalations: [],
         permissionEvents: [],
+        memoryPacketJson,
       };
     } catch (error) {
       console.error(
@@ -1625,7 +1735,7 @@ export class LoopRunService {
     stdoutRef: string,
   ): Promise<CollectorOutcome> {
     if (!ctx.input || !ctx.contract) {
-      return { inputRef: null, outputRef: null, reportRef: null };
+      return { inputRef: null, outputRef: null, reportRef: null, report: null };
     }
     const { runId, loopId } = ctx.active;
     const inputName =
@@ -1727,6 +1837,7 @@ export class LoopRunService {
       inputRef,
       outputRef,
       reportRef: `artifact://${runId}/${reportName}`,
+      report,
     };
   }
 

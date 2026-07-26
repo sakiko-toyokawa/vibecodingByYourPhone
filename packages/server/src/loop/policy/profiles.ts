@@ -3,8 +3,14 @@
  *
  * card.loop.policy 只携带选择项（profile 名 / approval_mode，见
  * loop-schema/loop-card.ts 的 Yep-extension 注释）；risk_rules /
- * hard_gates / bypass 允许范围用风险模型.md 的推荐默认值在此补全，
- * 保证分类与裁决规则集中一处、可测试。
+ * hard_gates / bypass 允许范围由本注册表补全，保证分类与裁决规则集中
+ * 一处、可测试。
+ *
+ * 命名档注册表（修复"policy_profile 覆盖只换标签不换规则"）：
+ * policy_profile_proposal 的档名覆盖在这里解析出**不同的真实规则**
+ * —— published 一个 strict 档会让后续 run 的 medium 动作从自批准变成
+ * 升级人工。档名不在注册表时回落风险模型.md 推荐默认值（旧卡兼容，
+ * 与阶段 2 行为一致）。
  *
  * 返回 null 表示 card 未声明 policy —— run 保持阶段 0/1 的只读 plan
  * 行为（策略投影不参与，交互式与既有 loop 行为零变化）。
@@ -35,22 +41,64 @@ const DEFAULT_RISK_RULES: PolicyProfile["risk_rules"] = {
   critical: "human_required",
 };
 
+/** 命名档的规则差异（未列出的维度回落默认值）。 */
+export interface ProfileDefinition {
+  risk_rules?: Partial<PolicyProfile["risk_rules"]>;
+  hard_gates?: HardGateAction[];
+  bypass_scope?: PolicyProfile["bypass_scope"];
+}
+
+/**
+ * 命名档注册表。档名的语义即其规则集合（新增档时在这里登记，不得在
+ * 调用处特判）。
+ *
+ * - `loop_bypass` / `github_issue_local_fix`：默认全量（本地、可回滚、
+ *   可审计的自批准）；
+ * - `loop_strict_review`：严格审查档——medium 动作也要升级人工
+ *   （review_or_policy），本地命令不在 bypass 自批准范围内；适合高
+ *   风险仓库的无人值守 run。
+ */
+export const NAMED_PROFILES: Record<string, ProfileDefinition> = {
+  loop_bypass: {},
+  github_issue_local_fix: {},
+  loop_strict_review: {
+    risk_rules: {
+      medium: "review_or_policy",
+      high: "human_required",
+    },
+    bypass_scope: {
+      allow_workspace_write: true,
+      allow_local_commands: false,
+    },
+  },
+};
+
 /**
  * Resolve the card's policy block into a full PolicyProfile.
  * Returns null when the card declares no policy (legacy read-only runs).
+ *
+ * nameOverride: policy_profile_proposal 的档名覆盖（装配层在 published /
+ * canary 生效时传入）——覆盖不只换标签，规则按覆盖档名从注册表解析。
  */
-export function resolvePolicyProfile(card: LoopCard): PolicyProfile | null {
+export function resolvePolicyProfile(
+  card: LoopCard,
+  nameOverride?: string,
+): PolicyProfile | null {
   const policy = card.loop.policy;
   if (!policy?.approval_mode) {
     return null;
   }
+  const name = nameOverride ?? policy.profile ?? `loop_${policy.approval_mode}`;
+  const definition = NAMED_PROFILES[name] ?? {};
   return {
-    policy_profile: policy.profile ?? `loop_${policy.approval_mode}`,
+    policy_profile: name,
     approval_mode: policy.approval_mode,
-    risk_rules: { ...DEFAULT_RISK_RULES },
-    hard_gates: [...ALL_HARD_GATES],
+    risk_rules: { ...DEFAULT_RISK_RULES, ...definition.risk_rules },
+    hard_gates: definition.hard_gates
+      ? [...definition.hard_gates]
+      : [...ALL_HARD_GATES],
     // 人工闸门与Bypass.md "Bypass 下允许的东西"：本地、可回滚、可审计。
-    bypass_scope: {
+    bypass_scope: definition.bypass_scope ?? {
       allow_workspace_write: true,
       allow_local_commands: true,
     },

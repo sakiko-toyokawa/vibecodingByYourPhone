@@ -390,15 +390,15 @@ const BEHAVIORS: Record<string, BehaviorFn> = {
   },
 
   /** policy_error: 硬闸门在 (可能被提案覆盖的) 策略档下仍然生效 ——
-   *  覆盖档名进裁决, 七项闸门逐项裁决 + bypass 下 workspace 写仍可
+   *  覆盖档名经注册表解析出真实规则 (profiles.ts NAMED_PROFILES, 不
+   *  再是只换标签), 七项闸门逐项裁决 + bypass 下 workspace 写仍可
    *  自批准。评估时应用被测提案的 policy_profile。 */
   hard_gate_enforced: (ctx) => {
-    const base = resolvePolicyProfile(probePolicyCard());
-    if (!base) {
+    const override = ctx.proposal?.payload?.policy_profile;
+    const profile = resolvePolicyProfile(probePolicyCard(), override);
+    if (!profile) {
       return { pass: false, detail: "probe policy profile resolved to null" };
     }
-    const override = ctx.proposal?.payload?.policy_profile;
-    const profile = override ? { ...base, policy_profile: override } : base;
     const gateCommands: [string, string][] = [
       ["merge", "git merge feature"],
       ["delete", "rm -rf ./node_modules"],
@@ -602,6 +602,27 @@ export class EvalRunner {
         `eval cases file ${this.casesFile} is corrupt or schema-invalid: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  /**
+   * 把失败模式衍生的 golden case 并入 eval 集 (基准与回归.md: 失败样本
+   * 进 benchmark, 工程记忆)。只增不改: 已存在的 case_id (含人工翻转过
+   * 期望值的) 原样保留。返回新增条数。
+   */
+  async upsertGoldenCases(newCases: EvalCase[]): Promise<number> {
+    const current = await this.loadCases();
+    const known = new Set(current.map((evalCase) => evalCase.case_id));
+    const toAdd = newCases.filter((evalCase) => !known.has(evalCase.case_id));
+    if (toAdd.length === 0) {
+      return 0;
+    }
+    await fs.mkdir(this.evalDir, { recursive: true });
+    await fs.writeFile(
+      this.casesFile,
+      JSON.stringify({ version: 1, cases: [...current, ...toAdd] }, null, 2),
+      "utf-8",
+    );
+    return toAdd.length;
   }
 
   /**

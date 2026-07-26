@@ -71,6 +71,11 @@ export interface VerifyRunInput {
   policyIntentRef?: string | null;
   /** 已知失败模式 id（失败模式账本 open 模式），供 verifier 对照。 */
   knownFailurePatterns?: string[];
+  /** review 段的真实报告（run-service 的 collector session 产出，修复计
+   *  划 #12）：card 的 verifier_chain 含 review 时传入，参与聚合
+   *  （requires_human 透传不再被丢弃）；缺省时 review 段保持
+   *  not_applicable 占位。 */
+  reviewReport?: VerifierReport;
   /** Per-command timeout; defaults to 120s (subprocess-verifier). */
   timeoutMs?: number;
 }
@@ -170,6 +175,11 @@ export async function verifyRun(
     }
 
     if (PLACEHOLDER_PHASES.has(phase)) {
+      // review 段有真实报告 (collector session) 时不写占位 —— 由聚合前
+      // 统一 append。
+      if (phase === "review" && input.reviewReport) {
+        continue;
+      }
       // 阶段 1 不做 interaction / review 段：写 not_applicable 占位，
       // 不参与聚合（不是 verifier_report，无 status 结论）。
       await store.writeArtifact(
@@ -186,6 +196,19 @@ export async function verifyRun(
         )}\n`,
       );
     }
+  }
+
+  // review 段真实报告 (collector session, 修复计划 #12): 落 per-phase
+  // artifact 并参与聚合, requires_human 透传按 02 §6 最高优先生效。
+  if (input.reviewReport) {
+    const reviewReport = VerifierReportSchema.parse(input.reviewReport);
+    reports.push(reviewReport);
+    executedPhases.push("review");
+    await store.writeArtifact(
+      runId,
+      verificationArtifactName("verifier-report-review.json", turn),
+      `${JSON.stringify(reviewReport, null, 2)}\n`,
+    );
   }
 
   // 聚合策略（02 §6 policy）：阶段 1 无 budget 强制（阶段 2 接管），

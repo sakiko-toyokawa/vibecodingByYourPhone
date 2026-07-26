@@ -23,7 +23,12 @@
  *  - curl / wget / mail / gh * comment 算 notify（一切对外沟通）；
  *    只读 HTTP 探测请用 WebFetch（分类为 low 只读），不经 Bash；
  *  - 复合命令（a && b; c | d）按段拆分，任一段命中硬闸门即整体命中
- *    （第一段命中的硬闸门胜出）。
+ *    （第一段命中的硬闸门胜出）；
+ *  - 命令通道的 workspace 边界：写目标（重定向 / tee / cp / mv / dd of=
+ *    / sed -i / node -e 内联绝对路径）越出 workspace 时按 high 记——
+ *    `echo x > /etc/x`、`node -e "fs.writeFileSync('/etc/x',..)"` 不再
+ *    借 medium 档被 bypass 自批准。启发式只认明确写形态，未知形态
+ *    保持原分级（误报边界宁严不宽）。
  */
 
 import path from "node:path";
@@ -104,6 +109,82 @@ function splitCommandSegments(command: string): string[] {
     .filter((segment) => segment.length > 0);
 }
 
+/**
+ * 提取命令段的写目标路径（启发式，宁可漏报不可误报——只认明确的写
+ * 形态，未知形态不拦截）：
+ * - 重定向 `>` / `>>`（含 `2>` `&>` 前缀）目标；
+ * - `tee` / `cp` / `mv` / `rsync` / `install` 的文件参数（cp 类取目标位）；
+ * - `dd of=`；`sed -i` 的文件；
+ * - `node/python -e` 内联脚本字符串里出现的绝对路径（受限启发：只在内
+ *   联代码内找绝对路径，不扫任意命令参数——`node /usr/lib/x.js` 这类
+ *   合法读取不受影响）。
+ * 相对路径交由调用方按 workspace 解析判定。
+ */
+function extractWriteTargets(segment: string): string[] {
+  const targets: string[] = [];
+  // 重定向目标（>` >>` 2> &> 前缀都算; 目标 token 到空白/分隔符为止）
+  for (const match of segment.matchAll(/(?:\d+|&)?>>?\s*([^\s;&|]+)/g)) {
+    targets.push(match[1] as string);
+  }
+  // dd of=<path>
+  for (const match of segment.matchAll(/\bdd\b[^;&|]*\bof=([^\s;&|]+)/g)) {
+    targets.push(match[1] as string);
+  }
+  // tee <path>
+  for (const match of segment.matchAll(/\btee\s+(?:-\S+\s+)*([^\s;&|]+)/g)) {
+    targets.push(match[1] as string);
+  }
+  // cp / mv / rsync / install: 最后一个非选项参数是写目标
+  for (const match of segment.matchAll(
+    /\b(?:cp|mv|rsync|install)\s+([^;&|]+)/g,
+  )) {
+    const args = (match[1] as string)
+      .split(/\s+/)
+      .filter((arg) => arg.length > 0 && !arg.startsWith("-"));
+    const dest = args[args.length - 1];
+    if (args.length >= 2 && dest) {
+      targets.push(dest);
+    }
+  }
+  // sed -i <file>
+  for (const match of segment.matchAll(/\bsed\s+[^;&|]*-i\S*\s+([^\s;&|]+)/g)) {
+    targets.push(match[1] as string);
+  }
+  // node/python/bun/deno -e 内联脚本里的绝对路径
+  const inline = /^(?:node|python|python3|bun|deno)\s+-e\s+(["'])([\s\S]*)\1/.exec(
+    segment,
+  );
+  if (inline) {
+    for (const match of (inline[2] as string).matchAll(
+      /([A-Za-z]:[\\/][^\s"';|]+|\/[^\s"';|]+)/g,
+    )) {
+      targets.push(match[1] as string);
+    }
+  }
+  return targets.filter(
+    (target) => target.length > 0 && !target.startsWith("-"),
+  );
+}
+
+/**
+ * 写目标是否越出 workspace（绝对路径在外, 或相对路径经 .. 逃逸）;
+ * 无 workspace 上下文时不判 (保持原行为, 不误报)。
+ */
+function isOutsideWorkspace(
+  target: string,
+  workspacePath: string | undefined,
+): boolean {
+  if (!workspacePath) {
+    return false;
+  }
+  // 去掉包裹引号
+  const clean = target.replace(/^["']|["']$/g, "");
+  if (!clean) {
+    return false;
+  }
+  return !isInsideWorkspace(clean, workspacePath);
+}
+
 interface HardGatePattern {
   action: HardGateAction;
   test: (segment: string) => boolean;
@@ -182,7 +263,7 @@ const LOCAL_GIT_READONLY =
 /** Bash 命令分类：硬闸门优先，其次本地只读 / 本地可回滚，默认 high。 */
 function classifyBashCommand(
   command: string,
-  _ctx: ClassifyContext,
+  ctx: ClassifyContext,
 ): ToolCallClassification {
   const summary = truncate(command.trim());
   const segments = splitCommandSegments(command);
@@ -205,6 +286,24 @@ function classifyBashCommand(
           risk: "critical",
           locallyRollbackable: false,
           summary,
+        };
+      }
+    }
+  }
+
+  // workspace 边界（bypass 不可移除项）：命令通道的写目标越出 workspace
+  // 时按"更大范围本地修改"记 high —— 不再让 `node -e fs.writeFileSync
+  // ('/etc/...')` / `echo x > /etc/x` 这类命令借 medium 档被自批准。
+  // 启发式（extractWriteTargets）：只认明确写形态, 未知形态不拦截。
+  for (const segment of segments) {
+    for (const target of extractWriteTargets(segment)) {
+      if (isOutsideWorkspace(target, ctx.workspacePath)) {
+        return {
+          action: "write",
+          hardGate: null,
+          risk: "high",
+          locallyRollbackable: false,
+          summary: `${summary} [write target outside workspace: ${target}]`,
         };
       }
     }

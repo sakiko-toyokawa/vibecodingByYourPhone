@@ -49,8 +49,10 @@ import type { RunStateStore } from "../control-plane/run-state-store.js";
 import { runLoopStorageCleanup } from "../state/cleanup.js";
 import type { FailurePatternStore } from "../state/failure-pattern-store.js";
 import type { LearningEventStore } from "../state/learning-event-store.js";
+import type { LoopCardStore } from "../state/loop-card-store.js";
 import type { ProposalStore } from "../state/proposal-store.js";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
+import type { EvalCase, EvalRunner } from "./eval-runner.js";
 import type { ProposalPipeline } from "./pipeline.js";
 import { buildSignature, patternIdFor, proposalIdFor } from "./signature.js";
 
@@ -125,6 +127,10 @@ export interface LearningWorkerDeps {
    * 清理, 保持 phase-3 测试挂载兼容)。
    */
   runStateStore?: RunStateStore;
+  /** golden task 同步: 失败模式 → eval 集的 card 查询 (可选)。 */
+  loopCardStore?: LoopCardStore;
+  /** golden task 同步: eval 集写入入口 (可选)。 */
+  evalRunner?: EvalRunner;
 }
 
 export interface LearningWorkerConfig {
@@ -267,6 +273,9 @@ export class LearningWorker {
       // failure_pattern 生命周期收口 (02 §8.3 open→resolved): 来源提案
       // 到达 published 即该模式已被处置。
       await this.resolvePublishedPatterns();
+      // golden tasks: 失败模式衍生的可复跑用例并入 eval 集 (基准与回归.md:
+      // 失败样本进 benchmark)。
+      await this.syncGoldenCases();
       // 04 容量与清理: 节流顺带执行 (worker 是唯一的定期后台任务)。
       await this.maybeRunCleanup();
       this.health.consecutiveFailures = 0;
@@ -334,6 +343,64 @@ export class LearningWorker {
     ) {
       console.log(
         `[LearningWorker] storage cleanup: ${result.ledgersCompressed} ledgers compressed, ${result.artifactFilesDeleted} artifact files deleted, ${result.eventsTruncated} events truncated`,
+      );
+    }
+  }
+
+  /**
+   * golden tasks (基准与回归.md: "canary 失败时应保留失败样本并进入
+   * benchmark"): 每个 open 失败模式衍生一条可复跑的 command case 进
+   * eval 集 —— workspace 取受影响 loop 的 card, 命令取 card 钉死的验
+   * 证命令 (static 优先, 无钉死命令的模式无法确定性复跑, 跳过)。
+   * expect 为 "fail" 如实记录当前失败; 修复使命令转绿后该 case 开始
+   * 不符合预期 (套件变红), 由人工把 expect 翻为 "pass" 完成基线更替
+   * —— 只增不改, 已存在的 case (含翻转过的) 不动。
+   */
+  private async syncGoldenCases(): Promise<void> {
+    const { loopCardStore, evalRunner } = this.deps;
+    if (!loopCardStore || !evalRunner) {
+      return;
+    }
+    const cases: EvalCase[] = [];
+    for (const pattern of this.deps.failurePatternStore.list()) {
+      if (pattern.status !== "open") {
+        continue;
+      }
+      const loopId = pattern.affected_loop_specs[0];
+      if (!loopId) {
+        continue;
+      }
+      const card = loopCardStore.getLoop(loopId)?.card;
+      const workspace = card?.loop.workspace.path;
+      if (!card || !workspace) {
+        continue;
+      }
+      const pinned =
+        card.loop.verification.commands?.static?.[0] ??
+        card.loop.verification.commands?.runtime?.[0];
+      if (!pinned) {
+        continue;
+      }
+      const [command, ...args] = pinned.split(/\s+/).filter(Boolean);
+      if (!command) {
+        continue;
+      }
+      cases.push({
+        case_id: `golden-${pattern.pattern_id}`,
+        category: pattern.type,
+        loop_id: loopId,
+        workspace,
+        kind: "command",
+        command,
+        args,
+        expect: "fail",
+        description: `golden task from failure pattern ${pattern.pattern_id} (${pattern.summary}); 修复使命令转绿后把 expect 翻为 "pass" 完成基线更替`,
+      });
+    }
+    const added = await evalRunner.upsertGoldenCases(cases);
+    if (added > 0) {
+      console.log(
+        `[LearningWorker] golden tasks: ${added} case(s) added to eval suite`,
       );
     }
   }

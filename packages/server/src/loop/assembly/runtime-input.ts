@@ -35,6 +35,7 @@
 
 import path from "node:path";
 import {
+  type BudgetLimits,
   DEFAULT_PROVIDER,
   type ImprovementProposal,
   type IntentContract,
@@ -46,6 +47,8 @@ import {
   type ProviderName,
 } from "@yep-anywhere/shared";
 import { resolvePolicyProfile } from "../policy/profiles.js";
+import { describeAdapter } from "./adapter-info.js";
+import { resolveAdapterPolicy } from "./adapter-policy.js";
 import { resolveProposalEffects } from "./proposal-effects.js";
 
 /**
@@ -102,6 +105,59 @@ export interface RuntimeInput {
    * 本次装配实际生效的提案 id（阶段 3 装配消费，审计/观测用）。
    */
   appliedProposals?: string[];
+  /**
+   * 02 §3 execution_contract 段：结构化的"完成什么"。prompt 是它的
+   * 文本投影 (constraints / required_output 都进 prompt, 不再丢失)。
+   */
+  executionContract: ExecutionContract;
+  /**
+   * 02 §3 native_invocation 段：adapter/bridge/surface/mode 真实投影
+   * (describeAdapter); timeout_seconds 仅在 adapter_policy 提供时非
+   * null (06 偏差 #35: 无默认轮次超时, resume_ref 恒 null —— 本 bundle
+   * 是首轮装配快照)。
+   */
+  nativeInvocation: NativeInvocation;
+  /**
+   * 02 §3 observability 段：本轮必须采集的证据通道声明 (如实反映实现:
+   * stderr / transcript 通道不存在, 记 false)。
+   */
+  observability: ObservabilityDeclaration;
+  /** 02 §3 budget_remaining: 本轮开始时的剩余预算 (run-service 经
+   *  RuntimeAssemblyContext 传入; 首轮即合约全量)。 */
+  budgetRemaining?: BudgetLimits;
+}
+
+/** 02 §3 execution_contract (结构化五字段)。 */
+export interface ExecutionContract {
+  goal: string;
+  scope: string[];
+  success_criteria: string[];
+  constraints: string[];
+  /** 执行后必须留下的证据类型 (summary / changed_files / commands_run /
+   *  test_results / known_risks 的子集)。 */
+  required_output: string[];
+}
+
+/** 02 §3 native_invocation (bridge 与原生 mode 两层不混用)。 */
+export interface NativeInvocation {
+  adapter: string;
+  bridge: string;
+  surface: string;
+  mode: string;
+  cwd_ref: string;
+  timeout_seconds: number | null;
+  resume_ref: string | null;
+}
+
+/** 02 §3 observability 采集声明。 */
+export interface ObservabilityDeclaration {
+  capture_stdout: boolean;
+  capture_stderr: boolean;
+  capture_structured_output: boolean;
+  capture_transcript: boolean;
+  capture_diff: boolean;
+  capture_exit_code: boolean;
+  capture_test_output: boolean;
 }
 
 export interface RuntimeAssemblyContext {
@@ -109,6 +165,12 @@ export interface RuntimeAssemblyContext {
     ghPath: string;
     token: string;
   };
+  /** 02 §3 memory packet: 失败模式账本 open 模式的确定性摘要 (run-service
+   *  构建, 注入 prompt; 与提案模板注入是两条独立路径)。 */
+  memoryPacket?: string;
+  /** 02 §3 budget_remaining: 本轮开始时的剩余预算 (run-service 从
+   *  control-plane 快照计算; 首轮为合约全量)。 */
+  budgetRemaining?: BudgetLimits;
 }
 
 /** File-mutating tools denied outright in legacy read-only runs. */
@@ -185,12 +247,10 @@ export function assembleRuntimeInput(
   // 版本自动回补（回滚即回到旧行为，版本记录不删）。
   const effects = resolveProposalEffects(loop.id, proposals);
 
-  let profile = resolvePolicyProfile(card);
+  const profile = resolvePolicyProfile(card, effects.policyProfileOverride);
   // policy_profile_proposal 的策略档名覆盖只在策略投影模式下生效（card
-  // 未声明 policy 时不为单个提案开启整条策略管线）。
-  if (profile && effects.policyProfileOverride) {
-    profile = { ...profile, policy_profile: effects.policyProfileOverride };
-  }
+  // 未声明 policy 时不为单个提案开启整条策略管线）；覆盖经注册表解析
+  // 出真实规则差异 (profiles.ts NAMED_PROFILES), 不只是换标签。
   // manual 无人值守 = 只读兜底（无法等待人工确认），走 legacy 形状。
   const policyActive = profile !== null && profile.approval_mode !== "manual";
 
@@ -201,16 +261,74 @@ export function assembleRuntimeInput(
   // 审批反向请求——硬闸门、bypass 审计整段失效；其余 provider 的审批
   // 路径未经同样验证。未知 = 不安全：policy run 落在非 Claude 桥上直接
   // 拒绝装配，不静默退化为无策略执行。
+  const provider =
+    (card.loop as { runtime?: { provider?: string } }).runtime?.provider ??
+    DEFAULT_PROVIDER;
   if (policyActive && profile) {
-    const provider =
-      (card.loop as { runtime?: { provider?: string } }).runtime?.provider ??
-      DEFAULT_PROVIDER;
     if (provider !== "claude" && provider !== "claude-ollama") {
       throw new AssemblyError(
         `Loop '${loop.id}' declares a policy (approval_mode=${profile.approval_mode}) but provider '${provider}' cannot enforce it: the policy hook is only a verified rule source on the Claude bridge (agent_sdk canUseTool fires per tool call). On '${provider}' the runtime would bypass approvals (codex maps bypassPermissions to approvalPolicy "never"), so hard gates and bypass auditing would silently not apply. Use provider 'claude' or drop loop.policy.`,
       );
     }
   }
+
+  // 02 §3 execution_contract: 结构化五字段 —— prompt 是它的文本投影
+  // (constraints 与 required_output 随之进 prompt, 不再丢失)。
+  const requiredOutput = [
+    "summary",
+    "known_risks",
+    ...(policyActive ? ["changed_files", "commands_run"] : []),
+    ...(loop.verification.required.some(
+      (p) => p === "static" || p === "runtime",
+    )
+      ? ["test_results"]
+      : []),
+  ];
+  const executionContract: ExecutionContract = {
+    goal: contract.raw_goal,
+    scope: [cwd],
+    success_criteria: [...contract.success_criteria],
+    constraints: [...contract.constraints],
+    required_output: requiredOutput,
+  };
+
+  // 02 §3 native_invocation: provider → adapter/bridge/surface/mode 真实
+  // 投影 (describeAdapter); timeout_seconds 仅在 adapter_policy 提供时
+  // 非 null (06 偏差 #35: 无默认轮次超时)。
+  const adapterInfo = describeAdapter(provider);
+  const policyTimeoutMs = resolveAdapterPolicy(effects.adapterPolicy).timeoutMs;
+  const nativeInvocation: NativeInvocation = {
+    adapter: adapterInfo.adapter,
+    bridge: adapterInfo.bridge,
+    surface: adapterInfo.surface,
+    mode: adapterInfo.mode,
+    cwd_ref: `workspace://${loop.id}`,
+    timeout_seconds: policyTimeoutMs ? policyTimeoutMs / 1000 : null,
+    // 本 bundle 是首轮装配快照; 后续轮 resume 经 Supervisor.resumeSession,
+    // 不重新装配 (06 偏差 #35)。
+    resume_ref: null,
+  };
+
+  // 02 §3 observability: 如实声明采集通道 (stderr / transcript 通道在
+  // ProcessEvent 层不存在, 记 false —— 不伪造采集能力)。
+  const observability: ObservabilityDeclaration = {
+    capture_stdout: true,
+    capture_stderr: false,
+    capture_structured_output: true,
+    capture_transcript: false,
+    capture_diff: true,
+    capture_exit_code: true,
+    capture_test_output: true,
+  };
+
+  const bundleExtras = {
+    executionContract,
+    nativeInvocation,
+    observability,
+    ...(context.budgetRemaining
+      ? { budgetRemaining: context.budgetRemaining }
+      : {}),
+  };
 
   const prompt = [
     ...(isGitHubPromptLoop(card)
@@ -235,6 +353,15 @@ export function assembleRuntimeInput(
           effects.memoryPacketTemplate,
         ]
       : []),
+    // 02 §3 memory packet: 失败模式账本的 open 模式摘要 (另一条独立路
+    // 径 —— 提案模板是"怎么改", 账本摘要是"哪些坑已知")。
+    ...(context.memoryPacket
+      ? [
+          "",
+          "Known failure patterns (failure pattern ledger — do not repeat these):",
+          context.memoryPacket,
+        ]
+      : []),
     "",
     "Task:",
     `- Task type: ${contract.task_type.primary}`,
@@ -245,6 +372,16 @@ export function assembleRuntimeInput(
     "",
     "Success criteria:",
     ...contract.success_criteria.map((c) => `- ${c}`),
+    ...(executionContract.constraints.length > 0
+      ? [
+          "",
+          "Constraints:",
+          ...executionContract.constraints.map((c) => `- ${c}`),
+        ]
+      : []),
+    "",
+    "Required output (leave this evidence):",
+    ...requiredOutput.map((o) => `- ${o}`),
     "",
     "Report format (plain text, in this order):",
     "1. Scope scanned",
@@ -269,6 +406,7 @@ export function assembleRuntimeInput(
       cwd,
       permissionMode: "plan",
       permissions: { deny: [...READ_ONLY_DENY] },
+      ...bundleExtras,
       ...(effects.adapterPolicy
         ? { adapterPolicy: effects.adapterPolicy }
         : {}),
@@ -286,6 +424,7 @@ export function assembleRuntimeInput(
     permissionMode: "bypassPermissions",
     // 显式规则留空：裁决全部走策略钩子（钩子对任何调用都会给出结论）。
     permissions: {},
+    ...bundleExtras,
     ...(isGitHubPromptLoop(card) && context.github
       ? {
           env: {
