@@ -174,4 +174,52 @@ export class LearningEventStore {
     await fs.writeFile(tmpPath, JSON.stringify(cursor, null, 2), "utf-8");
     await fs.rename(tmpPath, this.cursorFile);
   }
+
+  /**
+   * 04 容量与清理: 截断"消费位点之前且 created_at 早于 cutoff"的行。
+   * 未消费行 (>= cursor) 与无法解析 created_at 的行一律保留 (宁可多留
+   * 不误删)。返回删除行数与调整后的 cursor (被删行都在消费位点之前,
+   * cursor 前移相应行数)。
+   */
+  async truncateConsumedBefore(
+    cutoffIso: string,
+    cursor: number,
+  ): Promise<{ removed: number; newCursor: number }> {
+    let content: string;
+    try {
+      content = await fs.readFile(this.eventsFile, "utf-8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return { removed: 0, newCursor: cursor };
+      }
+      throw error;
+    }
+    const lines = content.split("\n").filter((line) => line.trim().length > 0);
+    const kept: string[] = [];
+    let removed = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i] as string;
+      if (i < cursor && isOlderThan(line, cutoffIso)) {
+        removed += 1;
+        continue;
+      }
+      kept.push(line);
+    }
+    if (removed > 0) {
+      const tmpPath = `${this.eventsFile}.tmp`;
+      await fs.writeFile(tmpPath, `${kept.join("\n")}\n`, "utf-8");
+      await fs.rename(tmpPath, this.eventsFile);
+    }
+    return { removed, newCursor: Math.max(0, cursor - removed) };
+  }
+}
+
+/** created_at 早于 cutoff 才删; 解析不出时间戳的行返回 false (保留)。 */
+function isOlderThan(line: string, cutoffIso: string): boolean {
+  try {
+    const createdAt = (JSON.parse(line) as { created_at?: unknown }).created_at;
+    return typeof createdAt === "string" && createdAt < cutoffIso;
+  } catch {
+    return false;
+  }
 }

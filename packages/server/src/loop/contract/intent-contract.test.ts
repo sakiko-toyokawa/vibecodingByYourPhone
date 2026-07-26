@@ -57,3 +57,27 @@ test("handoff.task overrides the generated raw_goal", () => {
     "Create or update REPORT.md with a workspace summary",
   );
 });
+
+test("stop_on_repeated_failure projects into contract stop_rules (02 §2)", () => {
+  const withRule = buildIntentContract(
+    makeCard({
+      stop_rules: {
+        max_turns: 3,
+        max_time_minutes: 10,
+        max_retries: 2,
+        stop_on_repeated_failure: 2,
+      },
+    }),
+    { runId: "run-5", source: "manual" },
+  );
+  assert.deepEqual(withRule.stop_rules, {
+    repetition: { max_same_failure: 2 },
+  });
+
+  // 未声明时不投影 (stop_rules 字段整体缺席)
+  const withoutRule = buildIntentContract(makeCard(), {
+    runId: "run-6",
+    source: "manual",
+  });
+  assert.equal(withoutRule.stop_rules, undefined);
+});

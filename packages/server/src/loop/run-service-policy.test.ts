@@ -41,8 +41,13 @@ interface ScriptedToolCall {
 
 interface SupervisorCall {
   method: "start" | "resume";
+  role: "executor" | "collector";
+  cwd: string;
   mode: PermissionMode | undefined;
   text: string;
+  env?: Record<string, string>;
+  providerName?: string;
+  model?: string;
   hadHook: boolean;
   hookResults: { behavior: string; message?: string }[];
 }
@@ -55,10 +60,14 @@ class PolicyFakeSupervisor {
   constructor(private readonly scripted: ScriptedToolCall[]) {}
 
   async startSession(
-    _cwd: string,
+    cwd: string,
     message: { text: string },
     mode?: PermissionMode,
-    settings?: { toolApprovalHook?: ToolApprovalHook },
+    settings?: {
+      toolApprovalHook?: ToolApprovalHook;
+      providerName?: string;
+      model?: string;
+    },
   ): Promise<Process> {
     const hookResults: SupervisorCall["hookResults"] = [];
     if (settings?.toolApprovalHook) {
@@ -71,8 +80,15 @@ class PolicyFakeSupervisor {
     }
     this.calls.push({
       method: "start",
+      role: message.text.includes("Collector input bundle")
+        ? "collector"
+        : "executor",
+      cwd,
       mode,
       text: message.text,
+      env: (settings as { env?: Record<string, string> } | undefined)?.env,
+      providerName: settings?.providerName,
+      model: settings?.model,
       hadHook: Boolean(settings?.toolApprovalHook),
       hookResults,
     });
@@ -81,14 +97,19 @@ class PolicyFakeSupervisor {
 
   async resumeSession(
     sessionId: string,
-    _cwd: string,
+    cwd: string,
     message: { text: string },
     mode?: PermissionMode,
   ): Promise<Process> {
     this.calls.push({
       method: "resume",
+      role: "executor",
+      cwd,
       mode,
       text: message.text,
+      env: undefined,
+      providerName: undefined,
+      model: undefined,
       hadHook: false,
       hookResults: [],
     });
@@ -133,6 +154,41 @@ function makeCard(withPolicy: boolean): LoopCard {
   };
 }
 
+function makeGitHubPromptCard(): LoopCard {
+  return {
+    loop: {
+      id: "github-prompt-loop",
+      trigger: { type: "manual" },
+      discovery: {
+        source: "github_prompt",
+        query: "去寻找 agent 项目的 bug 修复，优先找容易合 PR 的",
+      },
+      handoff: {
+        default_task_type: "github_issue_repair",
+        max_items_per_run: 1,
+        task: "去寻找 agent 项目的 bug 修复，优先找容易合 PR 的",
+      },
+      workspace: {
+        strategy: "direct",
+        path: "managed://github-workspaces/prompt-loops/github-prompt-loop",
+      },
+      verification: { required: ["static"] },
+      policy: {
+        profile: "github_issue_local_fix",
+        approval_mode: "bypass",
+      },
+      ...({
+        runtime: {
+          provider: "claude",
+          model: "claude-sonnet-4-5",
+        },
+      } as { runtime: { provider: string; model: string } }),
+      persistence: { state_file: "state/github-prompt-loop.json" },
+      stop_rules: { max_turns: 3, max_time_minutes: 30, max_retries: 2 },
+    },
+  };
+}
+
 const PASSED_JUDGMENT: JudgmentReport = {
   overall: "passed",
   next_action: "complete",
@@ -156,7 +212,11 @@ function makeVerify() {
 }
 
 async function withFixture(
-  opts: { withPolicy: boolean; scripted: ScriptedToolCall[] },
+  opts: {
+    withPolicy: boolean;
+    scripted: ScriptedToolCall[];
+    card?: LoopCard;
+  },
   fn: (ctx: {
     service: LoopRunService;
     controlPlane: ControlPlane;
@@ -174,7 +234,7 @@ async function withFixture(
       runLedgerStore: ledgerStore,
     });
     const supervisor = new PolicyFakeSupervisor(opts.scripted);
-    const card = makeCard(opts.withPolicy);
+    const card = opts.card ?? makeCard(opts.withPolicy);
     const loopCardStore = {
       getLoop: (id: string) =>
         id === card.loop.id
@@ -194,6 +254,17 @@ async function withFixture(
       controlPlane,
       sleep: async () => {},
       verifyRunFn: makeVerify() as never,
+      githubCredentialStore: {
+        getToken: async () => "github_pat_secret",
+      },
+      githubToolProvisioner: {
+        ensureGh: async () => ({
+          installed: true,
+          version: "2.64.0",
+          path: "/tmp/yep/tools/gh/2.64.0/gh/bin/gh",
+        }),
+      },
+      dataDir,
     });
     await fn({ service, controlPlane, supervisor, ledgerStore, stateStore });
     // Let in-flight ledger append chains settle before cleanup (Windows
@@ -230,6 +301,40 @@ async function waitForState(
   }
 }
 
+async function waitForCall(
+  supervisor: PolicyFakeSupervisor,
+  timeoutMs = 5000,
+): Promise<SupervisorCall> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const call = supervisor.calls[0];
+    if (call) {
+      return call;
+    }
+    if (Date.now() > deadline) {
+      throw new Error("timed out waiting for supervisor call");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+/** 状态机先转移（applyJudgment 内）→ 轮末账本/handoff 落盘 → finally 才
+ *  释放 active 注册，三者有天然的异步窗口；释放属实现细节，轮询等待而
+ *  非瞬时断言（负载下瞬时断言会抖动）。 */
+async function waitForInactive(
+  service: LoopRunService,
+  loopId: string,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (service.isRunActive(loopId)) {
+    if (Date.now() > deadline) {
+      throw new Error(`run for '${loopId}' still active after terminal state`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 test("hard gate smoke: git merge under bypass is denied and the run escalates to needs_human", async () => {
   await withFixture(
     {
@@ -247,7 +352,7 @@ test("hard gate smoke: git merge under bypass is denied and the run escalates to
       assert.equal(service.isRunActive("loop-policy"), true);
 
       // 策略钩子拦截了 merge（bypass ≠ 绕过硬闸门）
-      const call = supervisor.calls[0];
+      const call = await waitForCall(supervisor);
       assert.equal(call?.hadHook, true);
       assert.equal(call?.mode, "bypassPermissions");
       assert.equal(call?.hookResults[0]?.behavior, "deny");
@@ -283,12 +388,132 @@ test("hard gate smoke: git merge under bypass is denied and the run escalates to
         "close",
       ]);
 
-      // 运行账本可见能力快照
+      // 运行账本可见真实 runtime 投影（02 §8.1：mode 是 runtime 原生
+      // 模式，permissionMode 记能力快照）
       const latest = await ledgerStore.readEntry(summary.run_id);
-      assert.equal(latest?.runtime.mode, "bypassPermissions");
+      assert.equal(latest?.runtime.adapter, "claude");
+      assert.equal(latest?.runtime.mode, "print");
+      assert.match(
+        latest?.runtime.adapter_capability_snapshot ?? "",
+        /permissionMode=bypassPermissions/,
+      );
       assert.match(
         latest?.runtime.adapter_capability_snapshot ?? "",
         /policy=loop_bypass/,
+      );
+      assert.match(
+        latest?.runtime.adapter_capability_snapshot ?? "",
+        /interrupt=graceful/,
+      );
+    },
+  );
+});
+
+test("github_prompt policy runs pass GitHub env through supervisor settings", async () => {
+  await withFixture(
+    {
+      withPolicy: true,
+      scripted: [],
+      card: makeGitHubPromptCard(),
+    },
+    async ({ service, controlPlane, supervisor }) => {
+      const summary = await service.startRun("github-prompt-loop", "manual");
+
+      const state = await waitForState(controlPlane, summary.run_id, [
+        "complete",
+      ]);
+      assert.equal(state, "complete");
+
+      const call = await waitForCall(supervisor);
+      assert.equal(call?.mode, "bypassPermissions");
+      assert.match(call?.text ?? "", /GitHub issue repair loop/);
+      assert.match(
+        call?.cwd ?? "",
+        /github-workspaces[/\\]prompt-loops[/\\]github-prompt-loop/,
+      );
+      assert.equal(call?.env?.GH_TOKEN, "github_pat_secret");
+      assert.equal(call?.env?.GITHUB_TOKEN, "github_pat_secret");
+      assert.match(call?.env?.PATH ?? "", /gh[/\\]bin/);
+      assert.equal(call?.providerName, "claude");
+      assert.equal(call?.model, "claude-sonnet-4-5");
+    },
+  );
+});
+
+test("collector stage writes report and handoff artifacts with GitHub runtime env", async () => {
+  await withFixture(
+    {
+      withPolicy: true,
+      scripted: [],
+      card: makeGitHubPromptCard(),
+    },
+    async ({ service, controlPlane, supervisor, ledgerStore }) => {
+      const summary = await service.startRun("github-prompt-loop", "manual");
+
+      const state = await waitForState(controlPlane, summary.run_id, [
+        "complete",
+      ]);
+      assert.equal(state, "complete");
+
+      const executorCall = supervisor.calls.find(
+        (call) => call.role === "executor",
+      );
+      const collectorCall = supervisor.calls.find(
+        (call) => call.role === "collector",
+      );
+      assert.ok(executorCall, "executor session started");
+      assert.ok(collectorCall, "collector session started");
+      assert.equal(collectorCall.method, "start");
+      assert.equal(collectorCall.cwd, executorCall.cwd);
+      assert.equal(collectorCall.mode, "plan");
+      assert.equal(collectorCall.providerName, "claude");
+      assert.equal(collectorCall.model, "claude-sonnet-4-5");
+      assert.equal(collectorCall.env?.GH_TOKEN, "github_pat_secret");
+      assert.equal(collectorCall.env?.GITHUB_TOKEN, "github_pat_secret");
+      assert.match(collectorCall.env?.PATH ?? "", /gh[/\\]bin/);
+      assert.match(collectorCall.text, /Collector input bundle/);
+      assert.match(collectorCall.text, /"max_items_per_run": 1/);
+
+      const collectorInput = await ledgerStore.readArtifact(
+        summary.run_id,
+        "collector-input.json",
+      );
+      const collectorReport = await ledgerStore.readArtifact(
+        summary.run_id,
+        "collector-report.json",
+      );
+      const handoff = await ledgerStore.readArtifact(
+        summary.run_id,
+        "turn-handoff.json",
+      );
+      assert.ok(collectorInput, "collector input artifact written");
+      assert.ok(collectorReport, "collector report artifact written");
+      assert.ok(handoff, "turn handoff artifact written");
+
+      const parsedReport = JSON.parse(collectorReport);
+      assert.equal(parsedReport.status, "passed");
+      assert.deepEqual(parsedReport.evidence_refs, [
+        `artifact://${summary.run_id}/collector-output.log`,
+      ]);
+
+      const parsedHandoff = JSON.parse(handoff);
+      assert.equal(parsedHandoff.run_id, summary.run_id);
+      assert.equal(parsedHandoff.loop_id, "github-prompt-loop");
+      assert.equal(parsedHandoff.turn, 1);
+      assert.equal(
+        parsedHandoff.collector_report_ref,
+        `artifact://${summary.run_id}/collector-report.json`,
+      );
+      assert.deepEqual(parsedHandoff.actions_not_to_repeat, []);
+
+      const latest = await ledgerStore.readEntry(summary.run_id);
+      assert.ok(
+        latest?.artifact_refs.includes(
+          `artifact://${summary.run_id}/turn-handoff.json`,
+        ),
+      );
+      assert.ok(
+        latest?.verification_refs.verifier_report.includes("verifier-reports"),
       );
     },
   );
@@ -310,9 +535,9 @@ test("bypass smoke: workspace write self-approves with audit, run completes unat
         "complete",
       ]);
       assert.equal(state, "complete");
-      assert.equal(service.isRunActive("loop-policy"), false);
+      await waitForInactive(service, "loop-policy");
 
-      const call = supervisor.calls[0];
+      const call = await waitForCall(supervisor);
       assert.deepEqual(
         call?.hookResults.map((r) => r.behavior),
         ["allow", "allow"],
@@ -340,7 +565,7 @@ test("legacy card without policy: no hook, plan mode, read-only prompt (unchange
     async ({ service, controlPlane, supervisor, ledgerStore }) => {
       const summary = await service.startRun("loop-policy", "manual");
 
-      const call = supervisor.calls[0];
+      const call = await waitForCall(supervisor);
       // 无钩子 → 钩子不被调用（scripted 调用不发生），行为原样
       assert.equal(call?.hadHook, false);
       assert.equal(call?.hookResults.length, 0);
@@ -358,7 +583,11 @@ test("legacy card without policy: no hook, plan mode, read-only prompt (unchange
         0,
       );
       const latest = await ledgerStore.readEntry(summary.run_id);
-      assert.equal(latest?.runtime.mode, "plan");
+      assert.equal(latest?.runtime.mode, "print");
+      assert.match(
+        latest?.runtime.adapter_capability_snapshot ?? "",
+        /permissionMode=plan/,
+      );
     },
   );
 });

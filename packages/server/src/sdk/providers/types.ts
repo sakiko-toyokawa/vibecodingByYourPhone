@@ -59,6 +59,8 @@ export interface StartSessionOptions {
   executor?: string;
   /** Environment variables to set on remote (for testing: CLAUDE_SESSIONS_DIR) */
   remoteEnv?: Record<string, string>;
+  /** Extra environment variables for the local provider process. */
+  env?: Record<string, string>;
   /** Global instructions to append to system prompt (from server settings) */
   globalInstructions?: string;
 }

@@ -4,6 +4,12 @@ import type { AppOptions } from "../app.js";
 import { createAuthRoutes } from "../auth/routes.js";
 import { container } from "../container.js";
 import type {
+  GitHubClient,
+  GitHubCredentialStore,
+  GitHubIssueLoopService,
+  GitHubToolProvisioner,
+} from "../github/index.js";
+import type {
   ControlPlane,
   LoopCardStore,
   LoopRunService,
@@ -35,6 +41,7 @@ import { createDeviceRoutes } from "./devices.js";
 import { createEditorRoutes } from "./editor.js";
 import { createFilesRoutes } from "./files.js";
 import { createGitStatusRoutes } from "./git-status.js";
+import { createGitHubRoutes } from "./github.js";
 import { createGlobalSessionsRoutes } from "./global-sessions.js";
 import { health } from "./health.js";
 import { createInboxRoutes } from "./inbox.js";
@@ -69,6 +76,10 @@ export interface RouteDependencies {
   loopRunService?: LoopRunService;
   loopControlPlane?: ControlPlane;
   proposalStore?: ProposalStore;
+  githubCredentialStore: GitHubCredentialStore;
+  githubToolProvisioner: GitHubToolProvisioner;
+  githubClient: GitHubClient;
+  githubIssueLoopService?: GitHubIssueLoopService;
 }
 
 export function registerRoutes(
@@ -88,6 +99,10 @@ export function registerRoutes(
     loopRunService,
     loopControlPlane,
     proposalStore,
+    githubCredentialStore,
+    githubToolProvisioner,
+    githubClient,
+    githubIssueLoopService,
   } = container.cradle as unknown as RouteDependencies;
 
   // Auth routes (always mounted if authService is provided)
@@ -373,6 +388,16 @@ export function registerRoutes(
 
   // Git status routes
   app.route("/api/projects", createGitStatusRoutes({ scanner }));
+
+  app.route(
+    "/api/github",
+    createGitHubRoutes({
+      credentialStore: githubCredentialStore,
+      toolProvisioner: githubToolProvisioner,
+      githubClient,
+      issueLoopService: githubIssueLoopService,
+    }),
+  );
 
   // Recents routes (recently visited sessions)
   if (options.recentsService) {

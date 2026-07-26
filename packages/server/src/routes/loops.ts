@@ -10,7 +10,9 @@
 
 import { LoopActionRequestSchema, LoopCardSchema } from "@yep-anywhere/shared";
 import type { ProposalStatus } from "@yep-anywhere/shared";
+import { RunStateSchema } from "@yep-anywhere/shared";
 import { Hono } from "hono";
+import { z } from "zod";
 import {
   type ControlPlane,
   ControlPlaneError,
@@ -19,6 +21,20 @@ import {
   type LoopRunService,
   type ProposalStore,
 } from "../loop/index.js";
+
+/** POST /:id/runs 请求体 (03): intent_overrides 对 handoff 的本轮覆盖。 */
+const TriggerRunBodySchema = z
+  .object({
+    intent_overrides: z
+      .object({
+        task: z.string().optional(),
+        default_task_type: z.string().optional(),
+        max_items_per_run: z.number().int().positive().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
 
 export interface LoopsRoutesDeps {
   loopCardStore: LoopCardStore;
@@ -99,18 +115,55 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
 
   /**
    * GET /api/loops
-   * List registered loops (archived ones are hidden).
+   * List registered loops (archived ones are hidden), full StoredLoop
+   * shape (06 偏差 #30: 03 写的是 LoopSummary 投影, 但前端渲染需要
+   * LoopCard 本体 —— 保留全卡, 另补 03 的分页与状态过滤)。
+   * 查询参数: status? (paused/active/idle, active = 最近 run 在飞或等
+   * 人工) / limit? / offset? (默认 50/0, 非法值忽略取默认)。
    */
-  app.get("/", (c) => {
-    return c.json({ loops: loopCardStore.listLoops() });
+  app.get("/", async (c) => {
+    const limit = Number(c.req.query("limit")) || 50;
+    const offset = Number(c.req.query("offset")) || 0;
+    const statusQuery = c.req.query("status");
+    const loops = loopCardStore.listLoops();
+    if (!statusQuery) {
+      return c.json({ loops: loops.slice(offset, offset + limit) });
+    }
+    // 状态过滤需要 run 信息 (paused 看注册表, active 看最近 run 状态)
+    const withStatus = await Promise.all(
+      loops.map(async (stored) => {
+        let status: "paused" | "active" | "idle" = "idle";
+        if (stored.paused) {
+          status = "paused";
+        } else if (runService) {
+          const latest = (await runService.listRuns(stored.id))[0];
+          if (
+            latest &&
+            (latest.state === "active" ||
+              latest.state === "retry" ||
+              latest.state === "needs_human")
+          ) {
+            status = "active";
+          }
+        }
+        return { stored, status };
+      }),
+    );
+    return c.json({
+      loops: withStatus
+        .filter((entry) => entry.status === statusQuery)
+        .slice(offset, offset + limit)
+        .map((entry) => entry.stored),
+    });
   });
 
   /**
    * GET /api/loops/:id
-   * Loop detail. current_run_state / last_run_summary are null until the
-   * control-plane lands in a later phase.
+   * Loop detail (03): current_run_state 来自 control-plane 的 run_state
+   * 持久化记录 (无记录时为 null), last_run_summary 取最近一次 run 的
+   * 摘要 (无 run 时为 null)。
    */
-  app.get("/:id", (c) => {
+  app.get("/:id", async (c) => {
     const stored = loopCardStore.getLoop(c.req.param("id"));
     if (!stored || stored.archived) {
       return c.json(
@@ -118,10 +171,14 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
         404,
       );
     }
+    const currentRunState = controlPlane
+      ? await controlPlane.getRunState(stored.id)
+      : null;
+    const runs = runService ? await runService.listRuns(stored.id) : [];
     return c.json({
       loop: stored,
-      current_run_state: null,
-      last_run_summary: null,
+      current_run_state: currentRunState,
+      last_run_summary: runs[0] ?? null,
     });
   });
 
@@ -290,6 +347,8 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
    * Manually trigger one run. The run executes in the background; the
    * ledger entry lands in ~/.yep-anywhere/loops/runs/<run_id>.jsonl when
    * it finishes. 409 run_active guards same-loop concurrency.
+   * 请求体 intent_overrides (03): 对 handoff 的本轮覆盖, 不写回注册表;
+   * 空 body 合法。
    */
   app.post("/:id/runs", async (c) => {
     if (!runService) {
@@ -301,14 +360,25 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
         503,
       );
     }
-    // Body is optional in phase 0 (intent_overrides arrive with later phases)
+    let body: unknown = {};
     try {
-      await c.req.json();
+      body = await c.req.json();
     } catch {
       // empty / non-JSON body is legal
     }
+    const parsed = TriggerRunBodySchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      const message = parsed.error.issues
+        .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+        .join("; ");
+      return c.json({ error: "invalid_loop_card", message }, 400);
+    }
     try {
-      const run = await runService.startRun(c.req.param("id"), "manual");
+      const run = await runService.startRun(
+        c.req.param("id"),
+        "manual",
+        parsed.data.intent_overrides,
+      );
       return c.json({ run: { ...run, turn: 1 } }, 201);
     } catch (error) {
       if (error instanceof LoopRunError) {
@@ -324,7 +394,7 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
   /**
    * GET /api/loops/:id/runs
    * Run list projection (active runs + finished ledger entries), newest
-   * first. Optional limit/offset (defaults 50/0).
+   * first. Optional state? (7 枚举过滤, 03) + limit/offset (defaults 50/0).
    */
   app.get("/:id/runs", async (c) => {
     if (!runService) {
@@ -344,9 +414,21 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
         404,
       );
     }
+    const stateQuery = c.req.query("state");
+    if (stateQuery && !RunStateSchema.safeParse(stateQuery).success) {
+      return c.json(
+        {
+          error: "invalid_state",
+          message: `state must be one of ${RunStateSchema.options.join(", ")}`,
+        },
+        400,
+      );
+    }
     const limit = Number(c.req.query("limit")) || 50;
     const offset = Number(c.req.query("offset")) || 0;
-    const runs = await runService.listRuns(loopId);
+    const runs = (await runService.listRuns(loopId)).filter(
+      (run) => !stateQuery || run.state === stateQuery,
+    );
     return c.json({ runs: runs.slice(offset, offset + limit) });
   });
 

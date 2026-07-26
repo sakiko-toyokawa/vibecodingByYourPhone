@@ -67,16 +67,26 @@
  * the hook; their approval flow is untouched.
  */
 
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+import { promisify } from "node:util";
 import type {
   IntentContract,
   JudgmentReport,
   LoopCard,
+  ProviderName,
   RunLedgerEntry,
   RunState,
   RunStateRecord,
 } from "@yep-anywhere/shared";
-import { IntentContractSchema } from "@yep-anywhere/shared";
+import {
+  CollectorReportSchema,
+  DEFAULT_PROVIDER,
+  IntentContractSchema,
+  TurnHandoffSchema,
+} from "@yep-anywhere/shared";
 import {
   AdapterError,
   adapterErrorCodeToFailureTag,
@@ -84,10 +94,13 @@ import {
 import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { QueuedResponse } from "../supervisor/WorkerQueue.js";
+import { resolveAdapterPolicy } from "./assembly/adapter-policy.js";
 import {
   AssemblyError,
+  type RuntimeAssemblyContext,
   type RuntimeInput,
   assembleRuntimeInput,
+  extractExecutorSummary,
 } from "./assembly/runtime-input.js";
 import {
   type ContractSource,
@@ -100,13 +113,19 @@ import {
 } from "./control-plane/control-plane.js";
 import { retryBackoffMs } from "./control-plane/retry-backoff.js";
 import {
+  type PermissionEvent,
   type PolicyEscalation,
   createLoopToolApprovalHook,
 } from "./policy/approval-hook.js";
+import type { FailurePatternStore } from "./state/failure-pattern-store.js";
 import type { LoopCardStore } from "./state/loop-card-store.js";
 import type { ProposalStore } from "./state/proposal-store.js";
 import type { RunLedgerStore } from "./state/run-ledger-store.js";
-import { type VerificationRefs, verifyRun } from "./verification/verify-run.js";
+import {
+  type VerificationRefs,
+  verificationArtifactName,
+  verifyRun,
+} from "./verification/verify-run.js";
 
 export type LoopRunErrorCode =
   | "loop_not_found"
@@ -123,6 +142,14 @@ export class LoopRunError extends Error {
     super(message);
     this.name = "LoopRunError";
   }
+}
+
+/** 03 POST /api/loops/:id/runs 的 intent_overrides: 对 LoopCard handoff
+ *  的本轮覆盖 (仅影响本次合约构造与装配, 不写回注册表)。 */
+export interface IntentOverrides {
+  task?: string;
+  default_task_type?: string;
+  max_items_per_run?: number;
 }
 
 export interface RunSummary {
@@ -143,6 +170,10 @@ export interface LedgerSummary {
   retries_used: number;
   verifier_report_refs: string[];
   judgment_report_ref: string | null;
+  collector_report_ref: string | null;
+  handoff_ref: string | null;
+  blocker_fingerprint: string | null;
+  repeated_blocker_count: number;
   /** judgment_report 摘要（overall / next_action / requires_human） */
   judgment_summary: {
     overall: string;
@@ -169,6 +200,17 @@ interface ExecutionOutcome {
   usage: { tokens: number } | null;
   /** Set when the failure is a unified adapter hard error (02 §4). */
   adapterError?: AdapterError;
+  /** Normalized runtime messages observed during the turn (ProcessEvent
+   *  "message" stream, 00 挂载点三: 统一 trace 源). Persisted as the turn's
+   *  runtime-events artifact and referenced by the verification input
+   *  (02 §5 runtime_event_refs / structured_output). */
+  runtimeEvents?: unknown[];
+}
+
+interface CollectorOutcome {
+  reportRef: string | null;
+  outputRef: string | null;
+  inputRef: string | null;
 }
 
 /** Everything a suspended (needs_human / budget_limited / paused) run needs
@@ -191,6 +233,10 @@ interface RunExecutionContext {
    *  the current turn (05 阶段 2: 硬闸门拦截升级 needs_human). Reset at
    *  each turn start; drained into applyJudgment after the turn. */
   policyEscalations: PolicyEscalation[];
+  /** Permission verdicts recorded by the policy hook during the current
+   *  turn (02 §5 permission_event_refs 的证据载体). Reset at each turn
+   *  start; persisted as the turn's permission-events artifact. */
+  permissionEvents: PermissionEvent[];
   /** Set when contract/assembly setup failed before turn 1 could start. */
   setupError?: Error;
 }
@@ -213,6 +259,17 @@ export interface LoopRunServiceDeps {
   sleep?: (ms: number) => Promise<void>;
   /** Verification seam for tests; defaults to the real verifyRun. */
   verifyRunFn?: typeof verifyRun;
+  /** 失败模式账本（02 §8.3）：验证输入的 known_failure_patterns 取自这里
+   *  的 open 模式（02 §5）。缺席时退化为空数组（阶段 2 以前行为）。 */
+  failurePatternStore?: FailurePatternStore;
+  /** GitHub token store used by github_prompt discovery loops. */
+  githubCredentialStore?: { getToken(): Promise<string | null> };
+  /** Managed gh provisioner used by github_prompt discovery loops. */
+  githubToolProvisioner?: {
+    ensureGh(): Promise<{ path: string; version: string; installed: boolean }>;
+  };
+  /** Server data directory; used for managed github_prompt workspaces. */
+  dataDir?: string;
 }
 
 function makeRunId(now: Date): string {
@@ -225,6 +282,79 @@ function makeRunId(now: Date): string {
 
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isGitHubPromptLoop(card: LoopCard): boolean {
+  return card.loop.discovery?.source === "github_prompt";
+}
+
+function displayGitHubPromptWorkspacePath(loopId: string): string {
+  return `managed://github-workspaces/prompt-loops/${loopId}`;
+}
+
+function githubPromptWorkspacePath(dataDir: string, loopId: string): string {
+  return path.join(dataDir, "github-workspaces", "prompt-loops", loopId);
+}
+
+function loopRuntime(
+  card: LoopCard,
+): { provider?: string; model?: string } | undefined {
+  return (card.loop as { runtime?: { provider?: string; model?: string } })
+    .runtime;
+}
+
+/**
+ * 02 §8.1 运行账本 runtime 块的真实投影：从 card 的 provider 推导
+ * adapter 标识 / bridge / runtime 原生 mode / 能力快照，不再硬编码
+ * claude + agent_sdk + graceful（Codex run 的账本曾是编造值）。
+ *
+ * 映射依据：00-落地映射 bridge 表（Claude=agent_sdk、Codex=app_server）、
+ * 06 偏差 #17（Codex 无优雅 interrupt → kill-only；只有 Claude SDK 的
+ * AgentSession 暴露 interrupt() → graceful）。mode 是 runtime 原生模式
+ * （02 §8.1：claude=print / codex=exec），permissionMode 记入能力快照。
+ */
+export function describeAdapter(provider?: string): {
+  adapter: string;
+  bridge: string;
+  /** runtime 原生模式（02 §8.1 runtime.mode）。 */
+  mode: string;
+  interrupt: "graceful" | "kill-only";
+} {
+  const p = (provider as ProviderName | undefined) ?? DEFAULT_PROVIDER;
+  switch (p) {
+    case "claude":
+    case "claude-ollama":
+      return {
+        adapter: p,
+        bridge: "agent_sdk",
+        mode: "print",
+        interrupt: "graceful",
+      };
+    case "codex":
+    case "codex-oss":
+      return {
+        adapter: p,
+        bridge: "app_server",
+        mode: "exec",
+        interrupt: "kill-only",
+      };
+    case "gemini":
+    case "gemini-acp":
+      return {
+        adapter: p,
+        bridge: "acp",
+        mode: "acp",
+        interrupt: "kill-only",
+      };
+    default:
+      // 未知 provider 如实记录标识，能力按最保守口径（只能杀进程）。
+      return {
+        adapter: p,
+        bridge: "unknown",
+        mode: "unknown",
+        interrupt: "kill-only",
+      };
+  }
 }
 
 /** Retry = 证据传递：the next turn gets the previous judgment verbatim. */
@@ -276,7 +406,8 @@ function drainPolicyEscalation(
   };
 }
 
-/** Human response (approve / request_changes / resume / budget) as next-turn context. */ function buildHumanResumeContext(
+/** Human response (approve / request_changes / resume / budget) as next-turn context. */
+function buildHumanResumeContext(
   signal: ResumeSignal,
   judgment: JudgmentReport | null,
   judgmentRef: string | null,
@@ -319,6 +450,49 @@ function drainPolicyEscalation(
   }
   lines.push("", "Finish with a text report.");
   return lines.join("\n");
+}
+
+function buildCollectorPrompt(inputRef: string, bundle: unknown): string {
+  return [
+    "Collector input bundle:",
+    JSON.stringify(bundle, null, 2),
+    "",
+    `Read ${inputRef} as the durable input reference. Independently inspect only the evidence needed to review this turn. Stay read-only and finish with a concise evidence report.`,
+  ].join("\n");
+}
+
+function mergeEvidence(
+  judgment: JudgmentReport,
+  extraRefs: (string | null)[],
+): JudgmentReport {
+  const evidence = Array.from(
+    new Set([
+      ...judgment.evidence,
+      ...extraRefs.filter((ref): ref is string => Boolean(ref)),
+    ]),
+  );
+  return { ...judgment, evidence };
+}
+
+const execFileAsync = promisify(execFile);
+
+/**
+ * Capture the workspace's full diff against HEAD (staged + unstaged) for
+ * the verification input's evidence_refs.diff (02 §5, 04: diff.patch
+ * 永久保留). Returns null when the workspace is not a git repo, git is
+ * unavailable, or the turn produced no changes — never fabricates a diff.
+ */
+async function captureGitDiff(workspacePath: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-C", workspacePath, "diff", "HEAD"],
+      { timeout: 30_000, maxBuffer: 8 * 1024 * 1024 },
+    );
+    return stdout.trim().length > 0 ? stdout : null;
+  } catch {
+    return null;
+  }
 }
 
 export class LoopRunService {
@@ -448,8 +622,15 @@ export class LoopRunService {
    * Start a run for a loop. Registers the run as active synchronously
    * (so concurrent triggers get run_active), then executes in the
    * background — ledger entries are appended per turn as the run finishes.
+   *
+   * intentOverrides (03 POST /api/loops/:id/runs 请求体): 对 LoopCard
+   * handoff 的本轮覆盖 —— 只影响这一次的合约构造与装配, 不写回注册表。
    */
-  async startRun(loopId: string, source: ContractSource): Promise<RunSummary> {
+  async startRun(
+    loopId: string,
+    source: ContractSource,
+    intentOverrides?: IntentOverrides,
+  ): Promise<RunSummary> {
     const stored = this.deps.loopCardStore.getLoop(loopId);
     if (!stored) {
       throw new LoopRunError("loop_not_found", `Loop '${loopId}' not found`);
@@ -472,6 +653,23 @@ export class LoopRunService {
       );
     }
 
+    const card = intentOverrides
+      ? {
+          ...stored.card,
+          loop: {
+            ...stored.card.loop,
+            handoff: {
+              ...stored.card.loop.handoff,
+              ...Object.fromEntries(
+                Object.entries(intentOverrides).filter(
+                  ([, value]) => value !== undefined,
+                ),
+              ),
+            },
+          },
+        }
+      : stored.card;
+
     const createdAt = new Date();
     const runId = makeRunId(createdAt);
     const active: ActiveRun = {
@@ -485,7 +683,7 @@ export class LoopRunService {
 
     // Fire-and-forget: the HTTP handler / scheduler must not block on the
     // agent finishing. The ledger is the durable record of the run.
-    void this.executeRun(active, stored.card).catch((error) => {
+    void this.executeRun(active, card).catch((error) => {
       console.error(`[LoopRunService] run ${runId} crashed:`, error);
       this.releaseRun(runId);
     });
@@ -515,7 +713,9 @@ export class LoopRunService {
           state:
             this.deps.controlPlane?.currentStateOf(entry.run_id) ??
             entry.final_status,
-          source: "cron", // source is not in the ledger schema; see report
+          // 06 偏差 #28: 触发来源实记账本; 旧条目无该字段时按历史约定
+          // 回退 "cron"。
+          source: entry.source ?? "cron",
           created_at: entry.created_at,
         });
       }
@@ -618,6 +818,19 @@ export class LoopRunService {
 
     const decisionEntries =
       await this.deps.runLedgerStore.readDecisionEntries(runId);
+    const latestBlockingDecision = [...decisionEntries]
+      .reverse()
+      .find((decision) => decision.blocker_fingerprint);
+    const artifactRefs = entry?.artifact_refs ?? [];
+    const collectorReportRef =
+      [...artifactRefs]
+        .reverse()
+        .find((ref) => /\/collector-report(?:-turn\d+)?\.json$/.test(ref)) ??
+      null;
+    const handoffRef =
+      [...artifactRefs]
+        .reverse()
+        .find((ref) => /\/turn-handoff(?:-turn\d+)?\.json$/.test(ref)) ?? null;
 
     // turns_used / retries_used come from the control-plane's budget snapshot
     // (03: budget 消耗对照 max_turns / max_retries); the run_state belongs to
@@ -640,6 +853,11 @@ export class LoopRunService {
       judgment_report_ref: notApplicable(refs?.judgment_report)
         ? refs.judgment_report
         : null,
+      collector_report_ref: collectorReportRef,
+      handoff_ref: handoffRef,
+      blocker_fingerprint: latestBlockingDecision?.blocker_fingerprint ?? null,
+      repeated_blocker_count:
+        latestBlockingDecision?.repeated_blocker_count ?? 0,
       judgment_summary: judgmentSummary,
       decision_refs:
         decisionEntries.length > 0 ? [`ledger://decision-${runId}`] : [],
@@ -670,22 +888,95 @@ export class LoopRunService {
       lastJudgmentRef: null,
       pendingContext: null,
       policyEscalations: [],
+      permissionEvents: [],
     };
     try {
-      ctx.contract = buildIntentContract(card, { runId, source });
+      const executableCard = await this.resolveExecutableCard(card);
+      ctx.card = executableCard;
+      ctx.contract = buildIntentContract(executableCard, { runId, source });
       ctx.contractJson = JSON.stringify(ctx.contract, null, 2);
+      const runtimeContext =
+        await this.resolveRuntimeAssemblyContext(executableCard);
       // 阶段 3 装配消费：published / canary 提案在此进入 RuntimeInput
       // （每次新 run 重新装配 → 发布后新 run 即生效，rollback 后回到旧行为）。
       ctx.input = assembleRuntimeInput(
-        card,
+        executableCard,
         ctx.contract,
         this.deps.proposalStore?.listProposals() ?? [],
+        runtimeContext,
       );
     } catch (error) {
       ctx.setupError =
         error instanceof Error ? error : new Error(String(error));
     }
     await this.runTurns(ctx);
+  }
+
+  private async resolveExecutableCard(card: LoopCard): Promise<LoopCard> {
+    if (!isGitHubPromptLoop(card)) {
+      return card;
+    }
+    if (!this.deps.dataDir) {
+      throw new AssemblyError(
+        "GitHub prompt loop cannot start: server data directory is not configured",
+      );
+    }
+    const expectedWorkspacePath = displayGitHubPromptWorkspacePath(
+      card.loop.id,
+    );
+    if (card.loop.workspace.path !== expectedWorkspacePath) {
+      throw new AssemblyError(
+        `GitHub prompt loop cannot start: workspace.path must be '${expectedWorkspacePath}'`,
+      );
+    }
+    const workspacePath = githubPromptWorkspacePath(
+      this.deps.dataDir,
+      card.loop.id,
+    );
+    await mkdir(workspacePath, { recursive: true });
+    return {
+      ...card,
+      loop: {
+        ...card.loop,
+        workspace: {
+          ...card.loop.workspace,
+          strategy: "direct",
+          path: workspacePath,
+        },
+      },
+    };
+  }
+
+  private async resolveRuntimeAssemblyContext(
+    card: LoopCard,
+  ): Promise<RuntimeAssemblyContext> {
+    if (!isGitHubPromptLoop(card)) {
+      return {};
+    }
+    if (!this.deps.githubCredentialStore) {
+      throw new AssemblyError(
+        "GitHub prompt loop cannot start: GitHub credential store is not configured",
+      );
+    }
+    if (!this.deps.githubToolProvisioner) {
+      throw new AssemblyError(
+        "GitHub prompt loop cannot start: GitHub CLI provisioner is not configured",
+      );
+    }
+
+    const token = await this.deps.githubCredentialStore.getToken();
+    if (!token) {
+      throw new AssemblyError(
+        "GitHub prompt loop cannot start: save a GitHub token before running this loop",
+      );
+    }
+    const tool = await this.deps.githubToolProvisioner.ensureGh();
+    if (!tool.path) {
+      throw new AssemblyError(
+        "GitHub prompt loop cannot start: managed GitHub CLI path is unavailable",
+      );
+    }
+    return { github: { token, ghPath: tool.path } };
   }
 
   /**
@@ -773,13 +1064,93 @@ export class LoopRunService {
           `artifact://${runId}/${stdoutName}`,
         ];
 
+        // 02 §5 runtime_event_refs / structured_output：轮内归一消息流落
+        // 盘为 jsonl（一行一个 {at, message}），作为 maker→checker 的
+        // 运行时证据引用进验证输入。
+        let runtimeEventsRef: string | null = null;
+        if (outcome.runtimeEvents && outcome.runtimeEvents.length > 0) {
+          const eventsName =
+            ctx.turn === 1
+              ? "runtime-events.jsonl"
+              : `runtime-events-turn${ctx.turn}.jsonl`;
+          await store.writeArtifact(
+            runId,
+            eventsName,
+            `${outcome.runtimeEvents
+              .map((event) => JSON.stringify(event))
+              .join("\n")}\n`,
+          );
+          runtimeEventsRef = `artifact://${runId}/${eventsName}`;
+          artifactRefs.push(runtimeEventsRef);
+        }
+
+        // 02 §5 executor_summary：提取执行者自述（装配 prompt 契约的标
+        // 记块）落 markdown artifact。executor 没产出标记块时为 null—
+        // 自述缺失本身也是信号，不伪造。
+        let executorSummaryRef: string | null = null;
+        const executorSummary = extractExecutorSummary(outcome.finalText);
+        if (executorSummary) {
+          const summaryName =
+            ctx.turn === 1
+              ? "executor-summary.md"
+              : `executor-summary-turn${ctx.turn}.md`;
+          await store.writeArtifact(runId, summaryName, `${executorSummary}\n`);
+          executorSummaryRef = `artifact://${runId}/${summaryName}`;
+          artifactRefs.push(executorSummaryRef);
+        }
+
+        // 02 §5 evidence_refs.diff + 04 diff.patch 永久保留：捕获工作区
+        // 相对 HEAD 的完整差异（含 staged）；非 git 工作区或无变更时为
+        // null，不伪造证据。
+        let diffRef: string | null = null;
+        const workspacePath = ctx.card.loop.workspace.path;
+        if (workspacePath) {
+          const diff = await captureGitDiff(workspacePath);
+          if (diff) {
+            const diffName =
+              ctx.turn === 1 ? "diff.patch" : `diff-turn${ctx.turn}.patch`;
+            await store.writeArtifact(runId, diffName, diff);
+            diffRef = `artifact://${runId}/${diffName}`;
+            artifactRefs.push(diffRef);
+          }
+        }
+
+        // 02 §5 permission_event_refs：策略钩子本轮的裁决事件（bypass 自
+        // 批准 / 硬闸门拦截 / 拒绝）落盘，高风险任务的验证输入必须包含。
+        const permissionEventRefs: string[] = [];
+        if (ctx.permissionEvents.length > 0) {
+          const permissionName =
+            ctx.turn === 1
+              ? "permission-events.json"
+              : `permission-events-turn${ctx.turn}.json`;
+          await store.writeArtifact(
+            runId,
+            permissionName,
+            `${JSON.stringify(ctx.permissionEvents, null, 2)}\n`,
+          );
+          permissionEventRefs.push(`artifact://${runId}/${permissionName}`);
+        }
+
+        const collector = await this.runCollector(
+          ctx,
+          outcome,
+          `artifact://${runId}/${stdoutName}`,
+        );
+        if (collector.inputRef) {
+          artifactRefs.push(collector.inputRef);
+        }
+        if (collector.outputRef) {
+          artifactRefs.push(collector.outputRef);
+        }
+        if (collector.reportRef) {
+          artifactRefs.push(collector.reportRef);
+        }
+
         // --- verification ---
-        // NOTE: verification artifacts (verifier-reports.json,
-        // judgment-report.json) use canonical per-run names — a later turn
-        // overwrites the previous turn's files (latest-wins; the API summary
-        // always shows the freshest judgment). The previous turn's judgment
-        // content is not lost for the run itself: it is injected into the
-        // retry turn's context (retry = 证据传递).
+        // Verification artifacts are named per-turn (turn 1 keeps the
+        // canonical names): a retry turn never overwrites the previous
+        // turn's evidence, so every ledger entry's refs stay
+        // dereferenceable (02 §8.1: 每次 retry 独立 entry + 保存引用).
         let verificationRefs: VerificationRefs = {
           verification_input: "not_applicable",
           verifier_runtime: "not_applicable",
@@ -791,29 +1162,95 @@ export class LoopRunService {
         let judgmentRef: string | null = null;
 
         const requiredPhases = ctx.card.loop.verification.required;
-        const workspacePath = ctx.card.loop.workspace.path;
         if (requiredPhases.length > 0 && ctx.contract && workspacePath) {
+          // 02 §5 policy_intent_ref：策略投影 run 引用 turn 1 的投影快照。
+          const policyIntentRef = ctx.input?.policyProjection
+            ? `artifact://${runId}/policy-projection.json`
+            : null;
+          // 02 §5 known_failure_patterns：失败模式账本的 open 模式供
+          // verifier 对照（只读，不写——04 单写者表）。
+          const knownFailurePatterns = (
+            this.deps.failurePatternStore?.list() ?? []
+          )
+            .filter((pattern) => pattern.status === "open")
+            .map((pattern) => pattern.pattern_id);
           try {
             const verification = await this.verify(
               {
                 card: ctx.card,
                 contract: ctx.contract,
                 runId,
+                turn: ctx.turn,
                 workspacePath,
                 exitStatus: outcome.ok ? 0 : 1,
                 stdoutRef: `artifact://${runId}/${stdoutName}`,
+                diffRef,
+                runtimeEventsRef,
+                executorSummaryRef,
+                permissionEventRefs,
+                policyIntentRef,
+                knownFailurePatterns,
               },
               { store },
             );
             verificationRefs = verification.refs;
             verificationRan = true;
-            judgment = verification.judgment;
+            judgment = collector.reportRef
+              ? mergeEvidence(verification.judgment, [collector.reportRef])
+              : verification.judgment;
             judgmentRef = verification.refs.judgment_report;
+            if (collector.reportRef) {
+              await store.writeArtifact(
+                runId,
+                verificationArtifactName("judgment-report.json", ctx.turn),
+                `${JSON.stringify(judgment, null, 2)}\n`,
+              );
+            }
           } catch (error) {
+            // 验证层自身崩溃不得静默判过（verifier theater）：合成一份
+            // inconclusive + requires_human 的 judgment 升级人工，并把
+            // 错误落盘为证据——card 要求验证而验证没跑成时，由人决定
+            // 这个 run 是否成立。
             console.error(
               `[LoopRunService] verification failed for run ${runId}:`,
               error,
             );
+            const errorName = verificationArtifactName(
+              "verification-error.json",
+              ctx.turn,
+            );
+            const message =
+              error instanceof Error ? error.message : String(error);
+            await store
+              .writeArtifact(
+                runId,
+                errorName,
+                `${JSON.stringify(
+                  {
+                    run_id: runId,
+                    turn: ctx.turn,
+                    error: message,
+                    at: new Date().toISOString(),
+                  },
+                  null,
+                  2,
+                )}\n`,
+              )
+              .catch(() => {});
+            const errorRef = `artifact://${runId}/${errorName}`;
+            artifactRefs.push(errorRef);
+            verificationRan = true;
+            judgment = {
+              overall: "inconclusive",
+              next_action: "escalate",
+              retryable: false,
+              requires_human: true,
+              evidence: [errorRef],
+              unresolved_risks: [
+                `verification layer crashed and produced no judgment: ${message}`,
+              ],
+            };
+            judgmentRef = null;
           }
         }
         ctx.lastJudgment = judgment;
@@ -827,6 +1264,8 @@ export class LoopRunService {
         // attached to the control decision entry so the ledger carries it.
         let finalStatus: RunState = outcome.ok ? "complete" : "failed";
         let retriesUsed = 0;
+        let blockerFingerprint: string | undefined;
+        let repeatedBlockerCount: number | undefined;
         if (this.deps.controlPlane && ctx.contract) {
           const applied = await this.deps.controlPlane.applyJudgment({
             loopId,
@@ -840,6 +1279,11 @@ export class LoopRunService {
             judgmentRef,
             createdAt,
             budget: ctx.contract.budget,
+            // 02 §2 stop_rules: repetition.max_same_failure 由
+            // control-plane 按同一阻断指纹计数消费
+            stopRules: ctx.contract.stop_rules,
+            // 06 #32: run_state.session_ref 供前端订阅对应 session
+            sessionRef: outcome.sessionRef,
             // 硬闸门 / 高风险策略拦截（本 turn 内 policy hook 收集）：
             // 升级 needs_human，bypass 下仍被拦（05 阶段 2 验收 4）。
             policyEscalation: drainPolicyEscalation(ctx),
@@ -859,6 +1303,8 @@ export class LoopRunService {
           });
           finalStatus = applied.state;
           retriesUsed = applied.budget.used_retries;
+          blockerFingerprint = applied.entry.blocker_fingerprint;
+          repeatedBlockerCount = applied.entry.repeated_blocker_count;
         } else if (this.deps.controlPlane && !ctx.contract) {
           // Setup failed before a contract existed: record a terminal
           // control decision with a no-op budget (executionOk=false → failed).
@@ -879,6 +1325,7 @@ export class LoopRunService {
               max_turns: 1,
               max_retries: 0,
             },
+            sessionRef: outcome.sessionRef,
             usage: { tokens: null, timeMinutes },
             adapterFailure: outcome.adapterError
               ? {
@@ -891,29 +1338,67 @@ export class LoopRunService {
               : undefined,
           });
           finalStatus = applied.state;
+          blockerFingerprint = applied.entry.blocker_fingerprint;
+          repeatedBlockerCount = applied.entry.repeated_blocker_count;
         } else if (verificationRan && judgment) {
           finalStatus =
             outcome.ok && judgment.overall === "passed" ? "complete" : "failed";
         }
 
+        const handoffRef = await this.writeTurnHandoff(ctx, {
+          collectorReportRef: collector.reportRef,
+          judgmentRef,
+          evidenceRefs: judgment?.evidence ?? artifactRefs,
+          blockerFingerprint,
+          repeatedBlockerCount,
+        });
+        artifactRefs.push(handoffRef);
+
         // --- per-turn ledger entry (02 §8.1: 每次 retry 产生独立 entry;
         // the session_ref is identical across turns of one run) ---
+        // runtime 块从 card 的 provider 真实投影（describeAdapter）：02
+        // §8.1 的 mode 是 runtime 原生模式（claude=print / codex=exec），
+        // permissionMode 记入能力快照；interrupt 能力按 06 偏差 #17 如实
+        // 记录（Codex=kill-only，pause/cancel 只能杀进程——loop 的 pause
+        // 语义在两种 runtime 下统一为杀进程，选项 A，见文件头）。
+        const adapterInfo = describeAdapter(loopRuntime(ctx.card)?.provider);
+        const permissionMode = ctx.input?.permissionMode ?? "plan";
+        // 本次装配实际生效的提案 id 进能力快照 (appliedProposals 的审计
+        // 消费点: 哪个 run 吃了哪份提案, 账本可查)。
+        const appliedNote = ctx.input?.appliedProposals?.length
+          ? `;proposals=${ctx.input.appliedProposals.join("|")}`
+          : "";
+        // adapter_policy 的实际消费情况记入能力快照（含未消费键 —— 配置
+        // 以为生效实际没有的键必须可审计）。
+        const consumedPolicy = resolveAdapterPolicy(ctx.input?.adapterPolicy);
+        const adapterPolicyNote =
+          consumedPolicy.model !== undefined ||
+          consumedPolicy.timeoutMs !== undefined ||
+          consumedPolicy.ignoredKeys.length > 0
+            ? `;adapterPolicy[${[
+                consumedPolicy.model ? `model=${consumedPolicy.model}` : null,
+                consumedPolicy.timeoutMs
+                  ? `timeout_seconds=${consumedPolicy.timeoutMs / 1000}`
+                  : null,
+                consumedPolicy.ignoredKeys.length > 0
+                  ? `ignored=${consumedPolicy.ignoredKeys.join("|")}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(",")}]`
+            : "";
+        const capabilitySnapshot = ctx.input?.policyProfile
+          ? `realSdk(${adapterInfo.bridge});permissionMode=${permissionMode};policy=${ctx.input.policyProfile.policy_profile};selfApproveAudit;interrupt=${adapterInfo.interrupt}${adapterPolicyNote}${appliedNote}`
+          : `realSdk(${adapterInfo.bridge});permissionMode=${permissionMode};autoDenyApprovals;interrupt=${adapterInfo.interrupt}${adapterPolicyNote}${appliedNote}`;
         const entry: RunLedgerEntry = {
           loop_id: loopId,
           run_id: runId,
+          source: ctx.active.source,
           runtime: {
-            adapter: "claude",
+            adapter: adapterInfo.adapter,
             session_ref: outcome.sessionRef,
-            mode: ctx.input?.permissionMode ?? "plan",
-            // interrupt=graceful: the Claude SDK AgentSession exposes
-            // interrupt() (Process.interruptFn). 已知能力缺口（00-落地映射
-            // 短板表, 06 偏差）: Codex runtime 无优雅 interrupt —— 其
-            // AgentSession 只有 abort, snapshot 应记 interrupt=kill-only,
-            // pause/cancel 只能杀进程、partial result 丢失。loop 的 pause
-            // 语义在两种 runtime 下统一为杀进程（选项 A, 见文件头）。
-            adapter_capability_snapshot: ctx.input?.policyProfile
-              ? `realSdk(agent_sdk);permissionMode=${ctx.input.permissionMode};policy=${ctx.input.policyProfile.policy_profile};selfApproveAudit;interrupt=graceful`
-              : "realSdk(agent_sdk);permissionMode=plan;autoDenyApprovals;interrupt=graceful",
+            mode: adapterInfo.mode,
+            adapter_capability_snapshot: capabilitySnapshot,
           },
           input_refs: {
             intent: `intent://${loopId}`,
@@ -1083,8 +1568,16 @@ export class LoopRunService {
       return null;
     }
     try {
+      const executableCard = await this.resolveExecutableCard(stored.card);
       const contract = IntentContractSchema.parse(JSON.parse(contractJson));
-      const input = assembleRuntimeInput(stored.card, contract);
+      const runtimeContext =
+        await this.resolveRuntimeAssemblyContext(executableCard);
+      const input = assembleRuntimeInput(
+        executableCard,
+        contract,
+        this.deps.proposalStore?.listProposals() ?? [],
+        runtimeContext,
+      );
       let lastJudgment: JudgmentReport | null = null;
       const judgmentJson = await store.readArtifact(
         signal.runId,
@@ -1097,12 +1590,12 @@ export class LoopRunService {
         active: {
           runId: signal.runId,
           loopId: signal.loopId,
-          // source is not in the ledger schema (see listRuns); "cron" is
-          // the existing convention for ledger-derived runs.
-          source: "cron",
+          // 06 偏差 #28: 触发来源实记账本; 旧条目无该字段时按历史约定
+          // 回退 "cron"。
+          source: entry.source ?? "cron",
           createdAt: entry.created_at,
         },
-        card: stored.card,
+        card: executableCard,
         contract,
         contractJson,
         input,
@@ -1115,6 +1608,7 @@ export class LoopRunService {
         lastJudgmentRef: runState.last_judgment,
         pendingContext: null,
         policyEscalations: [],
+        permissionEvents: [],
       };
     } catch (error) {
       console.error(
@@ -1123,6 +1617,154 @@ export class LoopRunService {
       );
       return null;
     }
+  }
+
+  private async runCollector(
+    ctx: RunExecutionContext,
+    outcome: ExecutionOutcome,
+    stdoutRef: string,
+  ): Promise<CollectorOutcome> {
+    if (!ctx.input || !ctx.contract) {
+      return { inputRef: null, outputRef: null, reportRef: null };
+    }
+    const { runId, loopId } = ctx.active;
+    const inputName =
+      ctx.turn === 1
+        ? "collector-input.json"
+        : `collector-input-turn${ctx.turn}.json`;
+    const outputName =
+      ctx.turn === 1
+        ? "collector-output.log"
+        : `collector-output-turn${ctx.turn}.log`;
+    const reportName =
+      ctx.turn === 1
+        ? "collector-report.json"
+        : `collector-report-turn${ctx.turn}.json`;
+    const inputBundle = {
+      run_id: runId,
+      loop_id: loopId,
+      turn: ctx.turn,
+      task_type: ctx.contract.task_type.primary,
+      workspace_ref: `workspace://${loopId}/${runId}`,
+      workspace_path: ctx.input.cwd,
+      stdout_ref: stdoutRef,
+      execution_ok: outcome.ok,
+      max_items_per_run: ctx.card.loop.handoff?.max_items_per_run ?? null,
+      previous_judgment_ref: ctx.lastJudgmentRef,
+      previous_unresolved_risks: ctx.lastJudgment?.unresolved_risks ?? [],
+    };
+    const inputJson = `${JSON.stringify(inputBundle, null, 2)}\n`;
+    await this.deps.runLedgerStore.writeArtifact(runId, inputName, inputJson);
+    const inputRef = `artifact://${runId}/${inputName}`;
+
+    let collectorOutput = "";
+    let collectorOk = false;
+    try {
+      const message = {
+        text: buildCollectorPrompt(inputRef, inputBundle),
+        mode: "plan" as const,
+      };
+      // collector 也是 adapter 调用 (02 §3): adapter_policy 的 model 覆盖
+      // 与轮次超时同样适用 —— 挂死的 collector 不得挂死整个 run。
+      const adapterPolicy = resolveAdapterPolicy(ctx.input.adapterPolicy);
+      const result = await this.deps.supervisor.startSession(
+        ctx.input.cwd,
+        message,
+        "plan",
+        {
+          permissions: ctx.input.permissions,
+          env: ctx.input.env,
+          providerName: loopRuntime(ctx.card)?.provider as
+            | ProviderName
+            | undefined,
+          model: adapterPolicy.model ?? loopRuntime(ctx.card)?.model,
+        },
+      );
+      if ("error" in result || "queued" in result) {
+        collectorOutput =
+          "collector could not start: supervisor queue unavailable";
+      } else {
+        const collected = await this.watchProcess(runId, result as Process, {
+          timeoutMs: adapterPolicy.timeoutMs,
+        });
+        collectorOk = collected.ok;
+        collectorOutput =
+          collected.finalText ||
+          collected.error ||
+          "(collector produced no output)";
+      }
+    } catch (error) {
+      collectorOutput =
+        error instanceof Error
+          ? error.message
+          : `collector failed: ${String(error)}`;
+    }
+
+    await this.deps.runLedgerStore.writeArtifact(
+      runId,
+      outputName,
+      collectorOutput,
+    );
+    const outputRef = `artifact://${runId}/${outputName}`;
+    const report = CollectorReportSchema.parse({
+      collector_phase: "review",
+      status: collectorOk ? "passed" : "inconclusive",
+      evidence_refs: [outputRef],
+      unresolved_risks: collectorOk
+        ? []
+        : ["collector did not complete with a successful result"],
+      recommendation: collectorOk ? "stop" : "escalate",
+      confidence: collectorOk ? 0.7 : 0.2,
+      requires_human: !collectorOk,
+      summary: collectorOutput,
+    });
+    await this.deps.runLedgerStore.writeArtifact(
+      runId,
+      reportName,
+      `${JSON.stringify(report, null, 2)}\n`,
+    );
+    return {
+      inputRef,
+      outputRef,
+      reportRef: `artifact://${runId}/${reportName}`,
+    };
+  }
+
+  private async writeTurnHandoff(
+    ctx: RunExecutionContext,
+    refs: {
+      collectorReportRef: string | null;
+      judgmentRef: string | null;
+      evidenceRefs: string[];
+      blockerFingerprint?: string;
+      repeatedBlockerCount?: number;
+    },
+  ): Promise<string> {
+    const name =
+      ctx.turn === 1
+        ? "turn-handoff.json"
+        : `turn-handoff-turn${ctx.turn}.json`;
+    const handoff = TurnHandoffSchema.parse({
+      run_id: ctx.active.runId,
+      loop_id: ctx.active.loopId,
+      turn: ctx.turn,
+      workspace_ref: `workspace://${ctx.active.loopId}/${ctx.active.runId}`,
+      session_ref: ctx.sessionRef,
+      judgment_ref: refs.judgmentRef,
+      collector_report_ref: refs.collectorReportRef,
+      blocker_fingerprint: refs.blockerFingerprint ?? null,
+      repeated_blocker_count: refs.repeatedBlockerCount ?? null,
+      evidence_refs: refs.evidenceRefs,
+      next_required_checks: ctx.card.loop.verification.required,
+      actions_not_to_repeat: [],
+      created_at: new Date().toISOString(),
+    });
+    await this.deps.runLedgerStore.writeArtifact(
+      ctx.active.runId,
+      name,
+      `${JSON.stringify(handoff, null, 2)}\n`,
+    );
+    return `artifact://${ctx.active.runId}/${name}`;
   }
 
   /**
@@ -1156,6 +1798,7 @@ export class LoopRunService {
     // Legacy read-only runs (no policy) pass no hook: permissionMode "plan"
     // + deny rules + auto-deny watcher, exactly as phase 0/1.
     ctx.policyEscalations = [];
+    ctx.permissionEvents = [];
     const toolApprovalHook = ctx.input.policyProfile
       ? createLoopToolApprovalHook({
           profile: ctx.input.policyProfile,
@@ -1165,11 +1808,21 @@ export class LoopRunService {
           workspacePath: ctx.input.cwd,
           store: this.deps.runLedgerStore,
           escalations: ctx.policyEscalations,
+          permissionEvents: ctx.permissionEvents,
         })
       : undefined;
+    // adapter_policy 消费 (修复计划 #13): published / canary 的
+    // runtime_adapter_proposal 经装配带上 RuntimeInput.adapterPolicy,
+    // 这里解析成真实旋钮 —— model 覆盖进 session settings,
+    // timeout_seconds 进 watchProcess 的轮次超时 (02 §3: adapter 调用
+    // 必须带超时)。
+    const adapterPolicy = resolveAdapterPolicy(ctx.input.adapterPolicy);
     const sessionSettings = {
       permissions: ctx.input.permissions,
       toolApprovalHook,
+      env: ctx.input.env,
+      providerName: loopRuntime(ctx.card)?.provider as ProviderName | undefined,
+      model: adapterPolicy.model ?? loopRuntime(ctx.card)?.model,
     };
 
     const result = isFirstTurn
@@ -1212,7 +1865,9 @@ export class LoopRunService {
     // Registered so PATCH pause can kill the executing turn (选项 A);
     // removed again when watchProcess settles.
     this.executingProcesses.set(ctx.active.runId, proc);
-    return this.watchProcess(ctx.active.runId, proc);
+    return this.watchProcess(ctx.active.runId, proc, {
+      timeoutMs: adapterPolicy.timeoutMs,
+    });
   }
 
   /**
@@ -1221,22 +1876,35 @@ export class LoopRunService {
    * ever arrives. Token usage comes from the result message's `usage`
    * (Claude SDK AdapterOutput, 02 §4: input_tokens + output_tokens); when
    * the runtime does not expose usage it stays null — never fabricated.
+   *
+   * opts.timeoutMs: 轮次超时 (adapter_policy.timeout_seconds, 02 §3:
+   * adapter 调用必须带超时)。超时按 adapter 硬错误 timeout 归因
+   * (runtime_blackbox_error), 进程被杀, 不无限等待。
    */
   private async watchProcess(
     runId: string,
     proc: Process,
+    opts: { timeoutMs?: number } = {},
   ): Promise<ExecutionOutcome> {
     return new Promise<ExecutionOutcome>((resolve) => {
       let finalText = "";
       let tokens: number | null = null;
       let settled = false;
       let adapterError: AdapterError | undefined;
+      let timer: NodeJS.Timeout | undefined;
+      // 轮内归一消息流（00 挂载点三: ProcessEvent message 即统一 trace
+      // 源）——逐条收集，turn 结束后落 runtime-events artifact 供验证
+      // 输入引用（02 §5 runtime_event_refs / structured_output）。
+      const runtimeEvents: unknown[] = [];
 
       const settle = (ok: boolean, error?: string): void => {
         if (settled) {
           return;
         }
         settled = true;
+        if (timer) {
+          clearTimeout(timer);
+        }
         unsubscribe();
         this.executingProcesses.delete(runId);
         // Free the worker slot; the session jsonl stays on disk, so a
@@ -1249,12 +1917,26 @@ export class LoopRunService {
           error,
           usage: tokens === null ? null : { tokens },
           adapterError,
+          runtimeEvents,
         });
       };
+
+      if (opts.timeoutMs !== undefined && opts.timeoutMs > 0) {
+        timer = setTimeout(() => {
+          adapterError = new AdapterError(
+            "timeout",
+            `turn exceeded adapter policy timeout (${opts.timeoutMs}ms, adapter_policy.timeout_seconds)`,
+          );
+          settle(false, adapterError.message);
+        }, opts.timeoutMs);
+        // 计时器不得拖住 server 进程退出
+        timer.unref();
+      }
 
       const unsubscribe = proc.subscribe((event) => {
         if (event.type === "message") {
           const message = event.message;
+          runtimeEvents.push({ at: new Date().toISOString(), message });
           if (message.type === "result") {
             if (typeof message.result === "string") {
               finalText = message.result;

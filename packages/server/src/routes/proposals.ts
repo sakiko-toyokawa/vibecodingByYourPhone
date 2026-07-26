@@ -26,8 +26,16 @@
  * target 的旧 published 版本在装配层重新生效。
  */
 
+import { randomUUID } from "node:crypto";
+import {
+  ImprovementProposalSchema,
+  ProposalPayloadSchema,
+  ProposalRiskSchema,
+  ProposalTypeSchema,
+} from "@yep-anywhere/shared";
 import type { ImprovementProposal } from "@yep-anywhere/shared";
 import { Hono } from "hono";
+import { z } from "zod";
 import { ProposalStoreError, isMetaRuleProposal } from "../loop/index.js";
 import type { ProposalStore } from "../loop/index.js";
 import type { IEventBus } from "../watcher/IEventBus.js";
@@ -61,9 +69,60 @@ function isWorkerMetaRule(proposal: ImprovementProposal): boolean {
   return isMetaRuleProposal(proposal) && proposal.created_by !== "human";
 }
 
+/**
+ * POST /api/proposals 请求体 (06 偏差 #25: 03 端点总表无创建端点 ——
+ * "人工发起的元规则变更能进入提案" (提案验证与发布.md 元规则保护) 与
+ * worker 自动路径的 payload 缺口都需要一个人工创建入口)。
+ * created_by / status / proposal_id 由服务端钉死, 不接受请求体指定。
+ */
+const CreateProposalBodySchema = z.object({
+  type: ProposalTypeSchema,
+  summary: z.string().min(1),
+  target: z.string().min(1),
+  expected_effect: z.string().min(1),
+  risk: ProposalRiskSchema,
+  validation_plan: z.string().min(1),
+  source_patterns: z.array(z.string()).default([]),
+  payload: ProposalPayloadSchema.optional(),
+});
+
 export function createProposalsRoutes(deps: ProposalsRoutesDeps): Hono {
   const app = new Hono();
   const { proposalStore, eventBus } = deps;
+
+  /**
+   * POST /api/proposals — 人工创建提案 (06 偏差 #25, 03 未定义此端点)。
+   * created_by 恒为 "human"、status 恒为 draft: 人工发起的提案 (含元
+   * 规则变更) 从 draft 进入既有发布管线, 由 worker pipeline 推进
+   * shadow→canary, approve/publish 仍走人工闸门 —— 与 worker 提案同
+   * 一套管线, 不另开通道。
+   */
+  app.post("/", async (c) => {
+    const parsed = CreateProposalBodySchema.safeParse(await readBody(c));
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "invalid_proposal",
+          message: parsed.error.issues
+            .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+            .join("; "),
+        },
+        400,
+      );
+    }
+    const proposal = ImprovementProposalSchema.parse({
+      proposal_id: `prop-${new Date()
+        .toISOString()
+        .replace(/[-:]/g, "")
+        .replace(/\.\d{3}Z$/, "Z")}-${randomUUID().slice(0, 8)}`,
+      ...parsed.data,
+      status: "draft",
+      created_by: "human",
+      created_at: new Date().toISOString(),
+    });
+    const created = await proposalStore.create(proposal);
+    return c.json({ proposal: created }, 201);
+  });
 
   /**
    * GET /api/proposals/:id — 详情 + history (05 阶段 3 验收 3: 全程账本可查).

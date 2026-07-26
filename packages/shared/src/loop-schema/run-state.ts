@@ -49,6 +49,10 @@ export const RunStateRecordSchema = z.object({
   pending_approval: PendingApprovalSchema.nullable(),
   // 四类预算的逐轮消耗快照（扩展字段，见文件头注释）；阶段 1 文件为 null
   budget: BudgetSchema.nullable().default(null),
+  // 当前轮执行的 session 引用（扩展字段, 06 偏差 #32）: 03 "前端按
+  // run_state.runtime_ref 订阅对应 session 的消息流" 的载体；无 session
+  // (setup 失败) 时为 null，旧文件缺省 null
+  session_ref: z.string().nullable().default(null),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
 });

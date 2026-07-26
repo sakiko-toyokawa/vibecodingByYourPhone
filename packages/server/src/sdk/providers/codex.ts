@@ -1221,10 +1221,11 @@ export class CodexProvider implements AgentProvider {
     setActiveClient: (client: CodexAppServerClient) => void,
   ): AsyncIterableIterator<SDKMessage> {
     const codexCommand = await this.resolveCodexCommand();
+    const env = { ...this.getCodexEnv(), ...options.env };
     const appServer = new CodexAppServerClient(
       codexCommand,
       options.cwd,
-      this.getCodexEnv(),
+      env,
       resolveRequestTimeoutMs(this.config.requestTimeoutMs),
     );
     setActiveClient(appServer);

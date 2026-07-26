@@ -28,6 +28,9 @@ import { FailureTagSchema } from "./run-ledger.js";
  *   新增一值而非滥用 retry / bypass_used 语义。
  * - `budget`（阶段 2）：落账时 run 的预算快照，决策账本由此可见逐轮
  *   消耗（05 阶段 2 验收 2 "账本能逐轮看到 budget 消耗"）。
+ * - `blocker_fingerprint` / `repeated_blocker_count`（loop handoff
+ *   extension）：needs_human / retry 类阻塞的稳定归因，用于阻止人工
+ *   approve 后同一 blocker 无变化地反复恢复。
  */
 export const DecisionKindSchema = z.enum([
   "retry",
@@ -74,6 +77,10 @@ export const DecisionEntrySchema = z.object({
   failure_tags: z.array(FailureTagSchema).optional(),
   // 落账时 run 的预算快照（阶段 2，见文件头注释）
   budget: BudgetSchema.optional(),
+  // 同一阻塞原因的稳定指纹；通常只在 needs_human 决策上出现。
+  blocker_fingerprint: z.string().optional(),
+  // 当前 run 内该 blocker 连续/重复出现次数；从 1 开始。
+  repeated_blocker_count: z.number().int().positive().optional(),
   created_at: z.string().datetime(),
 });
 export type DecisionEntry = z.infer<typeof DecisionEntrySchema>;

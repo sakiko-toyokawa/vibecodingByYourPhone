@@ -41,12 +41,14 @@
  * control-plane is the only writer of state/<loop_id>.json (04-存储约定).
  */
 
+import { createHash } from "node:crypto";
 import type {
   Budget,
   BudgetLimits,
   DecisionEntry,
   DecisionKind,
   FailureTag,
+  IntentContract,
   JudgmentReport,
   LearningEvent,
   RunDecisionAction,
@@ -132,6 +134,16 @@ export interface ApplyJudgmentInput {
     reason: string;
     policyRef: string;
   };
+  /**
+   * 合约的非预算停止规则 (02 §2 stop_rules; 当前只有
+   * repetition.max_same_failure 被消费: 同一阻断指纹重复超过上限即停,
+   * needs_human 循环打断为终态 failed —— 预算与停止规则.md "同一
+   * verifier 同一错误重复 → 停止或人工")。
+   */
+  stopRules?: IntentContract["stop_rules"];
+  /** 本轮执行的 session 引用 (06 偏差 #32: run_state.session_ref,
+   *  前端据此订阅对应 session 的消息流)。 */
+  sessionRef?: string;
 }
 
 export interface ApplyJudgmentResult {
@@ -208,6 +220,35 @@ const DECISION_OPTIONS = ["approve", "reject", "request_changes", "pause"];
 /** Deterministic decision_id = idempotency key (run_id + turn + target/cause). */
 function controlDecisionId(runId: string, turn: number, to: RunState): string {
   return `decision-${runId}-t${turn}-${to}`;
+}
+
+function normalizeBlockerParts(parts: string[]): string[] {
+  return parts
+    .map((part) => part.trim().replace(/\s+/g, " ").toLowerCase())
+    .filter((part) => part.length > 0)
+    .sort();
+}
+
+function blockerFingerprint(
+  judgment: JudgmentReport | null,
+  policyEscalation?: ApplyJudgmentInput["policyEscalation"],
+): string | undefined {
+  if (!judgment && !policyEscalation) {
+    return undefined;
+  }
+  const payload = {
+    next_action: judgment?.next_action ?? "none",
+    risks: normalizeBlockerParts(judgment?.unresolved_risks ?? []),
+    evidence: normalizeBlockerParts(judgment?.evidence ?? []),
+    policy_action: policyEscalation?.action ?? null,
+    policy_reason: policyEscalation?.reason
+      ? normalizeBlockerParts([policyEscalation.reason])[0]
+      : null,
+  };
+  return `blocker:${createHash("sha256")
+    .update(JSON.stringify(payload))
+    .digest("hex")
+    .slice(0, 16)}`;
 }
 
 export class ControlPlane {
@@ -331,6 +372,9 @@ export class ControlPlane {
     if (decision.kind === "retry") {
       budget.used_retries += 1;
     }
+    // 03 "loop-budget-warning": budget 消耗越过 80% 阈值时广播
+    // (一次/run/字段; budget_limited 本身走 loop-state-changed 不重复)。
+    this.maybeWarnBudget(input, budget);
 
     const now = new Date().toISOString();
     const record: RunStateRecord = {
@@ -346,17 +390,51 @@ export class ControlPlane {
       workspace_ref: input.workspaceRef,
       last_judgment: input.judgmentRef,
       pending_approval: existing?.pending_approval ?? null,
+      // 本轮执行的 session 引用 (06 #32; 缺省保留既有值, 重启回放兼容)
+      session_ref: input.sessionRef ?? existing?.session_ref ?? null,
       budget,
       created_at: existing?.created_at ?? input.createdAt,
       updated_at: now,
     };
 
     const requestId = controlDecisionId(input.runId, input.turn, decision.kind);
-    const reason = input.adapterFailure
+    const fingerprint =
+      decision.kind === "needs_human"
+        ? blockerFingerprint(input.judgment, input.policyEscalation)
+        : undefined;
+    const repeatedBlockerCount = fingerprint
+      ? (
+          await this.deps.runLedgerStore.readDecisionEntries(input.runId)
+        ).filter(
+          (entry) =>
+            entry.decision === "needs_human" &&
+            entry.blocker_fingerprint === fingerprint,
+        ).length + 1
+      : undefined;
+    // 02 §2 stop_rules.repetition.max_same_failure (card 的
+    // stop_on_repeated_failure 经合约投影): 同一阻断指纹重复超过上限
+    // 即停 —— needs_human 循环打断为终态 failed (预算与停止规则.md:
+    // "同一 verifier 同一错误重复 → 停止或人工")。
+    const maxSameFailure = input.stopRules?.repetition?.max_same_failure;
+    if (
+      decision.kind === "needs_human" &&
+      repeatedBlockerCount !== undefined &&
+      maxSameFailure !== undefined &&
+      repeatedBlockerCount > maxSameFailure
+    ) {
+      decision.kind = "failed";
+      decision.reason = `${decision.reason}; stop rule repetition.max_same_failure=${maxSameFailure} hit: the same blocker recurred ${repeatedBlockerCount} times (预算与停止规则.md: 同一错误重复即停)`;
+    }
+
+    const baseReason = input.adapterFailure
       ? `${decision.reason}; adapter hard error (${input.adapterFailure.code}): ${input.adapterFailure.message}`
       : decision.kind === "budget_limited"
         ? `${decision.reason}; exhausted: ${exhausted.join(", ")}`
         : decision.reason;
+    const reason =
+      repeatedBlockerCount && repeatedBlockerCount > 1
+        ? `${baseReason}; repeated blocker #${repeatedBlockerCount} (${fingerprint})`
+        : baseReason;
 
     const {
       record: updated,
@@ -376,9 +454,18 @@ export class ControlPlane {
       policyRefs: input.policyEscalation
         ? [input.policyEscalation.policyRef]
         : undefined,
-      failureTags: input.adapterFailure
-        ? [input.adapterFailure.failureTag]
-        : undefined,
+      blockerFingerprint: fingerprint,
+      repeatedBlockerCount,
+      // 失败归因 (失败模式账本.md 8 值词汇; 修复计划 #21: 此前只挂
+      // adapter 硬错误, 验证失败/策略拦截永不可达):
+      // - adapter 硬错误 → adapterFailure.failureTag (映射见 adapter-error)
+      // - 硬闸门/高风险策略拦截 → policy_error
+      // - verifier 判失败/判不清 (failed/inconclusive, 含验证层自身崩溃的
+      //   合成 judgment) → verification_error
+      // intent_error / context_error / memory_packet_error 需要 verifier
+      // 侧的归因分类能力, eval_regression 由 eval 体系自身产出, 均不在
+      // 此挂载 (无生产信号, 不伪造)。
+      failureTags: this.attributeFailureTags(input),
       patch: {
         turn: input.turn,
         budget,
@@ -527,6 +614,18 @@ export class ControlPlane {
     }
 
     const { loopId, record } = waiting;
+    if (action === "approve" && !feedback?.trim()) {
+      const entries = await this.deps.runLedgerStore.readDecisionEntries(runId);
+      const currentDecision = entries.find(
+        (entry) => entry.decision_id === record.pending_approval?.request_id,
+      );
+      if ((currentDecision?.repeated_blocker_count ?? 0) >= 2) {
+        throw new ControlPlaneError(
+          "invalid_decision",
+          `approve would repeat unchanged blocker ${currentDecision?.blocker_fingerprint ?? "unknown"}; use request_changes with feedback after changing the environment or instructions`,
+        );
+      }
+    }
     const target: RunState =
       action === "reject" ? "failed" : action === "pause" ? "paused" : "active";
     const decisionKind: DecisionKind =
@@ -627,6 +726,8 @@ export class ControlPlane {
         workspace_ref: seed.workspaceRef,
         last_judgment: null,
         pending_approval: null,
+        // 首轮在飞, session_ref 待首轮 judgment 落账时写入 (06 #32)
+        session_ref: null,
         budget: seed.budget ? BudgetSchema.parse({ ...seed.budget }) : null,
         created_at: seed.createdAt,
         updated_at: new Date().toISOString(),
@@ -734,7 +835,7 @@ export class ControlPlane {
     } catch {
       throw new ControlPlaneError(
         "invalid_decision",
-        "budget supplement is invalid (max_retries must stay below max_turns)",
+        "budget supplement is invalid (budget schema rejected the merged limits)",
       );
     }
     const { record: updated } = await this.transition({
@@ -775,6 +876,8 @@ export class ControlPlane {
     failureTags?: FailureTag[];
     /** 涉及策略（policy://）；策略投影命中的决策携带，否则为空数组。 */
     policyRefs?: string[];
+    blockerFingerprint?: string;
+    repeatedBlockerCount?: number;
     feedback?: string;
     override?: DecisionEntry["override"];
     patch?: Partial<RunStateRecord>;
@@ -810,6 +913,8 @@ export class ControlPlane {
       failure_tags: opts.failureTags,
       // 账本可见逐轮消耗：每条决策携带落账时的预算快照。
       budget: budget ?? undefined,
+      blocker_fingerprint: opts.blockerFingerprint,
+      repeated_blocker_count: opts.repeatedBlockerCount,
       created_at: now,
     };
     await this.deps.runLedgerStore.appendDecisionEntry(runId, entry);
@@ -895,6 +1000,78 @@ export class ControlPlane {
    */
   async settleLearningEvents(): Promise<void> {
     await Promise.all(this.pendingLearningEvents);
+  }
+
+  /**
+   * 失败归因挂载 (修复计划 #21): 把本决策的归因信号映射为失败模式账本
+   * 8 值词汇, 去重; 无信号返回 undefined (条目缺省空数组)。只挂有真实
+   * 生产信号的类型, 不伪造 intent/context/memory_packet/eval_regression。
+   */
+  private attributeFailureTags(
+    input: ApplyJudgmentInput,
+  ): FailureTag[] | undefined {
+    const tags = new Set<FailureTag>();
+    if (input.adapterFailure) {
+      tags.add(input.adapterFailure.failureTag);
+    }
+    if (input.policyEscalation) {
+      tags.add("policy_error");
+    }
+    if (
+      input.judgment &&
+      (input.judgment.overall === "failed" ||
+        input.judgment.overall === "inconclusive")
+    ) {
+      tags.add("verification_error");
+    }
+    return tags.size > 0 ? [...tags] : undefined;
+  }
+
+  /**
+   * 03 "loop-budget-warning": budget 消耗越过 80% 阈值时广播, 一次/run/
+   * 字段 (内存去重; 进程重启后同一 run 再次越界会重发一次, 可接受 —
+   * 告警不是事实源, run_state 才是)。
+   */
+  private readonly budgetWarned = new Set<string>();
+
+  private maybeWarnBudget(input: ApplyJudgmentInput, budget: Budget): void {
+    if (!this.deps.eventBus) {
+      return;
+    }
+    const fields: { field: "max_turns" | "max_retries"; ratio: number }[] = [];
+    if (budget.max_turns > 0) {
+      fields.push({
+        field: "max_turns",
+        ratio: budget.used_turns / budget.max_turns,
+      });
+    }
+    if (budget.max_retries > 0) {
+      fields.push({
+        field: "max_retries",
+        ratio: budget.used_retries / budget.max_retries,
+      });
+    }
+    for (const { field, ratio } of fields) {
+      if (ratio < 0.8) {
+        continue;
+      }
+      const key = `${input.runId}:${field}`;
+      if (this.budgetWarned.has(key)) {
+        continue;
+      }
+      this.budgetWarned.add(key);
+      this.deps.eventBus.emit({
+        type: "loop-budget-warning",
+        loop_id: input.loopId,
+        run_id: input.runId,
+        turns_used: budget.used_turns,
+        max_turns: budget.max_turns,
+        retries_used: budget.used_retries,
+        max_retries: budget.max_retries,
+        near_limit: field,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 
   /**

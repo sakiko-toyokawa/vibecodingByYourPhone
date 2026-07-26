@@ -6,6 +6,7 @@ import {
   createContainerInstance,
   registerValue,
 } from "./container.js";
+import { GitHubIssueLoopService } from "./github/index.js";
 import {
   ControlPlane,
   CronScheduler,
@@ -248,6 +249,12 @@ export function createApp(
       controlPlane: loopControlPlane,
       // 阶段 3 装配消费: 新 run 装配读取 published / canary 提案
       proposalStore,
+      // 02 §5 known_failure_patterns: 验证输入对照失败模式账本的 open
+      // 模式（同一单例, 只读）
+      failurePatternStore,
+      githubCredentialStore: container.cradle.githubCredentialStore,
+      githubToolProvisioner: container.cradle.githubToolProvisioner,
+      dataDir: options.dataDir,
     });
     const cronScheduler = new CronScheduler({
       loopCardStore,
@@ -281,6 +288,8 @@ export function createApp(
       proposalStore,
       runLedgerStore,
       pipeline: proposalPipeline,
+      // 04 容量与清理: 顺带清理需要扫描活跃 run 状态
+      runStateStore,
     });
     learningWorker.start();
     registerValue("loopRunService", loopRunService);
@@ -289,6 +298,17 @@ export function createApp(
     registerValue("learningWorker", learningWorker);
     registerValue("proposalStore", proposalStore);
     registerValue("proposalPipeline", proposalPipeline);
+    const { config, githubToolProvisioner, githubClient } = container.cradle;
+    registerValue(
+      "githubIssueLoopService",
+      new GitHubIssueLoopService({
+        dataDir: config.dataDir,
+        toolProvisioner: githubToolProvisioner,
+        githubClient,
+        loopCardStore,
+        runService: loopRunService,
+      }),
+    );
   }
 
   // Register all API routes

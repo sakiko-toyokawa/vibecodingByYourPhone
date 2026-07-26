@@ -16,6 +16,7 @@ import { test } from "node:test";
 import type { DecisionEntry, PolicyProfile } from "@yep-anywhere/shared";
 import { RunLedgerStore } from "../state/run-ledger-store.js";
 import {
+  type PermissionEvent,
   type PolicyEscalation,
   createLoopToolApprovalHook,
 } from "./approval-hook.js";
@@ -50,6 +51,7 @@ async function withStore(
   fn: (ctx: {
     store: RunLedgerStore;
     escalations: PolicyEscalation[];
+    permissionEvents: PermissionEvent[];
     hook: ReturnType<typeof createLoopToolApprovalHook>;
   }) => Promise<void>,
 ): Promise<void> {
@@ -57,6 +59,7 @@ async function withStore(
   try {
     const store = new RunLedgerStore({ dataDir });
     const escalations: PolicyEscalation[] = [];
+    const permissionEvents: PermissionEvent[] = [];
     const hook = createLoopToolApprovalHook({
       profile: PROFILE,
       runId: "run-hook-1",
@@ -65,8 +68,9 @@ async function withStore(
       workspacePath: WS,
       store,
       escalations,
+      permissionEvents,
     });
-    await fn({ store, escalations, hook });
+    await fn({ store, escalations, permissionEvents, hook });
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }
@@ -157,6 +161,7 @@ test("audit write failure is fail-closed (self-approval requires audit)", async 
       workspacePath: WS,
       store,
       escalations: [],
+      permissionEvents: [],
     });
     const result = await hook("Write", { file_path: `${WS}/a.ts` });
     assert.equal(result.behavior, "deny");
@@ -178,6 +183,7 @@ test("manual profile denies mutations without audit entries", async () => {
       workspacePath: WS,
       store,
       escalations: [],
+      permissionEvents: [],
     });
     const result = await hook("Write", { file_path: `${WS}/a.ts` });
     assert.equal(result.behavior, "deny");

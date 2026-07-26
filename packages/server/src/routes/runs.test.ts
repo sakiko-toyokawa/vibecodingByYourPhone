@@ -81,7 +81,7 @@ async function withFixture(
       // GET /:id only touches the ledger store / control-plane; the
       // supervisor and card store are unused on this path.
       supervisor: {} as Supervisor,
-      loopCardStore: {} as LoopCardStore,
+      loopCardStore: { getLoop: () => undefined } as unknown as LoopCardStore,
       runLedgerStore: ledgerStore,
       controlPlane,
     });
@@ -212,6 +212,10 @@ test("GET /:id ledger_summary carries the judgment_report 摘要 and decision re
       run: { state: string };
       ledger_summary: {
         judgment_report_ref: string | null;
+        collector_report_ref: string | null;
+        handoff_ref: string | null;
+        blocker_fingerprint: string | null;
+        repeated_blocker_count: number;
         judgment_summary: {
           overall: string;
           next_action: string;
@@ -226,6 +230,10 @@ test("GET /:id ledger_summary carries the judgment_report 摘要 and decision re
       body.ledger_summary.judgment_report_ref,
       "artifact://run-1/judgment-report.json",
     );
+    assert.equal(body.ledger_summary.collector_report_ref, null);
+    assert.equal(body.ledger_summary.handoff_ref, null);
+    assert.ok(body.ledger_summary.blocker_fingerprint);
+    assert.equal(body.ledger_summary.repeated_blocker_count, 1);
     assert.deepEqual(body.ledger_summary.judgment_summary, {
       overall: "failed",
       next_action: "needs_human",
@@ -247,6 +255,95 @@ test("GET /:id on an unknown run → 404 run_not_found", async () => {
     assert.equal(
       ((await res.json()) as { error: string }).error,
       "run_not_found",
+    );
+  });
+});
+
+/** Seed a budget_limited run: retryable failure with exhausted turn budget. */
+async function seedBudgetLimitedRun(
+  controlPlane: ControlPlane,
+  ledgerStore: RunLedgerStore,
+  runId = "run-budget",
+): Promise<void> {
+  await ledgerStore.appendEntry(runId, makeLedgerEntry(runId));
+  const applied = await controlPlane.applyJudgment({
+    loopId: "loop-1",
+    runId,
+    turn: 3,
+    goalId: "intent-1",
+    workspaceRef: `workspace://loop-1/${runId}`,
+    executionOk: true,
+    verificationRan: true,
+    judgment: {
+      overall: "failed",
+      next_action: "retry",
+      retryable: true,
+      requires_human: false,
+      evidence: [],
+      unresolved_risks: ["lint errors"],
+    },
+    judgmentRef: `artifact://${runId}/judgment-report.json`,
+    createdAt: new Date().toISOString(),
+    budget: {
+      max_tokens: 0,
+      max_time_minutes: 30,
+      max_turns: 3,
+      max_retries: 2,
+    },
+    usage: { tokens: null, timeMinutes: 1 },
+  });
+  assert.equal(applied.state, "budget_limited");
+}
+
+test("POST /:id/budget — budget_limited → active, 预算快照更新 (06 偏差 #26)", async () => {
+  await withFixture(async ({ app, controlPlane, ledgerStore }) => {
+    await seedBudgetLimitedRun(controlPlane, ledgerStore);
+
+    const res = await app.request("/run-budget/budget", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ max_turns: 5 }),
+    });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      run_state: { state: string; budget: { max_turns: number } };
+    };
+    assert.equal(body.run_state.state, "active");
+    assert.equal(body.run_state.budget.max_turns, 5);
+
+    // resumed 决策落账 (budget_limited → active 全程可审计)
+    const decisions = await ledgerStore.readDecisionEntries("run-budget");
+    assert.ok(decisions.some((d) => d.decision === "resumed"));
+
+    // 恢复后不再是 budget_limited → 重复补充 409
+    const replay = await app.request("/run-budget/budget", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ max_turns: 9 }),
+    });
+    assert.equal(replay.status, 409);
+  });
+});
+
+test("POST /:id/budget — 404 未知 run; 400 空预算补丁", async () => {
+  await withFixture(async ({ app, controlPlane, ledgerStore }) => {
+    const missing = await app.request("/nope/budget", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ max_turns: 5 }),
+    });
+    assert.equal(missing.status, 404);
+
+    await seedBudgetLimitedRun(controlPlane, ledgerStore);
+    const empty = await app.request("/run-budget/budget", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    assert.equal(empty.status, 400);
+    assert.equal(
+      ((await empty.json()) as { error: string }).error,
+      "invalid_decision",
     );
   });
 });

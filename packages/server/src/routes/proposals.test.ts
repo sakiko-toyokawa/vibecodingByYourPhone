@@ -6,6 +6,7 @@ import { test } from "node:test";
 import type { ImprovementProposal, LoopCard } from "@yep-anywhere/shared";
 import { Hono } from "hono";
 import { LoopCardStore, ProposalStore } from "../loop/index.js";
+import type { ControlPlane, LoopRunService } from "../loop/index.js";
 import type { BusEvent } from "../watcher/EventBus.js";
 import type { IEventBus } from "../watcher/IEventBus.js";
 import { createLoopsRoutes } from "./loops.js";
@@ -120,6 +121,52 @@ async function advanceTo(
     by: "human",
   });
 }
+
+// --- GET 详情 + history ---
+
+test("POST /api/proposals — 人工创建: 201, created_by=human, status=draft (06 偏差 #25)", async () => {
+  await withApp(async ({ app, store }) => {
+    const res = await app.request(
+      post("/api/proposals", {
+        type: "memory_packet_template_proposal",
+        summary: "inject retry-hint template",
+        target: "loop-1.memory_packet_template",
+        expected_effect: "fewer context_error recurrences",
+        risk: "low",
+        validation_plan: "shadow then canary on loop-1",
+        payload: {
+          memory_packet_template:
+            "Always re-check assumptions before reporting.",
+          canary_loops: ["loop-1"],
+        },
+      }),
+    );
+    assert.equal(res.status, 201);
+    const body = (await res.json()) as { proposal: ImprovementProposal };
+    assert.match(body.proposal.proposal_id, /^prop-/);
+    assert.equal(body.proposal.created_by, "human");
+    assert.equal(body.proposal.status, "draft");
+    assert.equal(
+      body.proposal.payload?.memory_packet_template,
+      "Always re-check assumptions before reporting.",
+    );
+    // 落盘可检索 (后续由 worker pipeline 推进 draft→shadow→canary)
+    assert.equal(
+      store.get(body.proposal.proposal_id)?.proposal_id,
+      body.proposal.proposal_id,
+    );
+  });
+});
+
+test("POST /api/proposals — 非法请求体 400 invalid_proposal", async () => {
+  await withApp(async ({ app }) => {
+    const res = await app.request(
+      post("/api/proposals", { type: "memory_packet_template_proposal" }),
+    );
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).error, "invalid_proposal");
+  });
+});
 
 // --- GET 详情 + history ---
 
@@ -311,4 +358,71 @@ test("GET /api/loops/:id/proposals — 按 loop 过滤 + status 过滤; 未知 l
     assert.equal(missing.status, 404);
     assert.equal((await missing.json()).error, "loop_not_found");
   });
+});
+
+test("GET /api/loops/:id — current_run_state / last_run_summary 真实接线 (#16)", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-loops-detail-"));
+  try {
+    const loopCardStore = new LoopCardStore({ dataDir });
+    await loopCardStore.initialize();
+    await loopCardStore.createLoop(makeCard("loop-1"));
+    await loopCardStore.createLoop(makeCard("loop-2"));
+
+    const runState = {
+      version: 2,
+      goal_id: "intent-1",
+      run_id: "run-7",
+      state: "active",
+      turn: 1,
+      intent_version: 1,
+      workspace_ref: "workspace://loop-1/run-7",
+      last_judgment: null,
+      pending_approval: null,
+      created_at: NOW,
+      updated_at: NOW,
+    };
+    const summary = {
+      run_id: "run-7",
+      loop_id: "loop-1",
+      state: "active",
+      source: "manual",
+      created_at: NOW,
+    };
+    const app = new Hono();
+    app.route(
+      "/api/loops",
+      createLoopsRoutes({
+        loopCardStore,
+        runService: {
+          listRuns: async (loopId: string) =>
+            loopId === "loop-1" ? [summary] : [],
+        } as unknown as LoopRunService,
+        controlPlane: {
+          getRunState: async (loopId: string) =>
+            loopId === "loop-1" ? runState : null,
+        } as unknown as ControlPlane,
+      }),
+    );
+
+    const res = await app.request("/api/loops/loop-1");
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      current_run_state: { run_id: string; state: string } | null;
+      last_run_summary: { run_id: string } | null;
+    };
+    assert.equal(body.current_run_state?.run_id, "run-7");
+    assert.equal(body.current_run_state?.state, "active");
+    assert.equal(body.last_run_summary?.run_id, "run-7");
+
+    // 无 run 的 loop: 两个字段如实为 null
+    const res2 = await app.request("/api/loops/loop-2");
+    const body2 = (await res2.json()) as {
+      current_run_state: unknown;
+      last_run_summary: unknown;
+    };
+    assert.equal(body2.current_run_state, null);
+    assert.equal(body2.last_run_summary, null);
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
 });

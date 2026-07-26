@@ -6,18 +6,16 @@ import { z } from "zod";
  * 权威定义：docs/spec/02-schema契约.md §2（v1 不含 approval_mode / ambiguity /
  * clarification_history / 版本化字段 / handoff 块，不得预留）。
  */
-const BudgetSchema = z
-  .object({
-    max_tokens: z.number(),
-    max_time_minutes: z.number(),
-    // 总轮次上限，含首轮
-    max_turns: z.number(),
-    // retry 次数上限，不含首轮；与 max_turns 同时生效、先触者停
-    max_retries: z.number(),
-  })
-  .refine((budget) => budget.max_retries < budget.max_turns, {
-    message: "max_retries must be less than max_turns",
-  });
+const BudgetSchema = z.object({
+  max_tokens: z.number(),
+  max_time_minutes: z.number(),
+  // 总轮次上限，含首轮
+  max_turns: z.number(),
+  // retry 次数上限，不含首轮；与 max_turns 同时生效、先触者停
+  // (无严格小于约束 —— 先触者停语义下 max_retries >= max_turns 合法,
+  // 06 偏差 #31)
+  max_retries: z.number(),
+});
 
 export const IntentContractSchema = z.object({
   intent_id: z.string(),

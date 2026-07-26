@@ -1,0 +1,171 @@
+# Loop 子系统 spec 差距与修复计划
+
+> 来源：2026-07-26 对照 `E:/projects/loop/docs/spec`（00–06）对 `packages/server/src/loop/` 全量审计。
+> 判定口径：**壳子** = 定义/写入存在但运行时无消费者、硬编码假数据、或绕过 spec 机制；**偏差** = 实现了但与 spec 语义不符；**未实现** = spec 要求但代码缺失（注明是否计划内）。
+
+## P0 安全/正确性缺口
+
+### 1. Codex 链路上策略引擎被整体架空【壳子·安全】✅ 已修（守卫方向）
+- 证据：`sdk/providers/codex.ts:1120-1125` 把 `bypassPermissions` 映射为 `approvalPolicy: "never"` + `sandbox: "danger-full-access"`；app-server 不发 requestApproval，`loop/policy/` 的硬闸门七项、bypass 审计一行不执行。无守卫阻止 policy run 走 codex，06 偏差记录未登记。Claude 链路（`claude.ts:513-520` canUseTool）是真的。
+- 修复（2026-07-26，fail-closed 守卫）：装配层拒绝——card 声明非 manual policy 且 provider 非 claude/claude-ollama 时抛 `AssemblyError`（`loop/assembly/runtime-input.ts`），run 以 setup 失败落 failed + 原因可审计，不静默产出无策略的 RuntimeInput。已登记 06 偏差 #24。测试：`runtime-input.test.ts` "policy × non-Claude bridge is fail-closed"。
+- 遗留（另立任务）：Codex 桥的策略投影真正实现（approvalPolicy 改造让审批反向请求流经策略钩子 + 沙盒语义对齐），落地前不得解除守卫。
+
+### 2. 运行账本 runtime 块硬编码假数据【壳子】✅ 已修
+- 证据：`run-service.ts:1100-1112`：`runtime.adapter` 恒 `"claude"`、capability 恒 `interrupt=graceful`（与 06 偏差 #17 规定的 codex 应记 `kill-only` 矛盾）、`mode` 写的是 permissionMode 而非 runtime 原生模式。Codex run 的账本是编造值，污染阶段 3 学习输入。
+- 修复（2026-07-26）：新增 `describeAdapter`（`run-service.ts`），从 card 的 provider 投影真实值——adapter=provider 名、bridge 按 00 映射（claude*=agent_sdk / codex*=app_server / gemini*=acp）、mode 为 runtime 原生模式（print/exec/acp，02 §8.1）、interrupt 如实记录（claude=graceful，其余=kill-only，06 #17）；permissionMode 移入能力快照字符串。未知 provider 按最保守口径（bridge/mode=unknown、kill-only）。测试：`run-service-verification.test.ts` codex 投影用例 + `run-service-policy.test.ts` 断言更新。
+- 顺带修复：`run-service-policy.test.ts` 对 `isRunActive` 的瞬时断言是既有竞态（状态转移先于 finally 释放注册），改为轮询 `waitForInactive`。
+
+### 3. 验证层崩溃 = 静默判过【偏差·verifier theater】✅ 已修
+- 证据：`run-service.ts:993-998` verifyRun 抛错仅 console.error；`decide.ts:73-78` 随之判 `complete`，reason 误写 "card requires no verification phases"。
+- 修复（2026-07-26）：catch 分支合成 `inconclusive + requires_human + escalate` 的 judgment → needs_human，错误落 `verification-error[-turnN].json` artifact 并进 judgment.evidence。测试：`run-service-verification.test.ts` "verification layer crash escalates to needs_human"。
+
+### 4. 学习闭环不闭合【壳子】✅ 已修（最小闭环）
+- 证据：worker 提案从不带 `payload`（`learning/worker.ts:447-467`）；`resolveProposalEffects` 跳过无 payload 提案（`assembly/proposal-effects.ts:72-74`）；全库无 `created_by=human` 提案创建入口。自动路径提案走完 publish 对装配零影响，阶段 3 验收 5 生产不可达。
+- 修复（2026-07-26）：
+  - Part A：worker 为有真实消费者的槽位生成 payload——`memory_packet_template_proposal` 携带由失败模式生成的 `memory_packet_template`（装配层注入 prompt 是真消费者）；`runtime_adapter_proposal` 明确不带（adapterPolicy 无消费者，见 #13）；`policy_profile_proposal` 不带（档名不能杜撰，走人工入口补）。
+  - Part B：新增 `POST /api/proposals` 人工创建端点（`routes/proposals.ts`）：zod 校验、created_by 恒 human、status 恒 draft 由服务端钉死，创建后进既有管线（draft→shadow→canary 自动、approve/publish 人工闸门）。已登记 06 偏差 #25。
+  - 附带修复"元规则保护只有一半"：人工发起的元规则提案现在有真实创建入口，可经管线推进 + 人工批准。
+- 测试：`worker.test.ts` payload 生成用例（context_error → 模板携带 pattern id；runtime_adapter 不带 payload）、`routes/proposals.test.ts` 创建 201/400 用例。
+
+### 5. 发布管线评估与提案脱钩 + eval 用例空转【壳子·verifier theater 变种】✅ 已修
+- 证据：shadow/regression 复跑同一固定全局 eval 集，eval runner 从不应用提案（`learning/eval-runner.ts:197-226`）；内置用例全是 `node -e "process.exit(0/1)"`（`:124-140`）。任何提案分数相同，闸门无牙。
+- 修复（2026-07-26，完整实现非最小）：
+  - **behavior case 形态**：`eval-runner.ts` 整体重写，cases.json 增加 `kind: "behavior"` + 行为注册表，8 个内置 case 覆盖全部失败归因类别，每个直接调用被测子系统的真实函数——合约预算守卫（buildIntentContract 拒绝非法预算）、装配不变量（READ-ONLY/executor summary 契约）、memory packet 注入实效（提案模板真进 prompt 且硬规则不丢）、adapter 归因映射、子进程 verifier 失败/通过识别（真实子进程）、硬闸门裁决（3 项闸门 + bypass 自批准）、聚合 requires_human 透传、评估路径确定性。`command` 形态保留为用户扩展入口（历史失败样本回收入库）。
+  - **提案真实应用**：`EvalRunner.run` 接收提案本体，behavior case 在评估时应用其 payload（memory_packet_template 注入装配、policy_profile 覆盖进裁决）；scorecard 新增 `applied` 块记录真实参与评估的槽位与跳过原因（adapter_policy 因 #13 无消费者记入 skipped 而非假装评估过）。
+  - **管线接线**：pipeline 把提案本体传入 shadow/regression 复跑，history reason 带 `applied: ...` 摘要，"评估了什么"全程可审计。
+  - 未知行为名 fail-closed per-case（尺子坏了闸门不放行，不崩溃整场）。
+- 测试：eval-runner.test.ts 8 例（behavior 形态、未知行为 fail-closed、applied 槽位/跳过、policy_profile 覆盖真实进裁决）；pipeline.test.ts 新增带 payload 提案的 history applied 断言。全套件 exit=0。
+- 顺带发现（记录在案）：`policy_profile` 覆盖目前只换档名标签不换规则——`profiles.ts:42-57` 无命名档注册表，`resolvePolicyProfile` 恒返回默认规则。behavior case 的闸门检查对"未来按档名分化规则"有牙，但档名注册表本身是独立任务。
+
+## maker → checker 链路缺口（spec 02 §5 VerificationInputBundle）
+
+当前只有 `card/contract/exitStatus/stdoutRef` 四样流到 verifier（`run-service.ts:969-979`），且 `exitStatus` 是 `ok?0:1` 伪码、`stdout.log` 只写 `finalText`（`run-service.ts:924`）。
+
+### 6. `permission_event_refs` 恒 `[]`【壳子】✅ 已修
+- 证据：`verify-run.ts:153`。02 §5 要求高风险任务必须包含；bypass 审计决策账本条目（`approval-hook.ts:58-77`）与 `policy-projection.json` 已存在，未接线。
+- 修复（2026-07-26）：策略钩子每次裁决记录 `PermissionEvent`（`approval-hook.ts`），turn 结束落 `permission-events[-turnN].json` artifact 并引用进验证输入。
+
+### 7. `policy_intent_ref` 写死 `"not_applicable"`【壳子】✅ 已修
+- 证据：`verify-run.ts:160`，注释理由停留在阶段 1；turn 1 已落 `policy-projection.json`（`run-service.ts:913-919`）可引用。
+- 修复（2026-07-26）：策略投影 run 传 `artifact://<runId>/policy-projection.json`；无投影时仍落显式哨兵。
+
+### 8. `evidence_refs.diff` 恒 `null`【未实现】✅ 已修
+- 证据：`verify-run.ts:145` 注释自认 "no diff capture yet"；04 要求 `diff.patch` 永久保留。
+- 修复（2026-07-26）：turn 结束后 `git diff HEAD` 捕获（`captureGitDiff`，非 git 工作区/无变更 → null 不伪造），落 `diff[-turnN].patch` 并引用。
+
+### 9. `runtime_event_refs` / `structured_output` / `stderr` / `executor_summary` 恒空【已修，stderr 除外】
+- 证据：`verify-run.ts:148-152`。00 映射称 ProcessEvent `message` 为统一 trace 源，但 run 级 trace 未落 artifact。
+- 修复（2026-07-26）：`watchProcess` 逐条收集轮内归一消息，落 `runtime-events[-turnN].jsonl`，同时填 `runtime_event_refs` 与 `evidence_refs.structured_output`；`executor_summary` 走 prompt 契约方案——装配层要求 executor 收尾产出 `<<<EXECUTOR-SUMMARY>>>` 标记块（`runtime-input.ts`），run-service 提取落 `executor-summary[-turnN].md` 并引用，未产出标记块时为 null 不伪造。
+- 遗留：`stderr` 仍为空——`ProcessEvent` 联合类型（`supervisor/types.ts:223-234`）没有 stderr 通道，各 provider 读到 stderr 只写日志（`codex.ts:482-485`、`remote-spawn.ts:437-444`），需 adapter 底座改造（与"Codex 无优雅 interrupt"同类），应登记 06 偏差。
+
+### 10. `known_failure_patterns` 恒 `[]`【壳子】✅ 已修
+- 证据：`verify-run.ts:161`；`failure-pattern-store.ts` 存在且 worker 在写，验证层从不读。
+- 修复（2026-07-26）：`LoopRunService` 注入 `FailurePatternStore`（app.ts 同一单例，只读），open 模式 id 投影进验证输入。
+
+### 11. 多轮验证产物 latest-wins 覆盖【偏差】✅ 已修
+- 证据：`run-service.ts:949-954` 注释自认；历史轮账本条目的 `artifact://` 引用悬空。
+- 修复（2026-07-26）：验证产物经 `verificationArtifactName` 按轮命名（turn 1 保持规范名，turn N>1 带 `-turnN` 后缀）；stdout/runtime-events/diff/permission-events 同步按轮命名。
+
+### 12. collector 冒名 review 段、升级信号被丢弃【壳子/偏差】
+- 证据：`run-service.ts:1332-1436`：CollectorReport 不进 `aggregateVerifierReports`，`requires_human` 落地即丢（`:1423`）；`CollectorReportSchema`（`verification.ts:105-115`）是 spec 外私造 schema，冒用 "review" 段名，未登记 06。
+- 修复方向：collector 的 requires_human 接入 judgment 聚合，或降级为纯证据并在 06 登记。
+
+## P1 接口/字段级壳子
+
+### 13. `RuntimeInput.adapterPolicy` 全链路无消费者【壳子】✅ 已修
+- 证据：`runtime-input.ts:72,217-218,252` 写入后 run-service / adapter / Supervisor 均不读。`runtime_adapter_proposal` 发布后纯记账。
+- 修复（2026-07-26，完整消费链）：
+  - 新增 `loop/assembly/adapter-policy.ts` `resolveAdapterPolicy`：自由键值解析成两个真实旋钮——`model`（模型覆盖）与 `timeout_seconds`（轮次超时，02 §3"adapter 调用必须带超时"）；未知键/类型不符进 `ignoredKeys`，不静默吞掉。
+  - run-service 消费：`executeTurn` 把 model 覆盖进 session settings、timeoutMs 进 `watchProcess` 新增的轮次超时（超时按 adapter 硬错误 timeout 归因 runtime_blackbox_error，杀进程不无限等待）；collector 同为 adapter 调用，同等应用（挂死的 collector 不得挂死 run）；账本能力快照记录 `adapterPolicy[model=…,timeout_seconds=…]` 及 `ignored=` 未消费键。
+  - worker：`runtime_blackbox_error` 提案现在携带 `adapter_policy.timeout_seconds=600`（保守起点，经管线+人工闸门生效）。
+  - eval-runner：新增 `adapter_policy_application` behavior 与第 9 个内置 case，`adapter_policy` 槽位从 applied.skipped 转为真实参与评估。
+- 测试：`run-service-verification.test.ts` 两例（model 覆盖到达 session settings + 快照记录；timeout_seconds=0.05 杀掉永不发声的轮 → failed + runtime_blackbox_error）；worker/eval-runner 套件同步更新。全套件 exit=0。
+
+### 14. `budget_limited → active` 恢复路径生产不可达【壳子】✅ 已修
+- 证据：`supplementBudget`（`control-plane.ts:763-818`）有实现有测试，无任何 HTTP 路由调用；03 也未定义端点。budget_limited 实际等于终态。
+- 修复（2026-07-26）：新增 `POST /api/runs/:id/budget`（`routes/runs.ts`）：zod 校验（至少一项 max_* 字段），经 runService.getRun 解析 loop_id 后调 `supplementBudget`；错误语义 400 invalid_decision / 404 run_not_found / 409 invalid_state。已登记 06 偏差 #26。测试：`routes/runs.test.ts` 两例（200 active + resumed 落账 + 重复补充 409；404/400）。
+
+### 15. WS 事件 `loop-budget-warning` 整体缺失【未实现】✅ 已修
+- 证据：`EventBus.ts:289-310` 联合类型无此项，全库零引用；03 已定义 80% 阈值告警。
+- 修复（2026-07-26）：`EventBus.ts` 新增 `LoopBudgetWarningEvent`（字段按 03：turns/max_turns、retries/max_retries、near_limit）；control-plane 在 applyJudgment 预算累计（含 retry 扣减）后按 ≥80% 阈值发射，内存 Set 去重一次/run/字段。测试：`control-plane.test.ts`（阈值下不发、max_turns/max_retries 两字段各自发射、载荷字段）。
+
+### 16. `GET /api/loops/:id` 详情硬编码 null【壳子】✅ 已修
+- 证据：`routes/loops.ts:121-125` `current_run_state: null, last_run_summary: null`；controlPlane 已注入同工厂，注释借口（"control-plane 后续阶段"）已过时。
+- 修复（2026-07-26）：`current_run_state` 接 `controlPlane.getRunState`（run_state 持久化记录），`last_run_summary` 取 `runService.listRuns` 最新一条；deps 缺席时退化为 null（phase-0 挂载兼容）。测试：`routes/proposals.test.ts`（接线值 + 无 run 时如实 null）。
+
+### 17. 触发排队机制纯壳子【壳子】✅ 已修
+- 证据：`schedule.queue`（urgent/normal/background，`loop-card.ts:107`）零消费者；scheduler 忙时直接丢弃点火（`cron-scheduler.ts:112-114`）。05 阶段 0 列了"去重队列"但后续阶段对 trigger 再无排期。
+- 修复（2026-07-26）：`cron-scheduler.ts` 实现真队列——到期 loop 按 `schedule.queue` 优先级排序点火（urgent > normal > background，缺省 normal）；run 活跃时不再丢弃，进待触发队列（每 loop 至多一条去重、纯内存与"重启不补跑"取舍一致），后续 tick 按优先级补点（cron 不再匹配也补）；同一 tick 内补点与新到期不重复点火。测试：`cron-scheduler.test.ts` 三例（优先级顺序、忙时入队空闲补点且去重、pending 按优先级 drain）。
+
+### 18. 停止规则双壳子【壳子】✅ 已修（repetition 段）
+- 证据：`contract.stop_rules`（`intent-contract.ts:42-60`）构造侧从不写入（`:111-134`）、control-plane 从不读取；`stop_on_repeated_failure`（`loop-card.ts:39`）同样无消费者。"同一失败重复 N 次即停"运行时不存在。
+- 修复（2026-07-26）：
+  - 投影：`buildIntentContract` 把 card 的 `stop_on_repeated_failure` 投影为 `contract.stop_rules.repetition.max_same_failure`（safety/ambiguity 段机制未建，不投影）。
+  - 消费：control-plane `applyJudgment` 新增停止规则判定——同一阻断指纹的 needs_human 计数（既有 blocker_fingerprint / repeated_blocker_count 机制）超过 `max_same_failure` 时打断循环，needs_human → 终态 failed，reason 注明命中规则（预算与停止规则.md："同一 verifier 同一错误重复 → 停止或人工"）。
+  - run-service 把 `contract.stop_rules` 传入 applyJudgment。
+- 测试：`intent-contract.test.ts`（投影/未声明不投影）；`control-plane.test.ts`（同一阻断 3 轮：前 2 轮 needs_human、第 3 轮 failed + 无 stopRules 对照组第 3 轮仍 needs_human；人工恢复用 request_changes——submitDecision 对重复阻断拒绝空 approve，两个机制互补：决策侧防空批准，停止规则侧打断无限循环）。
+- 遗留：`stop_rules.safety.stop_on_policy_block`（硬闸门已一律升级 needs_human，语义已覆盖）与 `ambiguity.max_clarification_turns`（澄清机制未建）仍不消费，属机制未建而非壳子。
+
+### 19. 其余无消费者字段【壳子】✅ 已修（真消费 + 钉状态挂账）
+- 修复（2026-07-26）：
+  - `failure_pattern.status = resolved` 真消费：worker 每轮 tick 把 published 提案的 source_patterns 标记 resolved（幂等；回滚不重开，复发按签名重新入账）。
+  - `appliedProposals` 真消费：进账本能力快照 `;proposals=a|b`（哪个 run 吃了哪份提案可审计）。
+  - 钉状态挂账（06 偏差 #27，不删除与 spec 文本一致的字段，注释钉死待回填）：`PolicyProfile.permission_bridge`、`LoopCard.eval` 块、`persistence.state_file` + `.loop/STATE.md` 投影、`schedule.resume_rule`、Trigger 枚举 `webhook`/`resume`。
+  - `confidence=1` / `requires_clarification=false` / verifier confidence 三档 / verifier `requires_human=false`：确定性构造器与确定性 verifier 的诚实常量，非壳子，06 #27 一并钉注。
+
+### 20. 恒值假数据【壳子】✅ 已修（实质项）
+- 修复（2026-07-26）：
+  - run `source` 谎报 cron → `RunLedgerEntrySchema` 新增可选 `source`（06 偏差 #28），写入实记（`ctx.active.source`），listRuns/rebuildContext 读取（旧条目回退 "cron"）。
+  - `policy_projection.sandbox` 写死 `"workspace-write"` → 如实记 `"none"`（06 #24 守卫后策略 run 只在 Claude 桥，无 OS 沙盒，写边界由策略钩子强制）；allowed/disallowed_tools 空数组注释说明设计（钩子即规则来源）。
+  - 其余恒值项见 #19 钉注（诚实常量不修）。
+
+### 21. 失败归因来源过窄【偏差】✅ 已修
+- 证据：failure_tags 只来自 adapter 硬错误（`control-plane.ts:428-430`、`adapter-error.ts:99-110`）；8 值权威词汇中 5 值（intent_error、context_error、memory_packet_error、verification_error、eval_regression）生产不可达。
+- 修复（2026-07-26）：control-plane 新增 `attributeFailureTags` 统一挂载——adapter 硬错误（既有映射）、硬闸门/高风险策略拦截 → `policy_error`、judgment overall failed/inconclusive（含验证层自身崩溃的合成 judgment）→ `verification_error`，Set 去重。`intent_error`/`context_error`/`memory_packet_error` 需要 verifier 侧归因分类能力、`eval_regression` 由 eval 体系自产，均无生产信号不伪造（记录在案）。
+- 行为变化（语义正确）：retry/needs_human 决策现在带 failure_tags，按"终态或带 failure_tags 的决策"条件发射 learning_event——重复验证失败成为 worker 的真实学习输入（worker 按 run 去重，同一 run 的重试失败只计一次）；verification_error 模式生成 verification_rule_proposal，按元规则保护停 draft 待人工（尺子不自改，设计使然）。
+- 测试：`control-plane-learning.test.ts` 两例语义更新（retry/needs_human 带 verification_error 发射）+ 两例新增（三类信号组合去重、passed 无标签）。全套件 exit=0。
+
+## P2 契约/存储偏差
+
+### 22. API 形状偏差【已修主项】
+- 修复（2026-07-26，06 偏差 #30 裁决）：
+  - `GET /api/runs/:id` → `{ run, run_state, ledger_summary }`：补 run_state（02 §7 快照），撤掉全量账本暴露（03 决策三为准；05 验收 3"读回完整账本"由 readUri 文件解析满足）；前端本就不用 ledger 字段，无破坏。
+  - `GET /api/loops`：保留全 StoredLoop（前端渲染依赖，06 #30 登记），补 `status?`（paused/active/idle）与 `limit?`/`offset?`。
+  - `GET /api/loops/:id/runs`：补 `state?` 7 枚举过滤（非法值 400 invalid_state）。
+  - `POST /api/loops/:id/runs`：`intent_overrides` 接上（zod strict 校验，handoff 本轮覆盖 task/default_task_type/max_items_per_run，不写回注册表）。
+- 遗留：`loop-state-changed` 用 `timestamp` vs 03 的 `updated_at`（06 #32 同批登记，以实现为准）；409 错误码 invalid_state vs not_waiting（06 #8 已登记）。
+
+### 23. 存储约定偏差【已修主项】
+- 修复（2026-07-26）：
+  - **统一 `resolveUri`**：新增 `loop/state/uri.ts`（04 URI 解析表全部 scheme，白名单防 `..` 逃逸）；`RunLedgerStore.readUri` 让 artifact:// 与 ledger://（含 decision- 变体）真实可读——引用不再只写不读。测试 `uri.test.ts`（路径映射、逃逸拒绝、真实读取）。
+  - **清理/保留策略落地**：新增 `loop/state/cleanup.ts`——每 loop 最近 20 轮完整账本、过期压缩为仅 run_ledger_entry 行；artifacts 随账本裁剪（终态 run 永久保留 judgment-report/diff 最小证据，per-turn 命名兼容）；events.jsonl 消费位点前 30 天截断（cursor 前移）；非终态 run 全程保护（先扫 state/*.json）。learning worker 顺带驱动（04 指定），`cleanupIntervalMs` 默认 1h 节流；`RunLedgerStore.compressLedgerToRunEntries`/`artifactsDirFor`、`LearningEventStore.truncateConsumedBefore` 支撑。测试 `cleanup.test.ts` 三例（压缩+裁剪+证据保留、活跃保护、events 截断 cursor 前移）。
+  - **state/<loop_id>.json 容错加固**（`run-state-store.ts`）：坏文件备份 `.corrupt-<ts>`（不再静默当不存在）、per-file 串行写链（applyJudgment 与 pause/resume 并发不再读-改-写交错）。
+  - **loops.json 加载逐条 `LoopCardSchema` 校验**（与 failure-patterns store 同口径，坏文件备份从空开始）。
+  - **proposals 目录位置**（`loops/learning/proposals/` vs 04 的 `loops/proposals/`）：不改名，已连同 artifact per-turn 命名、账本压缩口径一并登记 06 偏差 #29。
+
+### 24. spec 未回写的实现偏差【已修主项】
+- 修复（2026-07-26，06 偏差 #31）：删除三处私加的 `max_retries < max_turns` refine（shared BudgetSchema、IntentContractSchema.budget、LoopCardSchema.stop_rules）——spec 只有"同时生效、先触者停"，相等合法；supplementBudget 校验同步放宽，eval behavior `contract_budget_guard` 改为断言预算投影正确性。
+- 其余 schema 扩展（decision_entry/run_state/learning 三件套/LoopCard 扩展块/canary-only approve/publish by:human/proposal_type/canUseTool 挂载点）此前已逐批登记 06（#8/#9/#13/#14/#15/#20/#23/#28/#32）。
+
+### 25. 其他偏差【已修两项，余者留档】
+- 修复（2026-07-26）：
+  - **验证短路规则**（四段验证模型.md）：verify-run 在某段硬失败后跳过后续段（后续结果不改变聚合结论），跳过段写 not_applicable 并注明 short-circuited 原因；测试覆盖（static 失败 → runtime 不执行且无输出日志；static 通过 → runtime 正常执行）。
+  - **run 级 trace correlation 载体**：run_state 新增 `session_ref`（06 偏差 #32），control-plane 每轮写入，GET /api/runs/:id 的 run_state 携带——前端可按 03 设计订阅对应 session 消息流。
+- 留档（独立任务，非壳子）：workspace 边界对 Bash 的写目标检查（分类层固有限度，需重定向解析）；02 §3 native_invocation 整段（timeout 已由 adapter_policy 部分承载）；cron 幂等键持久化（当前内存 + run_active 兜底）；模型清单外置（00 短板表遗留，05 未排期）；full_auto 与 assisted 语义分化（风险模型.md 层问题）；legacy 分支丢失 github env（github_prompt 卡无 policy 时拿不到 GH_TOKEN，实际路径都带 policy）；execution contract 结构化五字段（prompt 投影已是当前形态）。
+
+## 计划内未做（不算壳，记录备查）
+
+webhook/issue/resume 触发源；interaction/review 两段验证（05 阶段 1/2 明确不做）；YAML 权威格式加载；工作区隔离 worktree（05 阶段 2 明确不做）；eval 版本对比面板（05 阶段 3 从简）。
+
+## spec 自身矛盾（需回 spec 仓库处理）
+
+- 03"全量账本不经 API 暴露" vs 05 阶段 0 验收 3"能读回完整账本"
+- 01/00 要求 webhook/issue/resume 触发，05 从未排期
+- trigger 排队列在阶段 0 清单但后续阶段再无排期（壳子按现计划永远不会被填）
+
+## 修复顺序（本次执行）
+
+1. **maker → checker 链路**（#6/#7/#8/#9/#10/#11 + #3 兜底）——本次开工
+2. P0 其余（#1 codex 守卫、#2 账本 runtime、#4/#5 学习闭环）
+3. P1 接线类壳子（#13–#16 等）
+4. P2 契约/存储偏差与 spec 回写

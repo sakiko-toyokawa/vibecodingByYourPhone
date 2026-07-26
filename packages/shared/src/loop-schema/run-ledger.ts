@@ -40,6 +40,8 @@ export type FailureTag = z.infer<typeof FailureTagSchema>;
 export const RunLedgerEntrySchema = z.object({
   loop_id: z.string(),
   run_id: z.string(),
+  /** 触发来源 (扩展字段, 06 偏差 #28; 旧条目缺省按 "cron" 读取) */
+  source: z.enum(["cron", "manual"]).optional(),
   runtime: z.object({
     adapter: z.string(),
     session_ref: z.string(),

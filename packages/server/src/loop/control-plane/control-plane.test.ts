@@ -347,20 +347,21 @@ test("budget_limited → active via supplementBudget (人工补充预算并恢�
     );
     assert.equal(controlPlane.currentStateOf("run-1"), "budget_limited");
 
-    // 补充后仍须满足 max_retries < max_turns（5 >= max_turns 3 → 拒绝）
-    await assert.rejects(
-      () => controlPlane.supplementBudget("loop-1", { max_retries: 5 }),
-      (error: unknown) =>
-        error instanceof ControlPlaneError && error.code === "invalid_decision",
-    );
-
+    // 06 #31: max_retries >= max_turns 合法 (先触者停, 轮次上限先触达)
     const resumed = await controlPlane.supplementBudget("loop-1", {
-      max_retries: 2,
+      max_retries: 5,
     });
     assert.equal(resumed.state, "active");
-    assert.equal(resumed.budget?.max_retries, 2);
+    assert.equal(resumed.budget?.max_retries, 5);
     // 消耗不清零，只抬上限
     assert.equal(resumed.budget?.used_turns, 1);
+
+    // active 后重复补充 → 409 invalid_state
+    await assert.rejects(
+      () => controlPlane.supplementBudget("loop-1", { max_retries: 9 }),
+      (error: unknown) =>
+        error instanceof ControlPlaneError && error.code === "invalid_state",
+    );
 
     assert.deepEqual(
       resumes.map((s) => [s.runId, s.cause]),
@@ -476,6 +477,65 @@ test("needs_human bridging: decision-required event; approve → active with ove
       [["run-1", "human_approve", "人工确认 lint 报错可接受"]],
     );
     assert.deepEqual(resolved, []);
+  });
+});
+
+test("repeated blocker: second unchanged approve is rejected unless human adds new direction", async () => {
+  await withFixture(async ({ controlPlane, ledgerStore }) => {
+    const resumes: ResumeSignal[] = [];
+    controlPlane.onResumeRequested((signal) => resumes.push(signal));
+
+    const blocker = makeJudgment({
+      evidence: ["artifact://run-1/collector-report.json"],
+      unresolved_risks: ["GitHub auth missing: GH_TOKEN/GITHUB_TOKEN absent"],
+    });
+
+    const first = await controlPlane.applyJudgment(
+      applyInput({ judgment: blocker }),
+    );
+    assert.equal(first.state, "needs_human");
+    assert.ok(first.entry.blocker_fingerprint);
+    assert.equal(first.entry.repeated_blocker_count, 1);
+
+    const approved = await controlPlane.submitDecision("run-1", "approve");
+    assert.equal(approved.state, "active");
+    assert.equal(resumes.length, 1);
+
+    const begin = await controlPlane.beginTurn("run-1", 2);
+    assert.equal(begin.ok, true);
+
+    const second = await controlPlane.applyJudgment(
+      applyInput({
+        turn: 2,
+        judgment: blocker,
+      }),
+    );
+    assert.equal(second.state, "needs_human");
+    assert.equal(
+      second.entry.blocker_fingerprint,
+      first.entry.blocker_fingerprint,
+    );
+    assert.equal(second.entry.repeated_blocker_count, 2);
+
+    await assert.rejects(
+      () => controlPlane.submitDecision("run-1", "approve"),
+      (error: unknown) =>
+        error instanceof ControlPlaneError && error.code === "invalid_decision",
+    );
+
+    const changed = await controlPlane.submitDecision(
+      "run-1",
+      "request_changes",
+      "I added GH_TOKEN in the server environment; retry with gh auth status first.",
+    );
+    assert.equal(changed.state, "active");
+
+    const decisions = await ledgerStore.readDecisionEntries("run-1");
+    const secondNeedsHuman = decisions.find(
+      (entry) => entry.decision_id === "decision-run-1-t2-needs_human",
+    );
+    assert.equal(secondNeedsHuman?.repeated_blocker_count, 2);
+    assert.match(secondNeedsHuman?.reason ?? "", /repeated blocker/i);
   });
 });
 
@@ -691,4 +751,146 @@ test("run-state store tolerates a corrupt state file", async () => {
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }
+});
+
+test("loop-budget-warning: budget 消耗越过 80% 阈值广播, 一次/run/字段 (03)", async () => {
+  await withFixture(async ({ controlPlane, bus }) => {
+    // 阈值之下: turn 1/3 = 33%, 不告警
+    await controlPlane.applyJudgment(
+      applyInput({
+        loopId: "loop-w1",
+        runId: "run-w1",
+        judgment: makeJudgment({
+          overall: "passed",
+          next_action: "complete",
+          requires_human: false,
+        }),
+      }),
+    );
+    assert.equal(bus.ofType("loop-budget-warning").length, 0);
+
+    // 越过阈值: turn 2/2 = 100% → max_turns 告警
+    await controlPlane.applyJudgment(
+      applyInput({
+        loopId: "loop-w2",
+        runId: "run-w2",
+        turn: 2,
+        budget: {
+          max_tokens: 0,
+          max_time_minutes: 30,
+          max_turns: 2,
+          max_retries: 1,
+        },
+        judgment: makeJudgment({
+          overall: "passed",
+          next_action: "complete",
+          requires_human: false,
+        }),
+      }),
+    );
+    const warnings = bus.ofType("loop-budget-warning");
+    assert.equal(warnings.length, 1);
+    assert.equal(at(warnings, 0).near_limit, "max_turns");
+    assert.equal(at(warnings, 0).turns_used, 2);
+    assert.equal(at(warnings, 0).max_turns, 2);
+    assert.equal(at(warnings, 0).run_id, "run-w2");
+
+    // retry 判定消耗 retry 预算: used_retries 1/1 = 100% → max_retries 告警
+    await controlPlane.applyJudgment(
+      applyInput({
+        loopId: "loop-w3",
+        runId: "run-w3",
+        turn: 1,
+        budget: {
+          max_tokens: 0,
+          max_time_minutes: 30,
+          max_turns: 5,
+          max_retries: 1,
+        },
+        judgment: retryableJudgment(),
+      }),
+    );
+    const retryWarnings = bus.ofType("loop-budget-warning");
+    assert.equal(retryWarnings.length, 2);
+    assert.equal(at(retryWarnings, 1).near_limit, "max_retries");
+    assert.equal(at(retryWarnings, 1).retries_used, 1);
+  });
+});
+
+test("stop_rules.repetition.max_same_failure: 同一阻断重复超过上限即停 (02 §2)", async () => {
+  await withFixture(async ({ controlPlane }) => {
+    const stopRules = { repetition: { max_same_failure: 2 } };
+    const sameFailure = makeJudgment(); // 同一指纹 (unresolved_risks 相同)
+
+    // 第 1 次阻断: needs_human (count=1)
+    const t1 = await controlPlane.applyJudgment(
+      applyInput({
+        loopId: "loop-stop",
+        runId: "run-stop",
+        turn: 1,
+        judgment: sameFailure,
+        stopRules,
+      }),
+    );
+    assert.equal(t1.state, "needs_human");
+    await controlPlane.submitDecision(
+      "run-stop",
+      "request_changes",
+      "try a different fix",
+    );
+
+    // 第 2 次同一阻断: 仍 needs_human (count=2, 未超上限)
+    const t2 = await controlPlane.applyJudgment(
+      applyInput({
+        loopId: "loop-stop",
+        runId: "run-stop",
+        turn: 2,
+        judgment: sameFailure,
+        stopRules,
+      }),
+    );
+    assert.equal(t2.state, "needs_human");
+    await controlPlane.submitDecision(
+      "run-stop",
+      "request_changes",
+      "try a different fix",
+    );
+
+    // 第 3 次同一阻断: count=3 > max_same_failure=2 → 打断循环, 终态 failed
+    const t3 = await controlPlane.applyJudgment(
+      applyInput({
+        loopId: "loop-stop",
+        runId: "run-stop",
+        turn: 3,
+        judgment: sameFailure,
+        stopRules,
+      }),
+    );
+    assert.equal(t3.state, "failed");
+    assert.match(t3.entry.reason, /max_same_failure=2/);
+    assert.match(t3.entry.reason, /recurred 3 times/);
+
+    // 无 stopRules 的 run: 同一阻断第 3 次仍走 needs_human (行为对照)
+    const u1 = await controlPlane.applyJudgment(
+      applyInput({ loopId: "loop-nostop", runId: "run-nostop", turn: 1 }),
+    );
+    assert.equal(u1.state, "needs_human");
+    await controlPlane.submitDecision(
+      "run-nostop",
+      "request_changes",
+      "try a different fix",
+    );
+    await controlPlane.applyJudgment(
+      applyInput({ loopId: "loop-nostop", runId: "run-nostop", turn: 2 }),
+    );
+    await controlPlane.submitDecision(
+      "run-nostop",
+      "request_changes",
+      "try a different fix",
+    );
+    const u3 = await controlPlane.applyJudgment(
+      applyInput({ loopId: "loop-nostop", runId: "run-nostop", turn: 3 }),
+    );
+    assert.equal(u3.state, "needs_human");
+  });
 });

@@ -77,6 +77,22 @@ export interface ProposalPipelineDeps {
   evalRunner: EvalRunner;
 }
 
+/** 格式化 scorecard.applied 供提案 history 引用 (评估了什么可审计). */
+function formatApplied(applied: EvalScorecard["applied"]): string {
+  if (!applied) {
+    return "applied: none (no proposal payload evaluated)";
+  }
+  const parts = [
+    `applied: ${applied.slots.length > 0 ? applied.slots.join(", ") : "none"}`,
+  ];
+  if (applied.skipped.length > 0) {
+    parts.push(
+      `skipped: ${applied.skipped.map((s) => `${s.slot} (${s.reason})`).join(", ")}`,
+    );
+  }
+  return parts.join("; ");
+}
+
 export class ProposalPipeline {
   private readonly deps: ProposalPipelineDeps;
   /** worker 来源的元规则提案只告警一次 (worker 每 tick 都会调 advanceEligible) */
@@ -120,11 +136,13 @@ export class ProposalPipeline {
   /** 推进单个提案一档 (draft→shadow 旁路评估; shadow→regression 闸门). */
   private async advanceOne(proposal: ImprovementProposal): Promise<void> {
     if (proposal.status === "draft") {
-      // shadow 档: 旁路评估 —— 复跑 eval 集仅为 "若启用会如何" 的观察
-      // 记录, 不作为放行判据, 装配也不消费 shadow 提案 (不改装配)。
+      // shadow 档: 旁路评估 —— 复跑 eval 集并真实应用提案 payload
+      // (behavior case) 作为 "若启用会如何" 的观察记录, 不作为放行判据,
+      // 装配也不消费 shadow 提案 (不改装配)。
       const scorecard = await this.deps.evalRunner.run({
         mode: "shadow",
         proposalId: proposal.proposal_id,
+        proposal,
       });
       await this.deps.proposalStore.transitionStatus(
         proposal.proposal_id,
@@ -132,7 +150,7 @@ export class ProposalPipeline {
         {
           stage: "shadow",
           by: "worker",
-          reason: `shadow 旁路评估记录 eval/results/${scorecard.scorecard_id}.json (${scorecard.passed}/${scorecard.total} 符合预期); 不改装配`,
+          reason: `shadow 旁路评估记录 eval/results/${scorecard.scorecard_id}.json (${scorecard.passed}/${scorecard.total} 符合预期); 不改装配; ${formatApplied(scorecard.applied)}`,
         },
       );
       return;
@@ -143,6 +161,7 @@ export class ProposalPipeline {
       scorecard = await this.deps.evalRunner.run({
         mode: "regression",
         proposalId: proposal.proposal_id,
+        proposal,
       });
     } catch (error) {
       // fail-closed (元规则保护 2): eval 集缺失/损坏视为闸门不通过
@@ -160,7 +179,7 @@ export class ProposalPipeline {
         {
           stage: "regression",
           by: "worker",
-          reason: `regression 通过 (${scorecard.passed}/${scorecard.total}): scorecard eval/results/${scorecard.scorecard_id}.json`,
+          reason: `regression 通过 (${scorecard.passed}/${scorecard.total}): scorecard eval/results/${scorecard.scorecard_id}.json; ${formatApplied(scorecard.applied)}`,
         },
       );
     } else {

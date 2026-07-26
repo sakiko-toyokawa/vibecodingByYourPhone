@@ -101,3 +101,32 @@ export const JudgmentReportSchema = z.object({
   unresolved_risks: z.array(z.string()),
 });
 export type JudgmentReport = z.infer<typeof JudgmentReportSchema>;
+
+export const CollectorReportSchema = z.object({
+  collector_phase: z.literal("review"),
+  status: VerifierStatusSchema,
+  evidence_refs: z.array(z.string()),
+  unresolved_risks: z.array(z.string()),
+  recommendation: VerifierRecommendationSchema,
+  confidence: z.number().min(0).max(1),
+  requires_human: z.boolean().default(false),
+  summary: z.string(),
+});
+export type CollectorReport = z.infer<typeof CollectorReportSchema>;
+
+export const TurnHandoffSchema = z.object({
+  run_id: z.string(),
+  loop_id: z.string(),
+  turn: z.number().int().positive(),
+  workspace_ref: z.string(),
+  session_ref: z.string().nullable(),
+  judgment_ref: z.string().nullable(),
+  collector_report_ref: z.string().nullable(),
+  blocker_fingerprint: z.string().nullable(),
+  repeated_blocker_count: z.number().int().positive().nullable(),
+  evidence_refs: z.array(z.string()),
+  next_required_checks: z.array(z.string()),
+  actions_not_to_repeat: z.array(z.string()),
+  created_at: z.string().datetime(),
+});
+export type TurnHandoff = z.infer<typeof TurnHandoffSchema>;

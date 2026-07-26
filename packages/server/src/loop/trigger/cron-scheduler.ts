@@ -11,8 +11,14 @@
  * the same minute is a no-op. Missed instants after a process restart are
  * NOT caught up (phase-0 accepted trade-off, see 05 "风险与依赖").
  *
- * Concurrency: a loop whose previous run is still active is skipped
- * (same-loop runs are serial, see 04-存储约定.md 并发约定).
+ * Queue (01-架构 trigger 职责: 排队; 05 阶段 0 改动清单 "去重队列"):
+ * - 点火顺序按 `card.loop.schedule.queue` 优先级 (urgent > normal >
+ *   background, 缺省 normal), 不再按注册表顺序;
+ * - 上一个 run 仍活跃的 loop 不再直接丢弃点火: 进待触发队列 (每 loop
+ *   至多一条, 去重), 后续 tick 发现空闲即按优先级补点 —— 队列纯内存,
+ *   进程重启即丢 (与"重启不补跑"的既定取舍一致);
+ * - same-loop runs stay serial (04-存储约定.md 并发约定), 补点也只在
+ *   isRunActive 为 false 时发生。
  */
 
 import type { LoopCardStore } from "../state/loop-card-store.js";
@@ -26,10 +32,24 @@ export interface CronSchedulerDeps {
   loopCardStore: LoopCardStore;
   /** Fire a run for the loop. Must not throw; errors are the callee's. */
   onTrigger: (loopId: string, dedupeKey: string) => void;
-  /** True when the loop currently has an active run (skip this tick). */
+  /** True when the loop currently has an active run (queue this trigger). */
   isRunActive: (loopId: string) => boolean;
   /** Tick interval, defaults to 60s. Injectable for tests. */
   intervalMs?: number;
+}
+
+type QueuePriority = "urgent" | "normal" | "background";
+
+const PRIORITY_ORDER: Record<QueuePriority, number> = {
+  urgent: 0,
+  normal: 1,
+  background: 2,
+};
+
+interface PendingTrigger {
+  loopId: string;
+  dedupeKey: string;
+  priority: QueuePriority;
 }
 
 /** Minute-precision stamp used in dedupe keys (local time). */
@@ -53,6 +73,8 @@ export class CronScheduler {
   /** Cache parsed schedules per loop id; loops rarely change in phase 0. */
   private parsedCache = new Map<string, CronSchedule | null>();
   private warnedLoops = new Set<string>();
+  /** 待触发队列 (去重: 每 loop 至多一条); 纯内存, 重启即丢。 */
+  private pending: PendingTrigger[] = [];
 
   constructor(deps: CronSchedulerDeps) {
     this.deps = deps;
@@ -94,9 +116,20 @@ export class CronScheduler {
     }
 
     const fired: string[] = [];
+    // 本 tick 已点火的 loop: 待触发补点与新到期在同一 tick 不重复点火
+    // (一个 tick 一个 loop 至多一次; 新到期的下一分钟照常评估)。
+    const firedLoops = new Set<string>();
+    // 1. 先补点待触发队列里已空闲的 loop (优先级 + 先来后到)。
+    this.drainPending(fired, firedLoops);
+
+    // 2. 收集本分钟到期的 loop, 按 queue 优先级排序后点火。
+    const due: PendingTrigger[] = [];
     for (const stored of this.deps.loopCardStore.listLoops()) {
       const trigger = stored.card.loop.trigger;
       if (trigger.type !== "schedule" || !trigger.cron) {
+        continue;
+      }
+      if (firedLoops.has(stored.id)) {
         continue;
       }
 
@@ -109,15 +142,59 @@ export class CronScheduler {
       if (this.firedKeys.has(dedupeKey)) {
         continue; // idempotent: same firing instant ignites only once
       }
-      if (this.deps.isRunActive(stored.id)) {
-        continue; // same-loop runs are serial
+      due.push({
+        loopId: stored.id,
+        dedupeKey,
+        priority: stored.card.loop.schedule?.queue ?? "normal",
+      });
+    }
+    due.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
+    for (const entry of due) {
+      if (this.deps.isRunActive(entry.loopId)) {
+        this.enqueue(entry); // 忙时不丢弃, 进待触发队列 (去重)
+        continue;
       }
-
-      this.firedKeys.add(dedupeKey);
-      fired.push(dedupeKey);
-      this.deps.onTrigger(stored.id, dedupeKey);
+      this.fire(entry, fired, firedLoops);
     }
     return fired;
+  }
+
+  /** 补点待触发队列里已空闲的 loop (优先级排序, 同优先级按入队先后)。 */
+  private drainPending(fired: string[], firedLoops: Set<string>): void {
+    if (this.pending.length === 0) {
+      return;
+    }
+    this.pending.sort(
+      (a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority],
+    );
+    const remaining: PendingTrigger[] = [];
+    for (const entry of this.pending) {
+      if (this.deps.isRunActive(entry.loopId)) {
+        remaining.push(entry);
+        continue;
+      }
+      this.fire(entry, fired, firedLoops);
+    }
+    this.pending = remaining;
+  }
+
+  private enqueue(entry: PendingTrigger): void {
+    // 去重队列: 同一 loop 至多一条待触发 (保留最早的到期时刻)
+    if (this.pending.some((p) => p.loopId === entry.loopId)) {
+      return;
+    }
+    this.pending.push(entry);
+  }
+
+  private fire(
+    entry: PendingTrigger,
+    fired: string[],
+    firedLoops: Set<string>,
+  ): void {
+    this.firedKeys.add(entry.dedupeKey);
+    firedLoops.add(entry.loopId);
+    fired.push(entry.dedupeKey);
+    this.deps.onTrigger(entry.loopId, entry.dedupeKey);
   }
 
   private parseCached(loopId: string, cron: string): CronSchedule | null {

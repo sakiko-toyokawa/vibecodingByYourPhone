@@ -151,6 +151,24 @@ test("shadow 档记录 '若启用会如何' 的评估记录 (mode=shadow scoreca
   });
 });
 
+test("带 payload 的提案: 管线 history 记录真实应用的槽位 (#5)", async () => {
+  await withPipeline(async ({ store, pipeline }) => {
+    await store.create(
+      makeProposal("prop-payload", {
+        payload: { memory_packet_template: "verify before reporting" },
+      }),
+    );
+    await pipeline.advanceEligible(); // draft → shadow
+    const shadowReason = store.getHistory("prop-payload")[0]?.reason ?? "";
+    assert.match(shadowReason, /applied: memory_packet_template/);
+
+    await pipeline.advanceEligible(); // shadow → canary (regression 档)
+    const regressionReason = store.getHistory("prop-payload")[1]?.reason ?? "";
+    assert.match(regressionReason, /regression 通过/);
+    assert.match(regressionReason, /applied: memory_packet_template/);
+  });
+});
+
 test("regression 失败 → rolled_back, scorecard 引用与失败明细写 history", async () => {
   await withPipeline(async ({ dataDir, store, pipeline }) => {
     await store.create(makeProposal("prop-fail"));

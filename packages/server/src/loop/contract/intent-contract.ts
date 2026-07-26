@@ -5,10 +5,10 @@
  * Builds a v1 IntentContract from a LoopCard. Budget validation (phase 2):
  * - stop_rules → budget 投影：max_turns / max_time_minutes / max_retries
  *   照抄 LoopCard.stop_rules（预算与停止规则.md: stop_rules 中的同名字段是
- *   budget 向执行侧的投影，不得另立数值）。LoopCardSchema 已强制 stop_rules
- *   必填并带 max_retries < max_turns 的 refine，contract 层再用共享
- *   BudgetSchema 复核（缺省 / 非法值在 API 层已被 400 拒绝，这里是构造期
- *   兜底，违例抛 ContractValidationError）。
+ *   budget 向执行侧的投影，不得另立数值）。contract 层用共享 BudgetSchema
+ *   复核（缺省 / 非法值在 API 层已被 400 拒绝，这里是构造期兜底，违例抛
+ *   ContractValidationError）。max_retries >= max_turns 合法（先触者停
+ *   语义，06 偏差 #31——曾经的严格小于 refine 是私加约束，已移除）。
  * - max_turns 必须 >= 1（含首轮——首轮都跑不了的合约无意义）、
  *   max_retries 必须 >= 0、max_time_minutes 必须 > 0。
  * - max_tokens：LoopCard 没有 token 预算来源，写 0 = "不跟踪"（不参与
@@ -59,7 +59,8 @@ export function buildBudgetLimits(card: LoopCard): BudgetLimits {
       `Loop '${card.loop.id}' stop_rules.max_time_minutes must be > 0`,
     );
   }
-  // 复核 LoopCard refine（max_retries < max_turns）；used_* 缺省 0。
+  // used_* 缺省 0; max_retries >= max_turns 合法 (先触者停语义,
+  // 06 偏差 #31 —— 不再有严格小于 refine)。
   // max_tokens = 0 = 不跟踪（LoopCard 无 token 预算来源，明确默认值）。
   const budget = BudgetSchema.parse({
     max_tokens: 0,
@@ -131,5 +132,17 @@ export function buildIntentContract(
       : ["只读扫描完成并产出报告文本", "工作区未产生任何写改动"],
     constraints,
     budget: buildBudgetLimits(card),
+    // 02 §2 stop_rules 投影: card 的 stop_on_repeated_failure →
+    // repetition.max_same_failure (control-plane 按同一阻断指纹计数消费;
+    // safety/ambiguity 段机制未建, 不投影)。
+    ...(card.loop.stop_rules.stop_on_repeated_failure !== undefined
+      ? {
+          stop_rules: {
+            repetition: {
+              max_same_failure: card.loop.stop_rules.stop_on_repeated_failure,
+            },
+          },
+        }
+      : {}),
   });
 }

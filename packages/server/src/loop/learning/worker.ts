@@ -45,6 +45,8 @@ import type {
   ProposalType,
 } from "@yep-anywhere/shared";
 import { JudgmentReportSchema } from "@yep-anywhere/shared";
+import type { RunStateStore } from "../control-plane/run-state-store.js";
+import { runLoopStorageCleanup } from "../state/cleanup.js";
 import type { FailurePatternStore } from "../state/failure-pattern-store.js";
 import type { LearningEventStore } from "../state/learning-event-store.js";
 import type { ProposalStore } from "../state/proposal-store.js";
@@ -118,6 +120,11 @@ export interface LearningWorkerDeps {
    * approved/published 无自动路径 (人工闸门在 routes/proposals.ts)。
    */
   pipeline?: ProposalPipeline;
+  /**
+   * 04 容量与清理: 顺带清理需要扫描活跃 run 状态 (可选; 缺席时不做
+   * 清理, 保持 phase-3 测试挂载兼容)。
+   */
+  runStateStore?: RunStateStore;
 }
 
 export interface LearningWorkerConfig {
@@ -129,6 +136,8 @@ export interface LearningWorkerConfig {
   minDistinctRuns?: number;
   /** 可提案的出现次数阈值 (默认 3 —— 提案消耗发布管线资源, 需更强证据) */
   proposalMinOccurrences?: number;
+  /** 存储清理的节流间隔 (默认 1h; 清理涉及全量账本扫描, 不随 tick 高频跑) */
+  cleanupIntervalMs?: number;
   /** 时钟注入 (测试用) */
   now?: () => Date;
 }
@@ -167,6 +176,8 @@ export class LearningWorker {
   private readonly initPromise: Promise<void>;
   private timer?: NodeJS.Timeout;
   private ticking = false;
+  /** 上次存储清理时间 (epoch ms; 0 = 本进程未跑过, 首个 tick 即跑) */
+  private lastCleanupAt = 0;
 
   constructor(deps: LearningWorkerDeps, config: LearningWorkerConfig = {}) {
     this.deps = deps;
@@ -175,6 +186,7 @@ export class LearningWorker {
       patternMinOccurrences: config.patternMinOccurrences ?? 2,
       minDistinctRuns: config.minDistinctRuns ?? 1,
       proposalMinOccurrences: config.proposalMinOccurrences ?? 3,
+      cleanupIntervalMs: config.cleanupIntervalMs ?? 60 * 60 * 1000,
     };
     this.now = config.now ?? (() => new Date());
     // 存储加载是容错设计 (损坏即备份并从空开始); 这里再兜一层,
@@ -252,6 +264,11 @@ export class LearningWorker {
       // 发布管线自动推进 (draft→shadow→canary; 元规则保护与 fail-closed
       // regression 都在 pipeline 内)。异常由外层 tick catch 隔离。
       await this.deps.pipeline?.advanceEligible();
+      // failure_pattern 生命周期收口 (02 §8.3 open→resolved): 来源提案
+      // 到达 published 即该模式已被处置。
+      await this.resolvePublishedPatterns();
+      // 04 容量与清理: 节流顺带执行 (worker 是唯一的定期后台任务)。
+      await this.maybeRunCleanup();
       this.health.consecutiveFailures = 0;
       this.health.lastTickFinishedAt = this.now().toISOString();
     } catch (error) {
@@ -266,6 +283,58 @@ export class LearningWorker {
         error instanceof Error ? error.message : String(error);
     } finally {
       this.ticking = false;
+    }
+  }
+
+  /**
+   * failure_pattern 生命周期收口 (02 §8.3 status open→resolved): 来源
+   * 提案走完管线到达 published 即视为该模式已被处置 —— 每轮 tick 把
+   * published 提案的 source_patterns 标记为 resolved (幂等: 已
+   * resolved 的跳过不写)。回滚不自动重开: 模式复发会按签名再次入账
+   * (occurrence_count 继续累计), 由提案机制再处置。
+   */
+  private async resolvePublishedPatterns(): Promise<void> {
+    for (const proposal of this.deps.proposalStore.listProposals("published")) {
+      for (const patternId of proposal.source_patterns) {
+        const pattern = this.deps.failurePatternStore.get(patternId);
+        if (pattern && pattern.status === "open") {
+          await this.deps.failurePatternStore.upsert({
+            ...pattern,
+            status: "resolved",
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * 04 容量与清理: 按 cleanupIntervalMs 节流顺带执行 (账本 20 轮压缩、
+   * artifacts 随账本裁剪、events.jsonl 30 天截断; 活跃 run 全程保护)。
+   * runStateStore 未接线时跳过 (phase-3 测试挂载兼容)。
+   */
+  private async maybeRunCleanup(): Promise<void> {
+    if (!this.deps.runStateStore) {
+      return;
+    }
+    const nowMs = this.now().getTime();
+    if (nowMs - this.lastCleanupAt < this.config.cleanupIntervalMs) {
+      return;
+    }
+    this.lastCleanupAt = nowMs;
+    const result = await runLoopStorageCleanup({
+      runLedgerStore: this.deps.runLedgerStore,
+      learningEventStore: this.deps.learningEventStore,
+      runStateStore: this.deps.runStateStore,
+      now: this.now,
+    });
+    if (
+      result.ledgersCompressed > 0 ||
+      result.artifactFilesDeleted > 0 ||
+      result.eventsTruncated > 0
+    ) {
+      console.log(
+        `[LearningWorker] storage cleanup: ${result.ledgersCompressed} ledgers compressed, ${result.artifactFilesDeleted} artifact files deleted, ${result.eventsTruncated} events truncated`,
+      );
     }
   }
 
@@ -434,7 +503,21 @@ export class LearningWorker {
     }
   }
 
-  /** 模板化提案 (归因 → 类型查 ATTRIBUTION_TO_PROPOSAL 映射表). */
+  /** 模板化提案 (归因 → 类型查 ATTRIBUTION_TO_PROPOSAL 映射表).
+   *
+   *  payload 生成口径 (05 阶段 3 验收 5: 自动路径的提案走完管线要对装配
+   *  有真实影响) —— 只给有真实消费者的槽位生成机器可读内容:
+   *  - memory_packet_template_proposal → memory_packet_template (装配层
+   *    注入 prompt, proposal-effects.ts → runtime-input.ts, 真消费者);
+   *  - runtime_blackbox_error → runtime_adapter_proposal 带
+   *    adapter_policy.timeout_seconds (run-service 轮次超时, 真消费者;
+   *    模板值是保守起点, 发布前经管线 + 人工闸门);
+   *  - tool_error 的 runtime_adapter_proposal 不带 payload: 工具配置因
+   *    案例而异, 无法诚实模板化;
+   *  - policy_profile_proposal 不带 payload: 策略档名不能由 worker 安全
+   *    杜撰 (不存在的档名会让 resolvePolicyProfile 落空), 由人工在创建/
+   *    批准路径补 payload (POST /api/proposals)。
+   */
   private buildProposal(
     proposalId: string,
     pattern: FailurePattern,
@@ -444,6 +527,18 @@ export class LearningWorker {
     const target = pattern.affected_loop_specs[0]
       ? `${pattern.affected_loop_specs[0]}.${mapping.targetHint}`
       : mapping.targetHint;
+    const payload =
+      mapping.type === "memory_packet_template_proposal"
+        ? {
+            memory_packet_template: `Known recurring failure pattern (${pattern.pattern_id}, type=${pattern.type}, seen ${pattern.occurrence_count}x): ${pattern.summary} (affected loops: ${loopScope}). Adjust your approach to avoid this failure mode.`,
+          }
+        : pattern.type === "runtime_blackbox_error"
+          ? {
+              // 反复 runtime 黑盒失败 (超时类) → 给轮次一个显式超时下限,
+              // 由管线验证、人工批准后生效 (10min 保守起点)
+              adapter_policy: { timeout_seconds: 600 },
+            }
+          : undefined;
     return {
       proposal_id: proposalId,
       type: mapping.type,
@@ -463,6 +558,7 @@ export class LearningWorker {
         `确认 ${pattern.type} 不再复发后进入 regression/canary`,
       status: "draft",
       created_by: "worker",
+      ...(payload ? { payload } : {}),
       created_at: this.now().toISOString(),
     };
   }

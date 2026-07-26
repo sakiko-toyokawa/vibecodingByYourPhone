@@ -23,6 +23,7 @@ import {
   type RunLedgerEntry,
   RunLedgerEntrySchema,
 } from "@yep-anywhere/shared";
+import { UriResolutionError, resolveUri } from "./uri.js";
 
 /** run_id / artifact file names must stay inside their directory. */
 const SAFE_NAME = /^[A-Za-z0-9._-]+$/;
@@ -257,6 +258,98 @@ export class RunLedgerStore {
       }
       throw error;
     }
+  }
+
+  /**
+   * 统一 URI 读取 (04 L113: resolveUri 统一在 loop/state/, 引用不再是
+   * 只写不读)。artifact:// 返回文件内容 (缺失 undefined); ledger:// 返
+   * 回 jsonl 原文; ledger://decision-<run_id> 返回决策条目的 jsonl。
+   * 非文件 scheme (intent/policy/workspace) 抛 UriResolutionError。
+   */
+  async readUri(uri: string): Promise<string | undefined> {
+    const resolved = resolveUri(uri, {
+      dataDir: path.dirname(this.loopsDir),
+    });
+    if (resolved.kind === "artifact") {
+      return this.readArtifact(resolved.runId, resolved.file);
+    }
+    if (resolved.kind === "ledger") {
+      if (resolved.decisionsOnly) {
+        const entries = await this.readDecisionEntries(resolved.runId);
+        return entries.length > 0
+          ? `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`
+          : undefined;
+      }
+      try {
+        return await fs.readFile(resolved.filePath, "utf-8");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          return undefined;
+        }
+        throw error;
+      }
+    }
+    throw new UriResolutionError(
+      `loop URI scheme '${resolved.kind}' is not file-resolvable`,
+    );
+  }
+
+  /**
+   * 04 容量与清理: 把过期 run 的账本压缩为仅 run_ledger_entry 行 (决策
+   * 明细剔除)。压缩与追加共用 per-file 串行链, 不与在飞写入交错。
+   * 返回是否发生了压缩 (无文件 / 本就纯净时 false)。
+   */
+  async compressLedgerToRunEntries(runId: string): Promise<boolean> {
+    this.assertSafeName(runId, "run_id");
+    const filePath = path.join(this.runsDir, `${runId}.jsonl`);
+    const previous = this.appendChains.get(runId) ?? Promise.resolve();
+    let compressed = false;
+    const next = previous.then(async () => {
+      let content: string;
+      try {
+        content = await fs.readFile(filePath, "utf-8");
+      } catch {
+        return; // ENOENT — 无可压缩
+      }
+      const kept = content
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .filter((line) => {
+          try {
+            return (
+              (JSON.parse(line) as { type?: unknown }).type ===
+              "run_ledger_entry"
+            );
+          } catch {
+            return false; // 坏行随压缩剔除
+          }
+        });
+      if (kept.length === 0) {
+        return;
+      }
+      const current = content.split("\n").filter((l) => l.trim().length > 0);
+      if (kept.length === current.length) {
+        return; // 本就纯净
+      }
+      const tmpPath = `${filePath}.tmp`;
+      await fs.writeFile(tmpPath, `${kept.join("\n")}\n`, "utf-8");
+      await fs.rename(tmpPath, filePath);
+      compressed = true;
+    });
+    this.appendChains.set(
+      runId,
+      next.catch((error) => {
+        console.error(`[RunLedgerStore] compress failed for ${runId}:`, error);
+      }),
+    );
+    await next;
+    return compressed;
+  }
+
+  /** Artifacts directory of a run (cleanup/reader use; name-safe). */
+  artifactsDirFor(runId: string): string {
+    this.assertSafeName(runId, "run_id");
+    return path.join(this.artifactsDir, runId);
   }
 
   private assertSafeName(name: string, what: string): void {

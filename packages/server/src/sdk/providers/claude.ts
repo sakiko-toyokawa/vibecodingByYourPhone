@@ -526,7 +526,7 @@ export class ClaudeProvider implements AgentProvider {
           thinking: options.thinking,
           effort: options.effort,
           // Filter env to exclude npm_*, yep-anywhere specific, and other irrelevant vars
-          env: this.getEnv(),
+          env: { ...this.getEnv(), ...options.env },
           // Remote execution via SSH
           spawnClaudeCodeProcess,
         },

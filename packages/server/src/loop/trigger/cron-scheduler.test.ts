@@ -130,3 +130,74 @@ test("multiple loops fire independently in one tick", () => {
   scheduler.tick(at(30));
   assert.deepEqual(fired.sort(), ["a", "b"]);
 });
+
+function makeQueuedCard(
+  id: string,
+  cron: string,
+  queue: "urgent" | "normal" | "background",
+): LoopCard {
+  const card = makeCard(id, cron);
+  card.loop.schedule = { queue };
+  return card;
+}
+
+test("firing order follows schedule.queue priority (urgent > normal > background)", () => {
+  const fired: string[] = [];
+  const scheduler = new CronScheduler({
+    loopCardStore: fakeStore([
+      makeQueuedCard("bg", "* * * * *", "background"),
+      makeQueuedCard("urg", "* * * * *", "urgent"),
+      makeCard("norm", "* * * * *"), // 缺省 = normal
+    ]),
+    onTrigger: (loopId) => fired.push(loopId),
+    isRunActive: () => false,
+  });
+  scheduler.tick(at(30));
+  assert.deepEqual(fired, ["urg", "norm", "bg"]);
+});
+
+test("busy loop is queued (not dropped) and fired when free, deduped", () => {
+  const fired: string[] = [];
+  let active = true;
+  const scheduler = new CronScheduler({
+    // cron 只在 :30/:31 到期: :32 补点说明走的是队列而不是重新评估 cron
+    loopCardStore: fakeStore([makeCard("busy", "30,31 14 * * *")]),
+    onTrigger: (loopId) => fired.push(loopId),
+    isRunActive: () => active,
+  });
+
+  // 忙: 两个到期分钟都进队列 (去重, 只留最早一条)
+  assert.deepEqual(scheduler.tick(at(30)), []);
+  assert.deepEqual(scheduler.tick(at(31)), []);
+  assert.deepEqual(fired, []);
+
+  // 空闲后: 下一个 tick 补点 (cron 在 :32 已不匹配 —— 队列的意义就是
+  // 忙时不丢触发)
+  active = false;
+  const drained = scheduler.tick(at(32));
+  assert.equal(drained.length, 1);
+  assert.deepEqual(fired, ["busy"]);
+  // 补点只发生一次
+  assert.deepEqual(scheduler.tick(at(33)), []);
+  assert.equal(fired.length, 1);
+});
+
+test("pending queue drains in priority order", () => {
+  const fired: string[] = [];
+  const active = new Set(["bg", "urg", "norm"]);
+  const scheduler = new CronScheduler({
+    loopCardStore: fakeStore([
+      makeQueuedCard("bg", "* * * * *", "background"),
+      makeQueuedCard("urg", "* * * * *", "urgent"),
+      makeCard("norm", "* * * * *"),
+    ]),
+    onTrigger: (loopId) => fired.push(loopId),
+    isRunActive: (loopId) => active.has(loopId),
+  });
+  scheduler.tick(at(30)); // 全部进队列
+  assert.deepEqual(fired, []);
+
+  active.clear();
+  scheduler.tick(at(31));
+  assert.deepEqual(fired, ["urg", "norm", "bg"]);
+});

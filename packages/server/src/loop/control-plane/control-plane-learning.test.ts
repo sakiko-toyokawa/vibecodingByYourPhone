@@ -106,7 +106,7 @@ test("终态 complete 发射 learning_event（只发不等，落 events.jsonl）
   });
 });
 
-test("非终态 retry 不发射 learning_event", async () => {
+test("retry 决策带 verification_error 归因 → 发射 learning_event (#21)", async () => {
   await withFixture(async ({ controlPlane, eventStore }) => {
     const result = await controlPlane.applyJudgment(
       applyInput({ judgment: retryableJudgment() }),
@@ -114,11 +114,16 @@ test("非终态 retry 不发射 learning_event", async () => {
     assert.equal(result.state, "retry");
     await controlPlane.settleLearningEvents();
     const { events } = await eventStore.readEvents(0);
-    assert.equal(events.length, 0);
+    // 验证失败是真实学习信号: retry 决策带 verification_error 归因,
+    // 按"终态或带 failure_tags 的决策"条件发射 (worker 按 run 去重,
+    // 同一 run 的重试失败只计一次发作)
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.decision, "retry");
+    assert.deepEqual(events[0]?.failure_tags, ["verification_error"]);
   });
 });
 
-test("needs_human 不发射；人工 reject → failed 后发射", async () => {
+test("needs_human 带验证失败归因发射; 人工 reject → failed 后再发射", async () => {
   await withFixture(async ({ controlPlane, eventStore }) => {
     const applied = await controlPlane.applyJudgment(
       applyInput({
@@ -127,13 +132,16 @@ test("needs_human 不发射；人工 reject → failed 后发射", async () => {
     );
     assert.equal(applied.state, "needs_human");
     await controlPlane.settleLearningEvents();
-    assert.equal((await eventStore.readEvents(0)).events.length, 0);
+    const first = await eventStore.readEvents(0);
+    assert.equal(first.events.length, 1);
+    assert.equal(first.events[0]?.decision, "needs_human");
+    assert.deepEqual(first.events[0]?.failure_tags, ["verification_error"]);
 
     await controlPlane.submitDecision("run-1", "reject");
     await controlPlane.settleLearningEvents();
     const { events } = await eventStore.readEvents(0);
-    assert.equal(events.length, 1);
-    assert.equal(events[0]?.decision, "failed");
+    assert.equal(events.length, 2);
+    assert.equal(events[1]?.decision, "failed");
   });
 });
 
@@ -222,4 +230,40 @@ test("发射失败（EACCES）不影响 run 推进：决策照常落账、状态
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }
+});
+
+test("失败归因: adapter/策略拦截/验证失败信号同时挂载且去重 (#21)", async () => {
+  await withFixture(async ({ controlPlane }) => {
+    const result = await controlPlane.applyJudgment(
+      applyInput({
+        executionOk: false,
+        judgment: retryableJudgment(),
+        adapterFailure: {
+          code: "permission_denied",
+          failureTag: "policy_error",
+          message: "permission denied by runtime",
+        },
+        policyEscalation: {
+          action: "merge",
+          reason: "hard gate 'merge' intercepted",
+          policyRef: "policy://loop_bypass",
+        },
+      }),
+    );
+    assert.equal(result.state, "failed");
+    // policy_error 来自两处 (adapter permission_denied + 硬闸门拦截) 去重;
+    // 验证失败 overall=failed → verification_error
+    assert.deepEqual(result.entry.failure_tags, [
+      "policy_error",
+      "verification_error",
+    ]);
+  });
+});
+
+test("失败归因: passed judgment 且无其他信号 → 无 failure_tags (#21)", async () => {
+  await withFixture(async ({ controlPlane }) => {
+    const result = await controlPlane.applyJudgment(applyInput());
+    assert.equal(result.state, "complete");
+    assert.equal(result.entry.failure_tags, undefined);
+  });
 });

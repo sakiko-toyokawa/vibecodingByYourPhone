@@ -35,6 +35,26 @@ export interface PolicyEscalation {
   policyRef: string;
 }
 
+/**
+ * 一次权限裁决事件（02 §5 permission_event_refs 的证据载体）：
+ * 每次钩子裁决都记录一条（allow→bypass_used / hard_gate→policy_blocked /
+ * deny→denied），turn 结束后由 run-service 落成 permission-events
+ * artifact 并引用进 VerificationInputBundle——高风险任务的验证输入必须
+ * 包含权限事件，不再是空数组。
+ */
+export interface PermissionEvent {
+  /** 本 turn 内的事件序号（与审计决策条目同序）。 */
+  seq: number;
+  tool: string;
+  decision: "bypass_used" | "policy_blocked" | "denied";
+  action: string;
+  risk: string;
+  /** 关键参数摘要（与审计账本同一来源）。 */
+  summary: string;
+  reason: string;
+  policy_ref: string;
+}
+
 export interface LoopToolApprovalHookDeps {
   profile: PolicyProfile;
   runId: string;
@@ -44,6 +64,8 @@ export interface LoopToolApprovalHookDeps {
   store: RunLedgerStore;
   /** 升级收集器（按 turn 重置）；hard_gate 裁决会 push 一条。 */
   escalations: PolicyEscalation[];
+  /** 权限事件收集器（按 turn 重置）；每次裁决（含 allow/deny）都 push 一条。 */
+  permissionEvents: PermissionEvent[];
 }
 
 const HARD_GATE_DENY_HINT =
@@ -54,6 +76,25 @@ export function createLoopToolApprovalHook(
 ): (toolName: string, input: unknown) => Promise<ToolApprovalResult> {
   const policyRef = `policy://${deps.profile.policy_profile}`;
   let auditSeq = 0;
+  let eventSeq = 0;
+
+  const recordEvent = (
+    verdict: PolicyVerdict,
+    toolName: string,
+    decision: PermissionEvent["decision"],
+  ): void => {
+    eventSeq += 1;
+    deps.permissionEvents.push({
+      seq: eventSeq,
+      tool: toolName,
+      decision,
+      action: verdict.classification.action,
+      risk: verdict.classification.risk,
+      summary: verdict.classification.summary,
+      reason: verdict.reason,
+      policy_ref: policyRef,
+    });
+  };
 
   const appendAudit = async (
     verdict: PolicyVerdict,
@@ -91,15 +132,18 @@ export function createLoopToolApprovalHook(
             `[policy] audit append failed for run ${deps.runId}; denying ${toolName} (fail-closed):`,
             error,
           );
+          recordEvent(verdict, toolName, "denied");
           return {
             behavior: "deny",
             message:
               "policy audit ledger write failed; self-approval is not allowed without audit (fail-closed)",
           };
         }
+        recordEvent(verdict, toolName, "bypass_used");
         return { behavior: "allow" };
 
       case "hard_gate":
+        recordEvent(verdict, toolName, "policy_blocked");
         deps.escalations.push({
           action:
             verdict.classification.hardGate ?? verdict.classification.action,
@@ -122,6 +166,7 @@ export function createLoopToolApprovalHook(
         };
 
       case "deny":
+        recordEvent(verdict, toolName, "denied");
         console.warn(
           `[policy] run ${deps.runId}: denied ${toolName} — ${verdict.reason}`,
         );

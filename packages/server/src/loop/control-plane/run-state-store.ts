@@ -36,6 +36,9 @@ function defaultDataDir(): string {
 
 export class RunStateStore {
   private readonly stateDir: string;
+  /** Per-file write serialization (04: 每次状态机迁移触发串行写回,
+   *  applyJudgment 与 pause/resume 并发时不得读-改-写交错)。 */
+  private writeChains = new Map<string, Promise<void>>();
 
   constructor(options: RunStateStoreOptions = {}) {
     this.stateDir = path.join(
@@ -45,7 +48,9 @@ export class RunStateStore {
     );
   }
 
-  /** Load the current run_state for a loop; null when absent or corrupt. */
+  /** Load the current run_state for a loop; null when absent or corrupt
+   *  (corrupt files are backed up to .corrupt-<ts> first — 04 整文件写回
+   *  统一要求保留坏文件, 状态静默丢失必须可追查)。 */
   async load(loopId: string): Promise<RunStateRecord | null> {
     this.assertSafeName(loopId);
     let content: string;
@@ -61,26 +66,50 @@ export class RunStateStore {
       return RunStateRecordSchema.parse(JSON.parse(content));
     } catch (error) {
       console.warn(
-        `[RunStateStore] state/${loopId}.json failed validation; treating as absent:`,
+        `[RunStateStore] state/${loopId}.json failed validation; backing up and treating as absent:`,
         error,
       );
+      await this.backupCorrupt(loopId);
       return null;
     }
   }
 
-  /** Persist a run_state snapshot (validated, atomic temp-file + rename). */
+  /** Persist a run_state snapshot (validated, atomic temp-file + rename,
+   *  serialized per file through a promise chain). */
   async save(loopId: string, state: RunStateRecord): Promise<void> {
     this.assertSafeName(loopId);
     const validated = RunStateRecordSchema.parse(state);
-    await fs.mkdir(this.stateDir, { recursive: true });
-    const filePath = this.filePath(loopId);
-    const tmpPath = `${filePath}.tmp`;
-    await fs.writeFile(
-      tmpPath,
-      `${JSON.stringify(validated, null, 2)}\n`,
-      "utf-8",
+    const previous = this.writeChains.get(loopId) ?? Promise.resolve();
+    const next = previous.then(async () => {
+      await fs.mkdir(this.stateDir, { recursive: true });
+      const filePath = this.filePath(loopId);
+      const tmpPath = `${filePath}.tmp`;
+      await fs.writeFile(
+        tmpPath,
+        `${JSON.stringify(validated, null, 2)}\n`,
+        "utf-8",
+      );
+      await fs.rename(tmpPath, filePath);
+    });
+    this.writeChains.set(
+      loopId,
+      next.catch((error) => {
+        console.error(`[RunStateStore] save failed for ${loopId}:`, error);
+      }),
     );
-    await fs.rename(tmpPath, filePath);
+    return next;
+  }
+
+  /** Move an invalid state file aside so the bad content is preserved. */
+  private async backupCorrupt(loopId: string): Promise<void> {
+    try {
+      await fs.rename(
+        this.filePath(loopId),
+        `${this.filePath(loopId)}.corrupt-${Date.now()}`,
+      );
+    } catch {
+      // Best effort — the state already reads as absent either way
+    }
   }
 
   /** All stored run_state snapshots (corrupt files are skipped). */

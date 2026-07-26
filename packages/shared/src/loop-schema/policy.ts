@@ -94,6 +94,8 @@ export const PolicyProfileSchema = z.object({
   hard_gates: z.array(HardGateActionSchema),
   // approval_mode == "bypass" 时的自批准允许范围；缺省视为全允许
   bypass_scope: BypassScopeSchema.optional(),
+  // 【无消费者·已挂账 06 偏差 #27】02 §3 permission_bridge_ref 段未实现,
+  // 该子结构既无生产者也无消费者; 实现 native_invocation 段时回填。
   permission_bridge: z
     .object({
       adapter_profile: z.string().optional(),

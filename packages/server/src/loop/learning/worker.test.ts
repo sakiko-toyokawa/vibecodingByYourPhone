@@ -249,9 +249,41 @@ test("提案: occurrence >= 3 的 open pattern 生成模板化提案 (归因→�
       assert.deepEqual(proposal.source_patterns, [pattern.pattern_id]);
       assert.equal(proposal.status, "draft");
       assert.equal(proposal.created_by, "worker");
+      // runtime_blackbox_error (超时类) → 带真实可消费的 adapter_policy
+      // 轮次超时 (#13: run-service watchProcess 是真消费者)
+      assert.deepEqual(proposal.payload, {
+        adapter_policy: { timeout_seconds: 600 },
+      });
       assert.ok(proposal.summary.includes(pattern.pattern_id));
       assert.ok(proposal.expected_effect.length > 0);
       assert.ok(proposal.validation_plan.length > 0);
+    },
+  );
+});
+
+test("提案 payload: memory_packet_template_proposal 携带可装配的模板文本 (05 阶段 3 验收 5)", async () => {
+  await withWorker(
+    async ({ eventStore, patternStore, proposalStore, worker }) => {
+      for (const runId of ["run-1", "run-2", "run-3"]) {
+        await eventStore.appendEvent(
+          makeEvent({
+            event_id: `e-${runId}`,
+            run_id: runId,
+            failure_tags: ["context_error"],
+          }),
+        );
+      }
+      await worker.tick();
+      const pattern = only(patternStore.list());
+
+      const proposalId = only(proposalStore.list()).proposal_id;
+      const proposal = proposalStore.get(proposalId);
+      assert.ok(proposal);
+      assert.equal(proposal.type, "memory_packet_template_proposal");
+      const template = proposal.payload?.memory_packet_template;
+      assert.ok(template, "memory packet template payload generated");
+      assert.ok(template.includes(pattern.pattern_id));
+      assert.ok(template.includes("context_error"));
     },
   );
 });
@@ -341,4 +373,59 @@ test("毒行: 损坏行被跳过不阻塞, cursor 推进越过毒行", async () 
     assert.equal(pattern.occurrence_count, 2);
     assert.equal(await eventStore.readCursor(), 3); // 含毒行共 3 行
   });
+});
+
+test("生命周期收口: 来源提案 published 后 pattern 标记 resolved (02 §8.3)", async () => {
+  await withWorker(
+    async ({ eventStore, patternStore, proposalStore, worker }) => {
+      // 两次同类失败 → pattern (open)
+      await eventStore.appendEvent(
+        makeEvent({ event_id: "e1", run_id: "run-1" }),
+      );
+      await eventStore.appendEvent(
+        makeEvent({ event_id: "e2", run_id: "run-2" }),
+      );
+      await worker.tick();
+      const pattern = only(patternStore.list());
+      assert.equal(pattern.status, "open");
+
+      // 来源提案走完管线到达 published
+      await proposalStore.create({
+        proposal_id: "prop-resolve",
+        type: "memory_packet_template_proposal",
+        source_patterns: [pattern.pattern_id],
+        summary: "s",
+        target: "loop-1.memory_packet_template",
+        expected_effect: "e",
+        risk: "low",
+        validation_plan: "v",
+        status: "draft",
+        created_by: "human",
+        created_at: "2026-07-23T12:00:00.000Z",
+      });
+      await proposalStore.transitionStatus("prop-resolve", "shadow", {
+        stage: "shadow",
+        by: "worker",
+      });
+      await proposalStore.transitionStatus("prop-resolve", "canary", {
+        stage: "regression",
+        by: "worker",
+      });
+      await proposalStore.transitionStatus("prop-resolve", "approved", {
+        by: "human",
+      });
+      await proposalStore.transitionStatus("prop-resolve", "published", {
+        stage: "publish",
+        by: "human",
+      });
+
+      await worker.tick();
+      assert.equal(patternStore.get(pattern.pattern_id)?.status, "resolved");
+
+      // 幂等: 再 tick 不重复写 (last_seen_at 不变)
+      const before = patternStore.get(pattern.pattern_id)?.last_seen_at;
+      await worker.tick();
+      assert.equal(patternStore.get(pattern.pattern_id)?.last_seen_at, before);
+    },
+  );
 });

@@ -15,6 +15,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { LoopCard } from "@yep-anywhere/shared";
+import { LoopCardSchema } from "@yep-anywhere/shared";
 
 export interface StoredLoop {
   /** Loop id, taken from card.loop.id (LoopCard carries its own id) */
@@ -84,7 +85,17 @@ export class LoopCardStore {
 
       // Validate and migrate if needed
       if (parsed.version === CURRENT_VERSION) {
-        this.state = { version: CURRENT_VERSION, loops: parsed.loops ?? {} };
+        // 02: 字段 schema 以 zod 为权威 —— 逐条 LoopCardSchema 校验,
+        // 结构非法的条目污染整文件 (与 failure-patterns store 同一口径,
+        // 坏文件备份后从空开始, 不让坏结构静默进入注册表)。
+        const loops: LoopRegistryState["loops"] = {};
+        for (const [id, stored] of Object.entries(parsed.loops ?? {})) {
+          loops[id] = {
+            ...(stored as (typeof loops)[string]),
+            card: LoopCardSchema.parse((stored as { card?: unknown }).card),
+          };
+        }
+        this.state = { version: CURRENT_VERSION, loops };
       } else {
         this.state = this.migrate(parsed);
         await this.save();

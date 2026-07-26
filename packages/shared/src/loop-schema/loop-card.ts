@@ -16,6 +16,8 @@ export type VerificationPhase = z.infer<typeof VerificationPhaseSchema>;
 
 const TriggerSchema = z
   .object({
+    // 【webhook / resume 无消费者·已挂账 06 偏差 #27】两种触发源在 05
+    // 各阶段均未排期, 目前只有 manual / schedule 有真实点火路径。
     type: z.enum(["manual", "webhook", "schedule", "resume"]),
     cron: z.string().optional(),
   })
@@ -29,18 +31,16 @@ const TriggerSchema = z
     }
   });
 
-const StopRulesSchema = z
-  .object({
-    // 总轮次上限，含首轮
-    max_turns: z.number(),
-    max_time_minutes: z.number(),
-    // retry 次数上限，不含首轮；与 max_turns 同时生效、先触者停
-    max_retries: z.number(),
-    stop_on_repeated_failure: z.number().optional(),
-  })
-  .refine((rules) => rules.max_retries < rules.max_turns, {
-    message: "max_retries must be less than max_turns",
-  });
+const StopRulesSchema = z.object({
+  // 总轮次上限，含首轮
+  max_turns: z.number(),
+  max_time_minutes: z.number(),
+  // retry 次数上限，不含首轮；与 max_turns 同时生效、先触者停
+  // (无严格小于约束 —— 先触者停语义下 max_retries >= max_turns 合法,
+  // 06 偏差 #31)
+  max_retries: z.number(),
+  stop_on_repeated_failure: z.number().optional(),
+});
 
 export const LoopCardSchema = z.object({
   loop: z.object({
@@ -86,6 +86,8 @@ export const LoopCardSchema = z.object({
         })
         .optional(),
     }),
+    // 【无消费者·已挂账 06 偏差 #27】eval 配置块: eval runner 只读全局
+    // cases.json, 不读任何 card 配置; per-loop eval 计划未排期。
     eval: z
       .object({
         eval_plan: z.string().optional(),
@@ -105,12 +107,22 @@ export const LoopCardSchema = z.object({
     schedule: z
       .object({
         queue: z.enum(["urgent", "normal", "background"]).optional(),
+        // 【无消费者·已挂账 06 偏差 #27】resume 触发源未排期 (05 各阶段
+        // 均未覆盖), resume_rule 随之无消费。
         resume_rule: z.string().optional(),
       })
       .optional(),
     human_gate: z
       .object({
         required_for: z.array(z.string()).optional(),
+      })
+      .optional(),
+    // Yep extension: runtime model selection for unattended loop runs.
+    // Empty/absent values mean "use Supervisor/provider defaults".
+    runtime: z
+      .object({
+        provider: z.string().optional(),
+        model: z.string().optional(),
       })
       .optional(),
     // Phase-2 Yep extension (not in 02-schema契约.md §1): policy 开关。
@@ -126,6 +138,9 @@ export const LoopCardSchema = z.object({
       })
       .optional(),
     persistence: z.object({
+      // 【仅有约定无投影·已挂账 06 偏差 #27】04-存储约定.md 要求
+      // .loop/STATE.md 人可读投影, 但 05 各阶段未排期, 运行时无读写;
+      // 该字段当前仅作声明 (测试 fixture 填充)。
       state_file: z.string(),
     }),
     stop_rules: StopRulesSchema,

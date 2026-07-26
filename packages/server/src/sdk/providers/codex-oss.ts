@@ -406,7 +406,7 @@ export class CodexOSSProvider implements AgentProvider {
         codexProcess = spawn(codexPath, args, {
           cwd: options.cwd,
           stdio: ["pipe", "pipe", "pipe"],
-          env: { ...process.env },
+          env: { ...process.env, ...options.env },
           shell: process.platform === "win32",
         });
         pidRef.value = codexProcess.pid;

@@ -265,6 +265,25 @@ export interface RunDecisionRequiredEvent {
 }
 
 /**
+ * Loop control-plane: emitted when a run's budget consumption crosses the
+ * warning threshold (80%), once per run per budget field (spec:
+ * docs/spec/03-API契约.md "loop-budget-warning"). `budget_limited` itself
+ * is a state transition and travels via loop-state-changed, not this event.
+ */
+export interface LoopBudgetWarningEvent {
+  type: "loop-budget-warning";
+  loop_id: string;
+  run_id: string;
+  turns_used: number;
+  max_turns: number;
+  retries_used: number;
+  max_retries: number;
+  /** Which budget is approaching exhaustion first */
+  near_limit: "max_turns" | "max_retries";
+  timestamp: string;
+}
+
+/**
  * Loop learning: emitted when a proposal is published via
  * POST /api/proposals/:id/publish (spec: docs/spec/03-API契约.md
  * "proposal-published"). publish 仅人工 — published_by is always "human".
@@ -307,6 +326,7 @@ export type BusEvent =
   | BrowserTabDisconnectedEvent
   | LoopStateChangedEvent
   | RunDecisionRequiredEvent
+  | LoopBudgetWarningEvent
   | ProposalPublishedEvent;
 
 export type EventHandler<T = BusEvent> = (event: T) => void;
