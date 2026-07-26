@@ -158,8 +158,9 @@
 - 修复（2026-07-26）：
   - **验证短路规则**（四段验证模型.md）：verify-run 在某段硬失败后跳过后续段（后续结果不改变聚合结论），跳过段写 not_applicable 并注明 short-circuited 原因；测试覆盖（static 失败 → runtime 不执行且无输出日志；static 通过 → runtime 正常执行）。
   - **run 级 trace correlation 载体**：run_state 新增 `session_ref`（06 偏差 #32），control-plane 每轮写入，GET /api/runs/:id 的 run_state 携带——前端可按 03 设计订阅对应 session 消息流。
-- 留档（独立任务，非壳子）：~~workspace 边界对 Bash 的写目标检查~~（已修，06 #37，见下）；02 §3 native_invocation 整段（已由 06 #35 落地）；cron 幂等键持久化（当前内存 + run_active 兜底）；模型清单外置（00 短板表遗留，05 未排期）；full_auto 与 assisted 语义分化（风险模型.md 层问题）；legacy 分支丢失 github env（github_prompt 卡无 policy 时拿不到 GH_TOKEN，实际路径都带 policy）；execution contract 结构化五字段（已由 06 #35 落地）。
+- 留档（独立任务，非壳子）：~~workspace 边界对 Bash 的写目标检查~~（已修，06 #37，见下）；02 §3 native_invocation 整段（已由 06 #35 落地）；cron 幂等键持久化（已修，06 #38，见下）；模型清单外置（评估后不另做：loop 侧已有 `card.loop.runtime.model` 与 adapter_policy.model 两条真实通道，provider 回退清单属交互式选择器内部细节，06 #38 登记）；full_auto 与 assisted 语义分化（风险模型.md 层问题）；legacy 分支丢失 github env（github_prompt 卡无 policy 时拿不到 GH_TOKEN，实际路径都带 policy）；execution contract 结构化五字段（已由 06 #35 落地）。
 - 追加（2026-07-26 第三批）：**Bash 命令通道 workspace 边界**——`classify.ts` 启发式提取写目标（重定向/tee/cp/mv/rsync/install/dd of=/sed -i/node -e 内联绝对路径），越界按 write+high 分类，`node -e "fs.writeFileSync('/etc/...')"` 类逃逸不再被 bypass 自批准（06 #37）。测试：`classify.test.ts` 三例（越界各形态、workspace 内不误报、无上下文不启用）。
+- 追加（2026-07-26 第四批）：**cron 点火键持久化**——`<loop_id>:<分钟戳>` 幂等键落 `loops/trigger/cron-fired.json`（原子写、容错加载、只保留本分钟键），重启后同一分钟内不重复点火；tick 改 async（06 #38）。测试：`cron-scheduler.test.ts`（跨实例幂等 + 次分钟正常点火）。
 
 ## 计划内未做（不算壳，记录备查）
 

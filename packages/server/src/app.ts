@@ -268,6 +268,8 @@ export function createApp(
           );
         });
       },
+      // 点火键持久化: 进程重启后同一分钟内不重复点火
+      dataDir: options.dataDir,
     });
     cronScheduler.start();
     // 阶段 3 学习侧: 异步 learning worker, 与主链路同进程但崩溃隔离

@@ -21,6 +21,8 @@
  *   isRunActive 为 false 时发生。
  */
 
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import type { LoopCardStore } from "../state/loop-card-store.js";
 import {
   type CronSchedule,
@@ -36,6 +38,11 @@ export interface CronSchedulerDeps {
   isRunActive: (loopId: string) => boolean;
   /** Tick interval, defaults to 60s. Injectable for tests. */
   intervalMs?: number;
+  /**
+   * Yep data directory: 提供后点火键持久化到 loops/trigger/cron-fired.json
+   * (幂等键跨进程存活 —— 重启同一分钟内不重复点火; 缺席则保持纯内存)。
+   */
+  dataDir?: string;
 }
 
 type QueuePriority = "urgent" | "normal" | "background";
@@ -75,9 +82,68 @@ export class CronScheduler {
   private warnedLoops = new Set<string>();
   /** 待触发队列 (去重: 每 loop 至多一条); 纯内存, 重启即丢。 */
   private pending: PendingTrigger[] = [];
+  private readonly firedFile: string | null;
+  private firedLoaded = false;
 
   constructor(deps: CronSchedulerDeps) {
     this.deps = deps;
+    this.firedFile = deps.dataDir
+      ? path.join(deps.dataDir, "loops", "trigger", "cron-fired.json")
+      : null;
+  }
+
+  /**
+   * 点火键持久化 (loops/trigger/cron-fired.json): 进程重启后同一分钟内
+   * 不重复点火 —— 内存 Set 只管进程生命周期, 文件管进程边界。容错加
+   * 载 (坏文件当空), tmp+rename 写回。
+   */
+  private async loadFired(now: Date): Promise<void> {
+    if (!this.firedFile || this.firedLoaded) {
+      return;
+    }
+    this.firedLoaded = true;
+    const currentStamp = minuteStamp(now);
+    try {
+      const content = await fs.readFile(this.firedFile, "utf-8");
+      const parsed = JSON.parse(content) as { keys?: unknown };
+      if (Array.isArray(parsed.keys)) {
+        for (const key of parsed.keys) {
+          // 键的时效就是它的分钟戳: 只保留本分钟的键, 历史键自然淘汰
+          if (typeof key === "string" && key.endsWith(`:${currentStamp}`)) {
+            this.firedKeys.add(key);
+          }
+        }
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.warn(
+          "[CronScheduler] cron-fired.json 损坏, 按空集起步:",
+          error,
+        );
+      }
+    }
+    // 加载的键属于当前分钟: 锚定 currentMinute, 避免 tick 的分钟滚动
+    // 把刚加载的键当即刻过期的旧键清掉
+    this.currentMinute = currentStamp;
+  }
+
+  private async saveFired(): Promise<void> {
+    if (!this.firedFile) {
+      return;
+    }
+    try {
+      await fs.mkdir(path.dirname(this.firedFile), { recursive: true });
+      const tmpPath = `${this.firedFile}.tmp`;
+      await fs.writeFile(
+        tmpPath,
+        `${JSON.stringify({ version: 1, keys: [...this.firedKeys] }, null, 2)}\n`,
+        "utf-8",
+      );
+      await fs.rename(tmpPath, this.firedFile);
+    } catch (error) {
+      // 持久化失败不阻塞点火 (run_active 仍是并发兜底)
+      console.warn("[CronScheduler] cron-fired.json 写回失败:", error);
+    }
   }
 
   start(): void {
@@ -85,12 +151,10 @@ export class CronScheduler {
       return;
     }
     this.timer = setInterval(() => {
-      try {
-        this.tick(new Date());
-      } catch (error) {
-        // A tick must never take the server down
+      // A tick must never take the server down
+      void this.tick(new Date()).catch((error) => {
         console.error("[CronScheduler] tick failed:", error);
-      }
+      });
     }, this.deps.intervalMs ?? 60_000);
     this.timer.unref?.();
   }
@@ -106,7 +170,8 @@ export class CronScheduler {
    * Evaluate all loops against `now`. Returns the dedupe keys fired this
    * tick (exposed for tests and logging).
    */
-  tick(now: Date): string[] {
+  async tick(now: Date): Promise<string[]> {
+    await this.loadFired(now);
     const stamp = minuteStamp(now);
     if (stamp !== this.currentMinute) {
       // A new minute invalidates every older dedupe key — cron expressions
@@ -156,6 +221,8 @@ export class CronScheduler {
       }
       this.fire(entry, fired, firedLoops);
     }
+    // 点火键落盘 (本 tick 批量一次; tick 返回即持久化完成)
+    await this.saveFired();
     return fired;
   }
 
