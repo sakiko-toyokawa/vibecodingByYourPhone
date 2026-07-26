@@ -336,8 +336,7 @@ export function SessionPageContent({
       },
       {
         value: "skills",
-        description:
-          "use skills to improve how Codex performs specific tasks",
+        description: "use skills to improve how Codex performs specific tasks",
         source: "codex-source",
       },
       {
@@ -372,8 +371,7 @@ export function SessionPageContent({
       },
       {
         value: "init",
-        description:
-          "create an AGENTS.md file with instructions for Codex",
+        description: "create an AGENTS.md file with instructions for Codex",
         source: "codex-source",
       },
       {
@@ -429,14 +427,12 @@ export function SessionPageContent({
       },
       {
         value: "status",
-        description:
-          "show current session configuration and token usage",
+        description: "show current session configuration and token usage",
         source: "codex-source",
       },
       {
         value: "mcp",
-        description:
-          "list configured MCP tools; use /mcp verbose for details",
+        description: "list configured MCP tools; use /mcp verbose for details",
         source: "codex-source",
       },
       {

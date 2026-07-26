@@ -117,6 +117,11 @@ test("publish: npm/pnpm/yarn publish and gh release create", () => {
   assert.equal(bash("npm publish").hardGate, "publish");
   assert.equal(bash("pnpm publish --access public").hardGate, "publish");
   assert.equal(bash("gh release create v1.2.3").hardGate, "publish");
+  assert.equal(
+    bash("gh repo fork owner/repo --clone=false").hardGate,
+    "publish",
+  );
+  assert.equal(bash("gh pr create --draft --title fix").hardGate, "publish");
 });
 
 test("delete: rm -rf (any flag order) always hits, plain rm does not", () => {

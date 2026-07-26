@@ -147,7 +147,9 @@ const HARD_GATE_PATTERNS: HardGatePattern[] = [
     action: "publish",
     test: (s) =>
       /^(npm|pnpm|yarn)\s+publish\b/.test(s) ||
-      /^gh\s+release\s+create\b/.test(s),
+      /^gh\s+release\s+create\b/.test(s) ||
+      /^gh\s+repo\s+fork\b/.test(s) ||
+      /^gh\s+pr\s+create\b/.test(s),
   },
   // delete: 删除外部资源 / 破坏性删除
   { action: "delete", test: isDestructiveRm },

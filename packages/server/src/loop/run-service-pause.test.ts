@@ -40,6 +40,7 @@ const SESSION_ID = "session-pause-1";
 
 interface SupervisorCall {
   method: "start" | "resume";
+  role: "executor" | "collector";
   sessionId: string | null;
   text: string;
 }
@@ -56,7 +57,14 @@ class FakeSupervisor {
     _cwd: string,
     message: { text: string },
   ): Promise<Process> {
-    this.calls.push({ method: "start", sessionId: null, text: message.text });
+    this.calls.push({
+      method: "start",
+      role: message.text.includes("Collector input bundle")
+        ? "collector"
+        : "executor",
+      sessionId: null,
+      text: message.text,
+    });
     return this.makeProcess(SESSION_ID);
   }
 
@@ -65,7 +73,12 @@ class FakeSupervisor {
     _cwd: string,
     message: { text: string },
   ): Promise<Process> {
-    this.calls.push({ method: "resume", sessionId, text: message.text });
+    this.calls.push({
+      method: "resume",
+      role: "executor",
+      sessionId,
+      text: message.text,
+    });
     return this.makeProcess(sessionId);
   }
 
@@ -327,8 +340,11 @@ test("pause mid-turn: run → paused, process killed, 审批管线无新增排�
       // 从下一轮继续：turn 2 goes through resumeSession on the SAME session.
       const finalState = await waitForState(controlPlane, runId, ["complete"]);
       assert.equal(finalState, "complete");
-      assert.equal(supervisor.calls.length, 2);
-      const second = supervisor.calls[1];
+      const executorCalls = supervisor.calls.filter(
+        (call) => call.role === "executor",
+      );
+      assert.equal(executorCalls.length, 2);
+      const second = executorCalls[1];
       assert.equal(second?.method, "resume");
       assert.equal(second?.sessionId, SESSION_ID, "session_ref 一致");
       assert.match(second?.text ?? "", /resumed after a pause/);

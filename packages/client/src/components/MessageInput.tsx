@@ -173,6 +173,8 @@ export function MessageInput({
     onDraftControlsReady?.(controls);
   }, [controls, onDraftControlsReady]);
 
+  // This reset intentionally follows derived slash-menu inputs.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: slashQuery, slashCommands, and collapsed are the trigger inputs for resetting menu selection
   useEffect(() => {
     setHighlightedCommandIndex(0);
   }, [slashQuery, slashCommands, collapsed]);
@@ -212,7 +214,7 @@ export function MessageInput({
       // Refocus the textarea so user can continue typing
       textareaRef.current?.focus();
     }
-  }, [text, disabled, controls, onSend, attachments.length]);
+  }, [text, disabled, controls, onSend, attachments.length, onCustomCommand]);
 
   const handleQueue = useCallback(async () => {
     // Stop voice recording and get any pending interim text
@@ -241,12 +243,13 @@ export function MessageInput({
       void Promise.resolve(onQueue(message)).catch(() => {});
       textareaRef.current?.focus();
     }
-  }, [text, disabled, controls, onQueue, attachments.length]);
+  }, [text, disabled, controls, onQueue, attachments.length, onCustomCommand]);
 
   const insertSlashCommand = useCallback(
     (command: string) => {
       const bare = command.startsWith("/") ? command.slice(1) : command;
-      const currentSelectionEnd = textareaRef.current?.selectionEnd ?? text.length;
+      const currentSelectionEnd =
+        textareaRef.current?.selectionEnd ?? text.length;
       const beforeCursor = text.slice(0, currentSelectionEnd);
       const afterCursor = text.slice(currentSelectionEnd);
       const match = beforeCursor.match(SLASH_COMMAND_PATTERN);
@@ -554,6 +557,7 @@ export function MessageInput({
             className="absolute bottom-full left-0 right-0 z-[20] mb-2 max-h-52 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
             role="listbox"
             aria-label="Slash commands"
+            tabIndex={-1}
           >
             {filteredSlashCommands.map((command, index) => {
               const isActive = index === highlightedCommandIndex;

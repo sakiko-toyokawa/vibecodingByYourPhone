@@ -29,6 +29,7 @@ const SESSION_ID = "session-abc-123";
 
 interface SupervisorCall {
   method: "start" | "resume";
+  role: "executor" | "collector";
   sessionId: string | null;
   text: string;
 }
@@ -42,7 +43,14 @@ class FakeSupervisor {
     _cwd: string,
     message: { text: string },
   ): Promise<Process> {
-    this.calls.push({ method: "start", sessionId: null, text: message.text });
+    this.calls.push({
+      method: "start",
+      role: message.text.includes("Collector input bundle")
+        ? "collector"
+        : "executor",
+      sessionId: null,
+      text: message.text,
+    });
     return this.makeProcess(SESSION_ID);
   }
 
@@ -51,7 +59,12 @@ class FakeSupervisor {
     _cwd: string,
     message: { text: string },
   ): Promise<Process> {
-    this.calls.push({ method: "resume", sessionId, text: message.text });
+    this.calls.push({
+      method: "resume",
+      role: "executor",
+      sessionId,
+      text: message.text,
+    });
     return this.makeProcess(sessionId);
   }
 
@@ -234,9 +247,12 @@ test("retry: resumeSession on the same session, judgment injected, backoff waite
       assert.equal(finalState, "complete");
 
       // turn 1: startSession; turn 2 (retry): resumeSession, same session
-      assert.equal(supervisor.calls.length, 2);
-      assert.equal(supervisor.calls[0]?.method, "start");
-      const resume = supervisor.calls[1];
+      const executorCalls = supervisor.calls.filter(
+        (call) => call.role === "executor",
+      );
+      assert.equal(executorCalls.length, 2);
+      assert.equal(executorCalls[0]?.method, "start");
+      const resume = executorCalls[1];
       assert.equal(resume?.method, "resume");
       assert.equal(resume?.sessionId, SESSION_ID);
 
@@ -300,8 +316,11 @@ test("needs_human → request_changes resumes the run (active) with feedback inj
       assert.equal(finalState, "complete");
 
       // 第二轮走 resumeSession（同一 session），人工 feedback 注入上下文
-      assert.equal(supervisor.calls.length, 2);
-      const resume = supervisor.calls[1];
+      const executorCalls = supervisor.calls.filter(
+        (call) => call.role === "executor",
+      );
+      assert.equal(executorCalls.length, 2);
+      const resume = executorCalls[1];
       assert.equal(resume?.method, "resume");
       assert.equal(resume?.sessionId, SESSION_ID);
       assert.match(resume?.text ?? "", /请先修掉 lint 再交付/);
@@ -328,10 +347,13 @@ test("retry budget exhaustion ends the run as budget_limited (no infinite repair
       assert.equal(finalState, "budget_limited");
 
       // 3 轮执行（首轮 + 2 次 retry），退避 1min → 2min
-      assert.equal(supervisor.calls.length, 3);
+      const executorCalls = supervisor.calls.filter(
+        (call) => call.role === "executor",
+      );
+      assert.equal(executorCalls.length, 3);
       assert.deepEqual(sleeps, [60_000, 120_000]);
-      assert.equal(supervisor.calls[2]?.method, "resume");
-      assert.equal(supervisor.calls[2]?.sessionId, SESSION_ID);
+      assert.equal(executorCalls[2]?.method, "resume");
+      assert.equal(executorCalls[2]?.sessionId, SESSION_ID);
 
       const record = await stateStore.load("loop-it");
       assert.equal(record?.state, "budget_limited");

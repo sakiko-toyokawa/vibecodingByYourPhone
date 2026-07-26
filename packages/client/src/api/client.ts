@@ -261,10 +261,10 @@ export async function fetchJSON<T>(
     let errorMessage = `API error: ${res.status} ${res.statusText}`;
     try {
       const body = await res.json();
-      if (body.error) {
-        errorMessage = body.error;
-      } else if (body.message) {
+      if (body.message) {
         errorMessage = body.message;
+      } else if (body.error) {
+        errorMessage = body.error;
       }
     } catch {
       // Response body wasn't JSON, use default message

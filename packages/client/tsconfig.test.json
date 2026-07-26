@@ -13,6 +13,8 @@
     "src/types/desktop.d.ts",
     "src/vite-env.d.ts",
     "src/lib/loopDecisions.ts",
-    "src/lib/loopDecisions.test.ts"
+    "src/lib/loopDecisions.test.ts",
+    "src/lib/loopCardBuilder.ts",
+    "src/lib/loopCardBuilder.test.ts"
   ]
 }

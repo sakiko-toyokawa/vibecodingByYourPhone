@@ -127,7 +127,6 @@ export const VoiceInputButton = forwardRef(function VoiceInputButton(
       interimTranscript,
       finalizeListening,
       isListening,
-      stopListening,
       toggleListening,
       isAvailable,
     ],

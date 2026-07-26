@@ -212,6 +212,7 @@ export const ToolCallRow = memo(function ToolCallRow({
                 className={`h-4 w-4 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
                 viewBox="0 0 16 16"
                 fill="none"
+                aria-hidden="true"
               >
                 <path
                   d="M6 3l5 5-5 5"

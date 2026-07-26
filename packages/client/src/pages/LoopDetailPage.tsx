@@ -140,6 +140,13 @@ export function LoopDetailPage() {
 
   const judgment = runDetail?.ledger_summary.judgment_summary ?? null;
   const failureTags = runDetail?.ledger_summary.failure_tags ?? [];
+  const collectorReportRef =
+    runDetail?.ledger_summary.collector_report_ref ?? null;
+  const handoffRef = runDetail?.ledger_summary.handoff_ref ?? null;
+  const blockerFingerprint =
+    runDetail?.ledger_summary.blocker_fingerprint ?? null;
+  const repeatedBlockerCount =
+    runDetail?.ledger_summary.repeated_blocker_count ?? 0;
 
   return (
     <div
@@ -317,6 +324,46 @@ export function LoopDetailPage() {
                             {runDetail.ledger_summary.retries_used}
                           </span>
                         </div>
+                        {collectorReportRef && (
+                          <div className="flex items-start justify-between gap-[var(--space-3)]">
+                            <span className="shrink-0 text-[var(--text-muted)]">
+                              Collector
+                            </span>
+                            <span className="break-all text-right font-mono text-xs text-[var(--text-primary)]">
+                              {collectorReportRef}
+                            </span>
+                          </div>
+                        )}
+                        {handoffRef && (
+                          <div className="flex items-start justify-between gap-[var(--space-3)]">
+                            <span className="shrink-0 text-[var(--text-muted)]">
+                              Handoff
+                            </span>
+                            <span className="break-all text-right font-mono text-xs text-[var(--text-primary)]">
+                              {handoffRef}
+                            </span>
+                          </div>
+                        )}
+                        {blockerFingerprint && (
+                          <div className="flex items-start justify-between gap-[var(--space-3)]">
+                            <span className="shrink-0 text-[var(--text-muted)]">
+                              Blocker
+                            </span>
+                            <span className="break-all text-right font-mono text-xs text-[var(--text-primary)]">
+                              {blockerFingerprint}
+                              {repeatedBlockerCount > 0
+                                ? ` (${repeatedBlockerCount})`
+                                : ""}
+                            </span>
+                          </div>
+                        )}
+                        {repeatedBlockerCount > 1 && (
+                          <p className="m-0 rounded-[var(--radius-sm)] border border-[var(--warning-color)]/40 bg-[var(--warning-color)]/10 p-3 text-[var(--warning-color)]">
+                            Approve is likely to repeat the same blocker. Use
+                            request changes with new instructions or change the
+                            environment first.
+                          </p>
+                        )}
                         {failureTags.length > 0 && (
                           <div className="flex flex-wrap items-center gap-[var(--space-2)] pt-1">
                             <span className="text-[var(--text-muted)]">

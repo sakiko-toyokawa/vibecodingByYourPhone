@@ -36,6 +36,10 @@ export interface LedgerSummary {
   retries_used: number;
   verifier_report_refs: string[];
   judgment_report_ref: string | null;
+  collector_report_ref: string | null;
+  handoff_ref: string | null;
+  blocker_fingerprint: string | null;
+  repeated_blocker_count: number;
   /** judgment_report 摘要（overall / next_action / requires_human） */
   judgment_summary: {
     overall: string;
@@ -53,6 +57,12 @@ export interface RunDetail {
 
 export const loopsApi = {
   listLoops: () => fetchJSON<{ loops: StoredLoop[] }>("/loops"),
+
+  createLoop: (card: LoopCard) =>
+    fetchJSON<{ loop: StoredLoop }>("/loops", {
+      method: "POST",
+      body: JSON.stringify(card),
+    }),
 
   getLoop: (loopId: string) =>
     fetchJSON<{
