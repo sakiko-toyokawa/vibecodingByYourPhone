@@ -29,6 +29,35 @@ const DECISION_LABEL_KEYS = {
   pause: "loopApprovalPause",
 } as const;
 
+/** 硬闸门动作 / next_action 枚举值 → 可读标签 (显示原始枚举值被当成
+ *  "显示代码而不是请求原因"的误解来源; 未知值回退原文)。 */
+const ACTION_LABEL_KEYS: Record<string, string> = {
+  merge: "loopActionMerge",
+  deploy: "loopActionDeploy",
+  delete: "loopActionDelete",
+  publish: "loopActionPublish",
+  bill: "loopActionBill",
+  notify: "loopActionNotify",
+  close: "loopActionClose",
+  complete: "loopActionComplete",
+  retry: "loopActionRetry",
+  needs_human: "loopActionNeedsHuman",
+  escalate: "loopActionEscalate",
+  stop: "loopActionStop",
+  manual_review: "loopActionManualReview",
+};
+
+/** 风险档枚举值 → 可读标签。 */
+const RISK_LABEL_KEYS: Record<string, string> = {
+  low: "loopRiskLow",
+  medium: "loopRiskMedium",
+  high: "loopRiskHigh",
+  critical: "loopRiskCritical",
+  unrated: "loopRiskUnrated",
+};
+
+type MessageKey = Parameters<ReturnType<typeof useI18n>["t"]>[0];
+
 function decisionButtonClass(option: LoopDecisionOption): string {
   switch (option) {
     case "approve":
@@ -108,7 +137,9 @@ function ApprovalCard({
           </div>
         </div>
         <span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--warning-color)]/15 px-2 py-0.5 text-xs font-medium text-[var(--warning-color)]">
-          {event.risk}
+          {RISK_LABEL_KEYS[event.risk]
+            ? t(RISK_LABEL_KEYS[event.risk] as MessageKey)
+            : event.risk}
         </span>
       </div>
 
@@ -117,7 +148,9 @@ function ApprovalCard({
           <span className="text-[var(--text-muted)]">
             {t("loopsJudgmentNextAction")}:{" "}
           </span>
-          {event.action}
+          {ACTION_LABEL_KEYS[event.action]
+            ? t(ACTION_LABEL_KEYS[event.action] as MessageKey)
+            : event.action}
         </div>
         {event.reason && (
           <div className="break-words text-[var(--text-secondary)]">
