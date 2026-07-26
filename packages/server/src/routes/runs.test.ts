@@ -347,3 +347,48 @@ test("POST /:id/budget — 404 未知 run; 400 空预算补丁", async () => {
     );
   });
 });
+
+test("GET /:id — 活跃 run 的首个判定落账前, 不展示上个 run 的 run_state (冒烟实测)", async () => {
+  await withFixture(async ({ app, controlPlane, ledgerStore }) => {
+    // 上一个 run 完成, run_state 留下终态记录
+    await ledgerStore.appendEntry("run-old", makeLedgerEntry("run-old"));
+    await controlPlane.applyJudgment({
+      loopId: "loop-1",
+      runId: "run-old",
+      turn: 1,
+      goalId: "intent-1",
+      workspaceRef: "workspace://loop-1/run-old",
+      executionOk: true,
+      verificationRan: true,
+      judgment: {
+        overall: "passed",
+        next_action: "complete",
+        retryable: false,
+        requires_human: false,
+        evidence: [],
+        unresolved_risks: [],
+      },
+      judgmentRef: "artifact://run-old/judgment-report.json",
+      createdAt: new Date().toISOString(),
+      budget: { max_tokens: 0, max_time_minutes: 30, max_turns: 3, max_retries: 2 },
+      usage: { tokens: null, timeMinutes: 1 },
+    });
+
+    // 上一个 run 的详情: run_state 属于它, 正常展示
+    const oldRes = await app.request("/run-old");
+    const oldBody = (await oldRes.json()) as {
+      run_state: { run_id: string; state: string } | null;
+    };
+    assert.equal(oldBody.run_state?.state, "complete");
+
+    // 新 run 有账本条目但状态文件还是 run-old 的: run_state 必须为
+    // null, 不能把 run-old 的 complete 显示成它的
+    await ledgerStore.appendEntry("run-new", makeLedgerEntry("run-new"));
+    const activeRes = await app.request("/run-new");
+    assert.equal(activeRes.status, 200);
+    const activeBody = (await activeRes.json()) as {
+      run_state: unknown;
+    };
+    assert.equal(activeBody.run_state, null);
+  });
+});

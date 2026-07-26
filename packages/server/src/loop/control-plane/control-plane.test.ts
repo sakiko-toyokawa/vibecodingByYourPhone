@@ -894,3 +894,38 @@ test("stop_rules.repetition.max_same_failure: 同一阻断重复超过上限即�
     assert.equal(u3.state, "needs_human");
   });
 });
+
+test("same loop, next run: stale terminal record does not poison the new run (smoke finding)", async () => {
+  await withFixture(async ({ controlPlane, stateStore }) => {
+    // 第一个 run 完成 → run_state 留下终态记录
+    const first = await controlPlane.applyJudgment(
+      applyInput({
+        judgment: makeJudgment({
+          overall: "passed",
+          next_action: "complete",
+          requires_human: false,
+        }),
+      }),
+    );
+    assert.equal(first.state, "complete");
+
+    // 同一 loop 的第二个 run: 不得因上个 run 的 complete 记录而
+    // complete -> complete 非法转移; 预算消耗不泄漏
+    const second = await controlPlane.applyJudgment(
+      applyInput({
+        runId: "run-2",
+        turn: 1,
+        judgment: makeJudgment({
+          overall: "passed",
+          next_action: "complete",
+          requires_human: false,
+        }),
+      }),
+    );
+    assert.equal(second.state, "complete");
+    const record = await stateStore.load("loop-1");
+    assert.equal(record?.run_id, "run-2");
+    assert.equal(record?.budget?.used_turns, 1);
+    assert.equal(record?.budget?.used_time_minutes, 1);
+  });
+});

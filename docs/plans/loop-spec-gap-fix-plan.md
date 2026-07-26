@@ -172,9 +172,13 @@ webhook/issue/resume 触发源；interaction/review 两段验证（05 阶段 1/2
 - 01/00 要求 webhook/issue/resume 触发，05 从未排期
 - trigger 排队列在阶段 0 清单但后续阶段再无排期（壳子按现计划永远不会被填）
 
-## 修复顺序（本次执行）
+## 真实冒烟验证（2026-07-26，dev server + 真实 codex runtime）
 
-1. **maker → checker 链路**（#6/#7/#8/#9/#10/#11 + #3 兜底）——本次开工
-2. P0 其余（#1 codex 守卫、#2 账本 runtime、#4/#5 学习闭环）
-3. P1 接线类壳子（#13–#16 等）
-4. P2 契约/存储偏差与 spec 回写
+在真实 server（dist 直跑）上以 codex provider 完成端到端 run 验证：
+memory packet 注入 prompt 并落 artifact、native_invocation 真实投影（adapter=codex/bridge=app_server/mode=exec，快照 `interrupt=kill-only` 与 06 #17 一致）、budget_remaining、verification-input 的 known_failure_patterns 与 runtime_event_refs 真实填充、账本 source 如实、learning events 落盘、eval 内置 9 个 behavior case 在生产数据目录播种成功。
+
+**冒烟抓到的真 bug（已修）**：
+1. **同 loop 第二个 run 必崩**：run_state 按 loop 存储，上个 run 的终态记录被当作新 run 的 from-state → `IllegalTransitionError: complete -> complete` 且 run 静默失败（表面还显示上个 run 的 complete，极具迷惑性）。修复：applyJudgment 只在 `existing.run_id === input.runId` 时沿用 from-state 与预算快照，否则从 active/合约预算重起（`control-plane.ts`，测试 `control-plane.test.ts` "stale terminal record"）。
+2. **GET /api/runs/:id 显示串台**：活跃 run 首个判定落账前，run_state 展示的是上个 run 的记录。修复：run_state 的 run_id 与请求不符时返回 null（`routes/runs.ts`，测试 `routes/runs.test.ts`）。
+
+环境备忘（非代码问题）：本机 claude SDK 的 cli.js 路径解析与 codex 经 cmd.exe 的 spawn 在该 shell 环境下失败（00 短板表"Claude CLI 检测是假实现"的实证）；workspace.path 必须是 Windows 路径（MSYS `/tmp` 形式会导致 spawn cwd ENOENT）；codex runtime 路径下全链路验证通过。

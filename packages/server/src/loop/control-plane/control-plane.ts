@@ -344,8 +344,16 @@ export class ControlPlane {
 
     // Budget accumulation (预算与停止规则.md: max_turns 含首轮、max_retries
     // 不含首轮、同时生效先触者停). used_turns = completed turns = this turn.
+    //
+    // 状态文件按 loop 存储: 已有记录可能属于上一个 run (run_id 不同) ——
+    // 新 run 的首次判定从 active / 合约预算重新起算; 仅当记录属于本 run
+    // 时才沿用既有 from-state 与预算快照 (越序守卫 / 幂等续跑)。上个 run
+    // 的 used_* 消耗不得泄漏进新 run。
+    const sameRun = existing?.run_id === input.runId;
     const base: Budget =
-      existing?.budget ?? BudgetSchema.parse({ ...input.budget });
+      sameRun && existing?.budget
+        ? existing.budget
+        : BudgetSchema.parse({ ...input.budget });
     const budget: Budget = {
       ...base,
       used_turns: input.turn,
@@ -382,16 +390,18 @@ export class ControlPlane {
       goal_id: input.goalId,
       run_id: input.runId,
       // From-state: the run is active while its turn is judged. An existing
-      // record keeps its own state so an out-of-protocol call hits the
-      // transition-table guard instead of being silently re-based.
-      state: existing?.state ?? "active",
+      // record keeps its own state only when it belongs to THIS run — a
+      // stale record from the loop's previous run must not re-base the new
+      // run onto a terminal from-state (complete -> complete is illegal).
+      state: sameRun && existing ? existing.state : "active",
       turn: input.turn,
-      intent_version: existing?.intent_version ?? 1,
+      intent_version: sameRun && existing ? existing.intent_version : 1,
       workspace_ref: input.workspaceRef,
       last_judgment: input.judgmentRef,
-      pending_approval: existing?.pending_approval ?? null,
+      pending_approval: sameRun && existing ? existing.pending_approval : null,
       // 本轮执行的 session 引用 (06 #32; 缺省保留既有值, 重启回放兼容)
-      session_ref: input.sessionRef ?? existing?.session_ref ?? null,
+      session_ref:
+        input.sessionRef ?? (sameRun && existing ? existing.session_ref : null),
       budget,
       created_at: existing?.created_at ?? input.createdAt,
       updated_at: now,
