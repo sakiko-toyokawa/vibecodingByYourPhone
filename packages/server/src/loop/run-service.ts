@@ -1204,6 +1204,12 @@ export class LoopRunService {
       for (;;) {
         const turnStartedAt = Date.now();
 
+        // learning_refs.human_feedback 在轮首快照 (见 buildHumanFeedbackRefs):
+        // 人工反馈只会在阻塞等待期 (轮与轮之间) 进决策账本, 轮首取到的集合
+        // 即本轮 entry 落账时的最终集合; 轮首取数也避免在"状态转移已可见、
+        // entry 未落账"的收尾窗口里再串入 IO 延迟。
+        const humanFeedbackRefs = await this.buildHumanFeedbackRefs(runId);
+
         // --- execution ---
         let outcome: ExecutionOutcome;
         if (ctx.setupError) {
@@ -1765,7 +1771,11 @@ export class LoopRunService {
           verification_refs: verificationRefs,
           learning_refs: {
             control_decision: `ledger://${runId}`,
-            human_feedback: [],
+            // 02 §8.1: 人工反馈引用，轮首快照（无人工反馈则 [] 不落
+            // 文件，见 buildHumanFeedbackRefs）。
+            human_feedback: humanFeedbackRefs,
+            // 挂账口径：当前无 CI/PR/issue 外部反馈通道，恒 []
+            // （待 spec 06 登记后再回填）。
             external_feedback: [],
           },
           artifact_refs: artifactRefs,
@@ -2211,6 +2221,47 @@ export class LoopRunService {
       reportRef: `artifact://${runId}/${reportName}`,
       report,
     };
+  }
+
+  /**
+   * learning_refs.human_feedback 回填 (02 §8.1 / 04-存储约定): 人工反馈的
+   * 真实载体是决策账本里带 feedback / override 的 decision_entry
+   * (06 偏差 #9/#11)。每轮开始时快照一次 (人工反馈只会在阻塞等待期、即
+   * 轮与轮之间进入决策账本, 轮首集合即本轮 entry 的最终集合): 无则 []
+   * 且不落文件; 有则把相关决策条目聚合成 human-feedback.json 覆盖写
+   * (同名 artifact, 内容随人工反馈累积更新), 并引用
+   * artifact://<run_id>/human-feedback.json。每轮一条 entry — 前轮还没
+   * 有人工反馈的 entry 保持 [], 后续轮次的 entry 自然带上前轮人工提交
+   * 的反馈, 不重复落同一内容。人工 reject 直接终止 run (不再有新 entry),
+   * 其反馈留在决策账本 (control_decision: ledger://<run_id>) 可查。
+   */
+  private async buildHumanFeedbackRefs(runId: string): Promise<string[]> {
+    const decisions = await this.deps.runLedgerStore.readDecisionEntries(runId);
+    const withFeedback = decisions.filter(
+      (decision) =>
+        decision.feedback !== undefined || decision.override !== undefined,
+    );
+    if (withFeedback.length === 0) {
+      return [];
+    }
+    const name = "human-feedback.json";
+    const content = {
+      run_id: runId,
+      entries: withFeedback.map((decision) => ({
+        decision_id: decision.decision_id,
+        decision: decision.decision,
+        reason: decision.reason,
+        feedback: decision.feedback ?? null,
+        override: decision.override ?? null,
+        created_at: decision.created_at,
+      })),
+    };
+    await this.deps.runLedgerStore.writeArtifact(
+      runId,
+      name,
+      `${JSON.stringify(content, null, 2)}\n`,
+    );
+    return [`artifact://${runId}/${name}`];
   }
 
   private async writeTurnHandoff(

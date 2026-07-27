@@ -229,6 +229,28 @@ async function waitForState(
   }
 }
 
+/**
+ * 等 run-service 收尾：终态在 applyJudgment 里可见，但本轮的账本 entry
+ * 落账 / 注册清理在其之后（learning_refs 回填又加了一次 IO），断言账本
+ * 或注册状态前必须等 executeRun 返回（终态会注销 active 注册位）。
+ */
+async function waitForRunSettled(
+  service: LoopRunService,
+  loopId: string,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (!service.isRunActive(loopId)) {
+      return;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for run on '${loopId}' to settle`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 test("retry: resumeSession on the same session, judgment injected, backoff waited, budget accumulated", async () => {
   await withFixture(
     [RETRYABLE_JUDGMENT, PASSED_JUDGMENT],
@@ -331,6 +353,100 @@ test("needs_human → request_changes resumes the run (active) with feedback inj
       assert.equal(record?.budget?.used_retries, 0);
       assert.equal(record?.budget?.used_turns, 2);
       assert.equal(service.isRunActive("loop-it"), false);
+    },
+  );
+});
+
+test("learning_refs.human_feedback: entries with human feedback reference the aggregated artifact (02 §8.1)", async () => {
+  await withFixture(
+    [HUMAN_JUDGMENT, PASSED_JUDGMENT],
+    async ({ service, controlPlane, ledgerStore }) => {
+      const summary = await service.startRun("loop-it", "manual");
+      await waitForState(controlPlane, summary.run_id, ["needs_human"]);
+
+      // 人工反馈前的首轮 entry：尚无人工反馈，如实 [] 且不落文件。
+      // needs_human 在 applyJudgment 里可见，首轮 entry 落账在其后，
+      // 先等 entry 出现再断言。
+      const readRunEntries = async () =>
+        ((await ledgerStore.readUri(`ledger://${summary.run_id}`)) ?? "")
+          .split("\n")
+          .filter((line) => line.trim().length > 0)
+          .map((line) => JSON.parse(line) as Record<string, unknown>)
+          .filter((line) => line.type === "run_ledger_entry");
+      let before: Array<Record<string, unknown>> = [];
+      {
+        const deadline = Date.now() + 5000;
+        for (;;) {
+          before = await readRunEntries();
+          if (before.length >= 1) {
+            break;
+          }
+          if (Date.now() > deadline) {
+            throw new Error("timed out waiting for the turn-1 ledger entry");
+          }
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      }
+      assert.equal(before.length, 1);
+      assert.deepEqual(
+        (before[0]?.learning_refs as { human_feedback: string[] })
+          .human_feedback,
+        [],
+      );
+      assert.equal(
+        await ledgerStore.readArtifact(summary.run_id, "human-feedback.json"),
+        undefined,
+      );
+
+      // 人工 request_changes（feedback 必填）后 run 恢复并完成
+      await controlPlane.submitDecision(
+        summary.run_id,
+        "request_changes",
+        "请先修掉 lint 再交付",
+      );
+      await waitForState(controlPlane, summary.run_id, ["complete"]);
+      await waitForRunSettled(service, "loop-it");
+
+      // 次轮 entry 带上 artifact 引用；首轮 entry 保持当时的如实快照 []
+      const after = await readRunEntries();
+      assert.equal(after.length, 2);
+      assert.deepEqual(
+        (after[0]?.learning_refs as { human_feedback: string[] })
+          .human_feedback,
+        [],
+      );
+      assert.deepEqual(
+        (after[1]?.learning_refs as { human_feedback: string[] })
+          .human_feedback,
+        [`artifact://${summary.run_id}/human-feedback.json`],
+      );
+      assert.deepEqual(
+        (after[1]?.learning_refs as { external_feedback: string[] })
+          .external_feedback,
+        [],
+      );
+
+      // artifact 存在，内容聚合了带 feedback / override 的决策条目
+      const artifactJson = await ledgerStore.readArtifact(
+        summary.run_id,
+        "human-feedback.json",
+      );
+      assert.ok(artifactJson, "human-feedback.json artifact exists");
+      const artifact = JSON.parse(artifactJson) as {
+        run_id: string;
+        entries: Array<{
+          decision: string;
+          feedback: string | null;
+          override: { reason: string; feedback?: string } | null;
+        }>;
+      };
+      assert.equal(artifact.run_id, summary.run_id);
+      assert.equal(artifact.entries.length, 1);
+      assert.equal(artifact.entries[0]?.feedback, "请先修掉 lint 再交付");
+      assert.ok(
+        artifact.entries[0]?.override,
+        "override recorded for the human decision",
+      );
     },
   );
 });
