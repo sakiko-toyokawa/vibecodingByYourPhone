@@ -20,6 +20,13 @@ interface RunStreamOutputProps {
   sessionRef: string | null;
 }
 
+/** Accumulated display entry after merging stream events. */
+interface DisplayEntry {
+  at: string;
+  kind: "system" | "user" | "assistant" | "error" | "result" | "info";
+  text: string;
+}
+
 function parseRuntimeEvents(content: string): RuntimeEvent[] {
   return content
     .split("\n")
@@ -34,37 +41,120 @@ function parseRuntimeEvents(content: string): RuntimeEvent[] {
     .filter((event): event is RuntimeEvent => event !== null);
 }
 
-function formatEventText(event: RuntimeEvent): string {
-  const msg = event.message;
-  if (msg.error) {
-    return `[error] ${msg.error}`;
-  }
-  if (msg.type === "system" && msg.subtype === "init") {
-    return `[system] session initialized (cwd: ${msg.cwd ?? "unknown"})`;
-  }
-  if (msg.type === "user" && msg.content) {
-    return `[user] ${msg.content.slice(0, 200)}${msg.content.length > 200 ? "…" : ""}`;
-  }
-  if (msg.type === "assistant" && msg.content) {
-    return `[assistant] ${msg.content.slice(0, 500)}${msg.content.length > 500 ? "…" : ""}`;
-  }
-  if (msg.type === "result") {
-    return "[result] turn finished";
-  }
-  if (msg.type === "stream_event") {
-    const delta = (msg as { delta?: { text?: string } }).delta?.text;
-    if (delta) {
-      return `[stream] ${delta}`;
+/**
+ * Merge raw runtime events into human-readable display entries.
+ * stream_event deltas are accumulated per message; thinking/text blocks are
+ * concatenated into a single assistant entry instead of one line per delta.
+ */
+function buildDisplayEntries(events: RuntimeEvent[]): DisplayEntry[] {
+  const entries: DisplayEntry[] = [];
+  /** messageId -> accumulated text */
+  const streamAccum = new Map<string, { at: string; text: string }>();
+  let currentStreamId: string | null = null;
+
+  const flushStream = () => {
+    if (!currentStreamId) return;
+    const acc = streamAccum.get(currentStreamId);
+    if (acc && acc.text.trim().length > 0) {
+      entries.push({ at: acc.at, kind: "assistant", text: acc.text });
+    }
+    streamAccum.delete(currentStreamId);
+    currentStreamId = null;
+  };
+
+  for (const event of events) {
+    const msg = event.message;
+
+    if (msg.error) {
+      flushStream();
+      entries.push({ at: event.at, kind: "error", text: msg.error });
+      continue;
+    }
+
+    if (msg.type === "stream_event") {
+      const evt = (msg as { event?: { type?: string; [key: string]: unknown } })
+        .event;
+      if (!evt) continue;
+
+      if (evt.type === "message_start") {
+        flushStream();
+        const message = evt.message as { id?: string } | undefined;
+        currentStreamId = message?.id ?? `stream-${Date.now()}`;
+        streamAccum.set(currentStreamId, { at: event.at, text: "" });
+        continue;
+      }
+
+      if (evt.type === "content_block_delta" && currentStreamId) {
+        const delta = evt.delta as
+          | { type?: string; text?: string; thinking?: string }
+          | undefined;
+        const acc = streamAccum.get(currentStreamId);
+        if (acc && delta) {
+          if (delta.type === "text_delta" && delta.text) {
+            acc.text += delta.text;
+          } else if (delta.type === "thinking_delta" && delta.thinking) {
+            acc.text += delta.thinking;
+          }
+        }
+        continue;
+      }
+
+      if (evt.type === "message_stop" || evt.type === "content_block_stop") {
+        flushStream();
+        continue;
+      }
+      continue;
+    }
+
+    // Non-stream events
+    flushStream();
+
+    if (msg.type === "system" && msg.subtype === "init") {
+      entries.push({
+        at: event.at,
+        kind: "system",
+        text: `session initialized (cwd: ${msg.cwd ?? "unknown"})`,
+      });
+    } else if (msg.type === "user" && msg.content) {
+      entries.push({ at: event.at, kind: "user", text: msg.content });
+    } else if (msg.type === "assistant" && msg.content) {
+      entries.push({ at: event.at, kind: "assistant", text: msg.content });
+    } else if (msg.type === "result") {
+      entries.push({ at: event.at, kind: "result", text: "turn finished" });
+    } else if (msg.type === "system" && msg.subtype === "status") {
+      const status = (msg as { status?: string }).status;
+      if (status) {
+        entries.push({ at: event.at, kind: "info", text: `status: ${status}` });
+      }
     }
   }
-  return `[${msg.type ?? "event"}] ${JSON.stringify(msg).slice(0, 120)}`;
+
+  flushStream();
+  return entries;
+}
+
+function kindLabel(kind: DisplayEntry["kind"]): string {
+  switch (kind) {
+    case "system":
+      return "[system]";
+    case "user":
+      return "[user]";
+    case "assistant":
+      return "[assistant]";
+    case "error":
+      return "[error]";
+    case "result":
+      return "[result]";
+    case "info":
+      return "[info]";
+  }
 }
 
 /**
  * Live stream output for a loop run.
  * - Finished runs: reads runtime-events.jsonl for historical events.
  * - Active runs: also subscribes to the executor session via WebSocket for
- *   real-time messages, falling back to polling if the session is gone.
+ *   real-time messages, merging stream deltas into readable entries.
  */
 export function RunStreamOutput({
   runId,
@@ -76,7 +166,6 @@ export function RunStreamOutput({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load historical events from runtime-events.jsonl
   const loadHistorical = useCallback(async () => {
     try {
       const { content } = await loopsApi.getRunArtifact(
@@ -100,15 +189,16 @@ export function RunStreamOutput({
     return () => clearInterval(interval);
   }, [loadHistorical, isActive]);
 
-  // WebSocket subscription for live messages (active run + known session)
   const handleStreamMessage = useCallback(
     (data: { eventType: string; [key: string]: unknown }) => {
       if (data.eventType !== "message") return;
-      const event: RuntimeEvent = {
-        at: new Date().toISOString(),
-        message: data as RuntimeEvent["message"],
-      };
-      setLiveEvents((prev) => [...prev, event]);
+      setLiveEvents((prev) => [
+        ...prev,
+        {
+          at: new Date().toISOString(),
+          message: data as RuntimeEvent["message"],
+        },
+      ]);
     },
     [],
   );
@@ -118,7 +208,7 @@ export function RunStreamOutput({
     { onMessage: handleStreamMessage },
   );
 
-  const allEvents = [...historicalEvents, ...liveEvents];
+  const allEntries = buildDisplayEntries([...historicalEvents, ...liveEvents]);
 
   if (loading) {
     return (
@@ -128,7 +218,7 @@ export function RunStreamOutput({
     );
   }
 
-  if (allEvents.length === 0) {
+  if (allEntries.length === 0) {
     return (
       <p className="p-3 [font-size:var(--font-size-sm)] italic text-[var(--text-muted)]">
         {isActive
@@ -139,19 +229,30 @@ export function RunStreamOutput({
   }
 
   return (
-    <div className="flex max-h-[480px] flex-col gap-1 overflow-y-auto rounded bg-[var(--bg-primary)] p-3 font-mono [font-size:var(--font-size-xs)]">
-      {allEvents.map((event, index) => (
-        <div key={`${event.at}-${index}`} className="flex gap-2">
-          <span className="shrink-0 text-[var(--text-dimmed)]">
-            {new Date(event.at).toLocaleTimeString()}
+    <div className="flex max-h-[480px] flex-col gap-2 overflow-y-auto rounded bg-[var(--bg-primary)] p-3">
+      {allEntries.map((entry, index) => (
+        <div key={`${entry.at}-${index}`} className="flex gap-2">
+          <span className="shrink-0 font-mono [font-size:var(--font-size-xs)] text-[var(--text-dimmed)]">
+            {new Date(entry.at).toLocaleTimeString()}
           </span>
-          <span className="whitespace-pre-wrap break-all text-[var(--text-primary)]">
-            {formatEventText(event)}
+          <span
+            className={`shrink-0 font-mono [font-size:var(--font-size-xs)] ${
+              entry.kind === "error"
+                ? "text-[var(--error-color)]"
+                : entry.kind === "assistant"
+                  ? "text-[var(--accent-rust)]"
+                  : "text-[var(--text-muted)]"
+            }`}
+          >
+            {kindLabel(entry.kind)}
+          </span>
+          <span className="whitespace-pre-wrap break-all [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
+            {entry.text}
           </span>
         </div>
       ))}
       {isActive && (
-        <div className="mt-2 text-[var(--text-muted)] italic">
+        <div className="mt-2 [font-size:var(--font-size-xs)] italic text-[var(--text-muted)]">
           {wsConnected ? "live" : "polling"}…
         </div>
       )}
