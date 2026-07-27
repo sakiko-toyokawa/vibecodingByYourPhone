@@ -471,19 +471,47 @@ export function LoopsPage() {
                   </label>
 
                   {createForm.kind === "workspace" ? (
-                    <label className="flex flex-col gap-1">
-                      <span className="[font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
-                        {t("loopsCreateWorkspaceLabel")}
-                      </span>
-                      <input
-                        className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-border)]"
-                        value={createForm.workspacePath}
-                        onChange={(event) =>
-                          updateCreateForm("workspacePath", event.target.value)
-                        }
-                        placeholder="E:\\projects\\my-app"
-                      />
-                    </label>
+                    <>
+                      <label className="flex flex-col gap-1">
+                        <span className="[font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
+                          {t("loopsCreateWorkspaceLabel")}
+                        </span>
+                        <input
+                          className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-border)]"
+                          value={createForm.workspacePath}
+                          onChange={(event) =>
+                            updateCreateForm(
+                              "workspacePath",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="E:\\projects\\my-app"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="[font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
+                          {t("loopsCreatePolicyModeLabel")}
+                        </span>
+                        <select
+                          className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-border)]"
+                          value={createForm.policyMode}
+                          onChange={(event) =>
+                            updateCreateForm(
+                              "policyMode",
+                              event.target
+                                .value as LoopCreateFormState["policyMode"],
+                            )
+                          }
+                        >
+                          <option value="readonly">
+                            {t("loopsCreatePolicyModeReadonly")}
+                          </option>
+                          <option value="modify">
+                            {t("loopsCreatePolicyModeModify")}
+                          </option>
+                        </select>
+                      </label>
+                    </>
                   ) : (
                     <div className="flex flex-col justify-end gap-1 rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2">
                       <span className="[font-size:var(--font-size-xs)] font-medium text-[var(--text-muted)]">
@@ -684,6 +712,15 @@ export function LoopsPage() {
                         <span className="overflow-hidden text-ellipsis whitespace-nowrap font-medium text-[var(--text-primary)]">
                           {loop.id}
                         </span>
+                        {loop.card.loop.policy ? (
+                          <span className="shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--warning-color)]/15 px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium text-[var(--warning-color)]">
+                            modify
+                          </span>
+                        ) : (
+                          <span className="shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium text-[var(--text-muted)]">
+                            readonly
+                          </span>
+                        )}
                         {lastRun && (
                           <span
                             className={`shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium ${runStateBadgeClass(lastRun.state)}`}

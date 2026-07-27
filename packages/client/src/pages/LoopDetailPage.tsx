@@ -260,6 +260,16 @@ export function LoopDetailPage() {
                     : loop.card.loop.trigger.type}
                 </span>
                 {" · "}
+                {loop.card.loop.policy ? (
+                  <span className="rounded-[var(--radius-sm)] bg-[var(--warning-color)]/15 px-1.5 py-0.5 text-xs font-medium text-[var(--warning-color)]">
+                    modify
+                  </span>
+                ) : (
+                  <span className="rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-1.5 py-0.5 text-xs font-medium text-[var(--text-muted)]">
+                    readonly
+                  </span>
+                )}
+                {" · "}
                 {t("loopsCreated", { time: formatTime(loop.created_at) })}
               </p>
             )}

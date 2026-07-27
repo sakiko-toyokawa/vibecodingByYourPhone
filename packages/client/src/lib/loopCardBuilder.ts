@@ -1,9 +1,12 @@
 import type { LoopCard } from "@yep-anywhere/shared";
 
 export type LoopKind = "workspace" | "github_prompt";
+export type PolicyMode = "readonly" | "modify";
 
 export interface LoopCreateFormState {
   kind: LoopKind;
+  /** workspace 类型专用：只读扫描 or 策略约束下的修改循环 */
+  policyMode: PolicyMode;
   id: string;
   workspacePath: string;
   task: string;
@@ -20,6 +23,7 @@ export interface LoopCreateFormState {
 
 export const DEFAULT_LOOP_CREATE_FORM: LoopCreateFormState = {
   kind: "workspace",
+  policyMode: "readonly",
   id: "",
   workspacePath: "",
   task: "",
@@ -127,6 +131,14 @@ export function buildLoopCard(form: LoopCreateFormState): LoopCard {
         strategy: "direct",
         path: form.workspacePath.trim(),
       },
+      ...(form.policyMode === "modify"
+        ? {
+            policy: {
+              profile: "workspace_local_fix",
+              approval_mode: "bypass" as const,
+            },
+          }
+        : {}),
     },
   };
 }

@@ -61,6 +61,7 @@ export interface ProfileDefinition {
 export const NAMED_PROFILES: Record<string, ProfileDefinition> = {
   loop_bypass: {},
   github_issue_local_fix: {},
+  workspace_local_fix: {},
   loop_strict_review: {
     risk_rules: {
       medium: "review_or_policy",
