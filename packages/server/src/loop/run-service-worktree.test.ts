@@ -13,7 +13,7 @@
 
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -24,7 +24,7 @@ import { createLoopsRoutes } from "../routes/loops.js";
 import { createRunsRoutes } from "../routes/runs.js";
 import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
-import type { IEventBus } from "../watcher/index.js";
+import type { BusEvent, IEventBus } from "../watcher/index.js";
 import { ControlPlane } from "./control-plane/control-plane.js";
 import { RunStateStore } from "./control-plane/run-state-store.js";
 import { LoopRunService } from "./run-service.js";
@@ -40,7 +40,9 @@ interface SupervisorCall {
 }
 
 /** Fake Supervisor: 记录 cwd 并立即成功; writeChange 时 executor 会在
- *  cwd (worktree) 里真实写一个文件, 模拟 modify loop 的改动。 */
+ *  cwd (worktree) 里真实写一个文件, 模拟 modify loop 的改动。同时追加
+ *  已跟踪的 README.md — git diff --stat 口径不含未跟踪新文件, 事件
+ *  diff_summary 断言需要一处跟踪文件改动。 */
 class FakeSupervisor {
   readonly calls: SupervisorCall[] = [];
   writeChange = false;
@@ -52,6 +54,7 @@ class FakeSupervisor {
         path.join(cwd, "loop-change.txt"),
         `change at ${Date.now()}\n`,
       );
+      await appendFile(path.join(cwd, "README.md"), "loop touch\n");
     }
     return {
       sessionId: "session-wt-1",
@@ -158,6 +161,8 @@ interface Fixture {
   controlPlane: ControlPlane;
   supervisor: FakeSupervisor;
   ledgerStore: RunLedgerStore;
+  /** eventBus 录下的全部广播事件 (run-decision-required 等) */
+  events: BusEvent[];
 }
 
 async function withFixture(fn: (ctx: Fixture) => Promise<void>): Promise<void> {
@@ -167,8 +172,11 @@ async function withFixture(fn: (ctx: Fixture) => Promise<void>): Promise<void> {
     await loopCardStore.initialize();
     const ledgerStore = new RunLedgerStore({ dataDir });
     const stateStore = new RunStateStore({ dataDir });
+    const events: BusEvent[] = [];
     const eventBus = {
-      emit: () => {},
+      emit: (event: BusEvent) => {
+        events.push(event);
+      },
     } as unknown as IEventBus;
     const controlPlane = new ControlPlane({
       runStateStore: stateStore,
@@ -195,7 +203,7 @@ async function withFixture(fn: (ctx: Fixture) => Promise<void>): Promise<void> {
       }),
     );
     app.route("/", createRunsRoutes({ runService: service, controlPlane }));
-    await fn({ app, controlPlane, supervisor, ledgerStore });
+    await fn({ app, controlPlane, supervisor, ledgerStore, events });
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }
@@ -332,7 +340,7 @@ test("合并闸门: 判过且 worktree 有改动 → needs_human; approve 后合
   const repo = await makeTempRepo();
   try {
     await withFixture(
-      async ({ app, controlPlane, supervisor, ledgerStore }) => {
+      async ({ app, controlPlane, supervisor, ledgerStore, events }) => {
         supervisor.writeChange = true;
         const create = await app.request("/", {
           method: "POST",
@@ -351,6 +359,21 @@ test("合并闸门: 判过且 worktree 有改动 → needs_human; approve 后合
 
         // 验证通过但改动待合并确认: 不直接 complete, 升级人工闸门
         await waitForState(controlPlane, run.run_id, ["needs_human"]);
+
+        // run-decision-required 事件: worktree 有改动 → diff_summary 携带
+        // git diff --stat 摘要 (README.md 是跟踪文件改动; loop-change.txt
+        // 是未跟踪新文件, 不在 --stat 口径内); 合并闸门把 judgment 改写为
+        // needs_human → recommended 为 manual_review (无可靠默认动作)。
+        const required = events.filter(
+          (e) => e.type === "run-decision-required",
+        );
+        assert.equal(required.length, 1);
+        const gatePayload = required[0] as Extract<
+          BusEvent,
+          { type: "run-decision-required" }
+        >;
+        assert.match(gatePayload.diff_summary ?? "", /README\.md/);
+        assert.equal(gatePayload.recommended, "manual_review");
         const gateJson = await ledgerStore.readArtifact(
           run.run_id,
           "merge-gate.json",

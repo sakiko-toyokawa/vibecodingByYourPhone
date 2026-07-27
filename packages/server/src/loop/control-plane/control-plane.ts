@@ -144,6 +144,10 @@ export interface ApplyJudgmentInput {
   /** 本轮执行的 session 引用 (06 偏差 #32: run_state.session_ref,
    *  前端据此订阅对应 session 的消息流)。 */
   sessionRef?: string;
+  /** 工作区 diff 摘要 (git diff --stat 文本, 由 run-service 捕获)。仅在
+   *  升级 needs_human 时随 run-decision-required 事件透传给前端;
+   *  缺失则事件不携带 diff_summary 字段。 */
+  diffSummary?: string;
 }
 
 export interface ApplyJudgmentResult {
@@ -220,6 +224,31 @@ export interface ControlPlaneDeps {
 
 /** The options a needs_human run offers (03: full set). */
 const DECISION_OPTIONS = ["approve", "reject", "request_changes", "pause"];
+
+/**
+ * judgment.next_action → run-decision-required 事件的 recommended 字段
+ * (03-API契约 Human Gate Payload)。口径钉死:
+ * - complete → "approve" (判过, 建议通过)
+ * - retry → "request_changes" (建议打回修改后再试)
+ * - stop → "reject" (判停, 建议终止; next_action 枚举无 failed, stop
+ *   承载"失败即拒"的推荐语义)
+ * - 其余 (needs_human / escalate) 或缺失 → "manual_review" (无可靠建议,
+ *   前端不映射到任何按钮)
+ * 硬闸门策略升级 (policyEscalation) 不走本映射 — 人工裁决场景不给默认
+ * 推荐, 避免误导性建议。
+ */
+function recommendedDecision(nextAction: string | undefined): string {
+  switch (nextAction) {
+    case "complete":
+      return "approve";
+    case "retry":
+      return "request_changes";
+    case "stop":
+      return "reject";
+    default:
+      return "manual_review";
+  }
+}
 
 /** Deterministic decision_id = idempotency key (run_id + turn + target/cause). */
 function controlDecisionId(runId: string, turn: number, to: RunState): string {
@@ -516,6 +545,15 @@ export class ControlPlane {
         reason,
         evidence_refs: input.judgment?.evidence ?? [],
         options: DECISION_OPTIONS,
+        // recommended: 硬闸门升级是人工裁决场景, 不发推荐 (不给误导性
+        // 默认动作, 字段缺省); 其余按 judgment.next_action 映射
+        // (口径见 recommendedDecision)。
+        recommended: input.policyEscalation
+          ? undefined
+          : recommendedDecision(input.judgment?.next_action),
+        // diff_summary: run-service 捕获的工作区改动摘要, 缺失则事件
+        // 不带该字段 (undefined 不进 JSON)。
+        diff_summary: input.diffSummary,
         timestamp: now,
       });
     }

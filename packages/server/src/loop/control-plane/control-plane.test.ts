@@ -480,6 +480,89 @@ test("needs_human bridging: decision-required event; approve → active with ove
   });
 });
 
+test("run-decision-required: recommended 按 next_action 映射, diff_summary 透传", async () => {
+  // complete → approve; diff_summary 透传
+  await withFixture(async ({ controlPlane, bus }) => {
+    const stat = " src/a.ts | 2 +-\n 1 file changed, 1 insertion(+)";
+    await controlPlane.applyJudgment(
+      applyInput({
+        judgment: makeJudgment({
+          overall: "passed",
+          next_action: "complete",
+          requires_human: true,
+        }),
+        diffSummary: stat,
+      }),
+    );
+    const payload = at(bus.ofType("run-decision-required"), 0);
+    assert.equal(payload.recommended, "approve");
+    assert.equal(payload.diff_summary, stat);
+  });
+
+  // retry → request_changes
+  await withFixture(async ({ controlPlane, bus }) => {
+    await controlPlane.applyJudgment(
+      applyInput({
+        judgment: retryableJudgment({ requires_human: true }),
+      }),
+    );
+    const payload = at(bus.ofType("run-decision-required"), 0);
+    assert.equal(payload.recommended, "request_changes");
+  });
+
+  // stop → reject (next_action 枚举无 failed, stop 承载判停推荐)
+  await withFixture(async ({ controlPlane, bus }) => {
+    await controlPlane.applyJudgment(
+      applyInput({
+        judgment: makeJudgment({ next_action: "stop" }),
+      }),
+    );
+    const payload = at(bus.ofType("run-decision-required"), 0);
+    assert.equal(payload.recommended, "reject");
+  });
+
+  // needs_human / escalate → manual_review; 无 diffSummary 则字段缺省
+  await withFixture(async ({ controlPlane, bus }) => {
+    await controlPlane.applyJudgment(applyInput());
+    const payload = at(bus.ofType("run-decision-required"), 0);
+    assert.equal(payload.recommended, "manual_review");
+    assert.equal(payload.diff_summary, undefined);
+  });
+  await withFixture(async ({ controlPlane, bus }) => {
+    await controlPlane.applyJudgment(
+      applyInput({
+        judgment: makeJudgment({ next_action: "escalate" }),
+      }),
+    );
+    const payload = at(bus.ofType("run-decision-required"), 0);
+    assert.equal(payload.recommended, "manual_review");
+  });
+
+  // 硬闸门升级是人工裁决场景: 不发 recommended (不给误导性默认动作)
+  await withFixture(async ({ controlPlane, bus }) => {
+    await controlPlane.applyJudgment(
+      applyInput({
+        judgment: makeJudgment({
+          overall: "passed",
+          next_action: "complete",
+          requires_human: false,
+        }),
+        policyEscalation: {
+          action: "merge",
+          reason: "protected branch",
+          policyRef: "policy://hard-gate/merge",
+        },
+        diffSummary: " src/a.ts | 2 +-",
+      }),
+    );
+    const payload = at(bus.ofType("run-decision-required"), 0);
+    assert.equal(payload.action, "merge");
+    assert.equal(payload.recommended, undefined);
+    // diff_summary 与 recommended 解耦: 有摘要仍透传
+    assert.equal(payload.diff_summary, " src/a.ts | 2 +-");
+  });
+});
+
 test("repeated blocker: second unchanged approve is rejected unless human adds new direction", async () => {
   await withFixture(async ({ controlPlane, ledgerStore }) => {
     const resumes: ResumeSignal[] = [];

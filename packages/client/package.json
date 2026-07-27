@@ -10,7 +10,7 @@
     "build:stable": "tsc && vite build --base /_stable/ --outDir dist-stable",
     "build:remote": "tsc && vite build --config vite.config.remote.ts",
     "preview:remote": "vite preview --config vite.config.remote.ts",
-    "test": "node -e \"require('fs').rmSync('.test-dist', { recursive: true, force: true })\" && tsc -p tsconfig.test.json && node --experimental-specifier-resolution=node .test-dist/pages/relayConnectAttempt.test.js && node --experimental-specifier-resolution=node .test-dist/components/FilePathLink.test.js && node --experimental-specifier-resolution=node .test-dist/lib/loopDecisions.test.js && node --experimental-specifier-resolution=node .test-dist/lib/loopCardBuilder.test.js && node -e \"require('fs').rmSync('.test-dist', { recursive: true, force: true })\""
+    "test": "node -e \"require('fs').rmSync('.test-dist', { recursive: true, force: true })\" && tsc -p tsconfig.test.json && node --experimental-specifier-resolution=node .test-dist/pages/relayConnectAttempt.test.js && node --experimental-specifier-resolution=node .test-dist/components/FilePathLink.test.js && node --experimental-specifier-resolution=node .test-dist/components/LoopApprovalCards.test.js && node --experimental-specifier-resolution=node .test-dist/lib/loopDecisions.test.js && node --experimental-specifier-resolution=node .test-dist/lib/loopCardBuilder.test.js && node -e \"require('fs').rmSync('.test-dist', { recursive: true, force: true })\""
   },
   "dependencies": {
     "@codemirror/commands": "^6.8.1",

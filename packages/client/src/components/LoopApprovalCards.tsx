@@ -12,6 +12,11 @@ import {
   isAwaitingHuman,
   loopChangedState,
 } from "../lib/loopDecisions";
+import {
+  DecisionButtons,
+  DiffSummaryBlock,
+  recommendedDecisionOption,
+} from "./LoopApprovalCards.shared";
 
 interface PendingApproval {
   event: RunDecisionRequiredEvent;
@@ -57,19 +62,6 @@ const RISK_LABEL_KEYS: Record<string, string> = {
 };
 
 type MessageKey = Parameters<ReturnType<typeof useI18n>["t"]>[0];
-
-function decisionButtonClass(option: LoopDecisionOption): string {
-  switch (option) {
-    case "approve":
-      return "bg-[var(--primary)] text-[var(--on-primary)]";
-    case "reject":
-      return "bg-[var(--error-color)]/15 text-[var(--error-color)] border border-[var(--error-color)]/40";
-    case "request_changes":
-      return "bg-[var(--warning-color)]/15 text-[var(--warning-color)] border border-[var(--warning-color)]/40";
-    case "pause":
-      return "bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)]";
-  }
-}
 
 function ApprovalCard({
   approval,
@@ -157,6 +149,12 @@ function ApprovalCard({
             {event.reason}
           </div>
         )}
+        {event.diff_summary && (
+          <DiffSummaryBlock
+            label={t("loopApprovalDiffSummary")}
+            summary={event.diff_summary}
+          />
+        )}
       </div>
 
       {approval.error && (
@@ -194,19 +192,19 @@ function ApprovalCard({
           </div>
         </div>
       ) : (
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {event.options.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className={`rounded-md px-3 py-2.5 text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50 ${decisionButtonClass(option)}`}
-              disabled={approval.submitting}
-              onClick={() => handleDecision(option)}
-            >
-              {t(DECISION_LABEL_KEYS[option])}
-            </button>
-          ))}
-        </div>
+        <DecisionButtons
+          options={event.options}
+          labels={{
+            approve: t(DECISION_LABEL_KEYS.approve),
+            reject: t(DECISION_LABEL_KEYS.reject),
+            request_changes: t(DECISION_LABEL_KEYS.request_changes),
+            pause: t(DECISION_LABEL_KEYS.pause),
+          }}
+          recommended={recommendedDecisionOption(event.recommended)}
+          recommendedBadge={t("loopApprovalRecommended")}
+          disabled={approval.submitting}
+          onSelect={handleDecision}
+        />
       )}
     </div>
   );

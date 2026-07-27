@@ -160,7 +160,12 @@ export interface RunDecisionRequiredEvent {
   risk: string;
   reason: string;
   evidence_refs: string[];
+  /** 工作区改动摘要 (git diff --stat 文本); 无改动或未捕获时缺省 */
+  diff_summary?: string;
   options: LoopDecisionOption[];
+  /** 控制面推荐的决策; 硬闸门升级等人工裁决场景缺省, "manual_review"
+   *  不映射到任何按钮 */
+  recommended?: string;
   timestamp: string;
 }
 

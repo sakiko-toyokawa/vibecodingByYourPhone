@@ -1032,6 +1032,8 @@
   "loopApprovalFeedbackPlaceholder": "変更内容を記述…",
   "loopApprovalSubmit": "送信",
   "loopApprovalCancel": "キャンセル",
+  "loopApprovalRecommended": "推奨",
+  "loopApprovalDiffSummary": "ワークスペースの差分サマリ",
   "loopActionMerge": "保護ブランチへマージ",
   "loopActionDeploy": "デプロイ",
   "loopActionDelete": "削除",

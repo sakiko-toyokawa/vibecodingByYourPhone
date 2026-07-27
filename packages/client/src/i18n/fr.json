@@ -1032,6 +1032,8 @@
   "loopApprovalFeedbackPlaceholder": "Décrivez ce qui doit changer…",
   "loopApprovalSubmit": "Envoyer",
   "loopApprovalCancel": "Annuler",
+  "loopApprovalRecommended": "Recommandé",
+  "loopApprovalDiffSummary": "Résumé des modifications du workspace",
   "loopActionMerge": "Fusionner vers la branche protégée",
   "loopActionDeploy": "Déployer",
   "loopActionDelete": "Supprimer",

@@ -473,6 +473,39 @@ async function captureGitDiff(workspacePath: string): Promise<string | null> {
   }
 }
 
+/** diff_summary 截断上限: 避免巨型 --stat 输出灌进 WS 事件。 */
+const DIFF_SUMMARY_MAX_CHARS = 500;
+
+/**
+ * run-decision-required 事件的 diff_summary: 工作区相对基线的
+ * git diff --stat 摘要文本。worktree 策略基线传 baseSha (含 loop 分支
+ * 已提交改动), direct 策略缺省对 HEAD。与 captureGitDiff 同口径: 不含
+ * 未跟踪新文件 (--stat 限制, 与 diff.patch 证据一致); 非 git 工作区 /
+ * git 不可用 / 无变更时返回 null, 不伪造 — 该字段只是审批展示的辅助
+ * 信息, 失败即省略, 绝不阻断控制决策。
+ */
+async function captureGitDiffStat(
+  workspacePath: string,
+  baseRef?: string,
+): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-C", workspacePath, "diff", "--stat", baseRef ?? "HEAD"],
+      { timeout: 30_000, maxBuffer: 1024 * 1024 },
+    );
+    const trimmed = stdout.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+    return trimmed.length > DIFF_SUMMARY_MAX_CHARS
+      ? `${trimmed.slice(0, DIFF_SUMMARY_MAX_CHARS)}…`
+      : trimmed;
+  } catch {
+    return null;
+  }
+}
+
 export class LoopRunService {
   private readonly deps: LoopRunServiceDeps;
   private readonly sleep: (ms: number) => Promise<void>;
@@ -1576,6 +1609,16 @@ export class LoopRunService {
         let blockerFingerprint: string | undefined;
         let repeatedBlockerCount: number | undefined;
         if (this.deps.controlPlane && ctx.contract) {
+          // 升级 needs_human 时随 run-decision-required 事件带给前端的
+          // 改动摘要 (git diff --stat; worktree 策略对 baseSha 取全量,
+          // direct 对 HEAD)。每轮都算一次, 由 control-plane 决定仅在
+          // needs_human 事件里透传; 捕获失败为 null 即省略该字段。
+          const diffSummary = workspacePath
+            ? ((await captureGitDiffStat(
+                workspacePath,
+                ctx.workspaceEvidence?.baseSha,
+              )) ?? undefined)
+            : undefined;
           const applied = await this.deps.controlPlane.applyJudgment({
             loopId,
             runId,
@@ -1588,6 +1631,7 @@ export class LoopRunService {
             judgmentRef,
             createdAt,
             budget: ctx.contract.budget,
+            diffSummary,
             // 02 §2 stop_rules: repetition.max_same_failure 由
             // control-plane 按同一阻断指纹计数消费
             stopRules: ctx.contract.stop_rules,

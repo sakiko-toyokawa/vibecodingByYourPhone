@@ -8,6 +8,8 @@
     "src/components/FilePathLink.shared.tsx",
     "src/components/FilePathLink.tsx",
     "src/components/FilePathLink.test.tsx",
+    "src/components/LoopApprovalCards.shared.tsx",
+    "src/components/LoopApprovalCards.test.tsx",
     "src/pages/relayConnectAttempt.ts",
     "src/pages/relayConnectAttempt.test.ts",
     "src/types/desktop.d.ts",
