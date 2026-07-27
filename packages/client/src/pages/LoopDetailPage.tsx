@@ -430,6 +430,7 @@ export function LoopDetailPage() {
                               runDetail?.run.state === "active" ||
                               runDetail?.run.state === "retry"
                             }
+                            sessionRef={runDetail?.session_ref ?? null}
                           />
                         </div>
 

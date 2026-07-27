@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { loopsApi } from "../api/loops";
+import { useSessionStream } from "../hooks/useSessionStream";
 
 interface RuntimeEvent {
   at: string;
@@ -16,6 +17,7 @@ interface RuntimeEvent {
 interface RunStreamOutputProps {
   runId: string;
   isActive: boolean;
+  sessionRef: string | null;
 }
 
 function parseRuntimeEvents(content: string): RuntimeEvent[] {
@@ -59,36 +61,64 @@ function formatEventText(event: RuntimeEvent): string {
 }
 
 /**
- * Live stream output for a loop run: reads runtime-events.jsonl and polls
- * for updates while the run is active. Shows executor messages in order.
+ * Live stream output for a loop run.
+ * - Finished runs: reads runtime-events.jsonl for historical events.
+ * - Active runs: also subscribes to the executor session via WebSocket for
+ *   real-time messages, falling back to polling if the session is gone.
  */
-export function RunStreamOutput({ runId, isActive }: RunStreamOutputProps) {
-  const [events, setEvents] = useState<RuntimeEvent[]>([]);
+export function RunStreamOutput({
+  runId,
+  isActive,
+  sessionRef,
+}: RunStreamOutputProps) {
+  const [historicalEvents, setHistoricalEvents] = useState<RuntimeEvent[]>([]);
+  const [liveEvents, setLiveEvents] = useState<RuntimeEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  // Load historical events from runtime-events.jsonl
+  const loadHistorical = useCallback(async () => {
     try {
       const { content } = await loopsApi.getRunArtifact(
         runId,
         "runtime-events.jsonl",
       );
-      setEvents(parseRuntimeEvents(content));
+      setHistoricalEvents(parseRuntimeEvents(content));
       setError(null);
     } catch {
-      setEvents([]);
-      setError("runtime-events.jsonl not available");
+      setHistoricalEvents([]);
+      setError("runtime-events.jsonl not available yet");
     } finally {
       setLoading(false);
     }
   }, [runId]);
 
   useEffect(() => {
-    void load();
+    void loadHistorical();
     if (!isActive) return;
-    const interval = setInterval(() => void load(), 3000);
+    const interval = setInterval(() => void loadHistorical(), 5000);
     return () => clearInterval(interval);
-  }, [load, isActive]);
+  }, [loadHistorical, isActive]);
+
+  // WebSocket subscription for live messages (active run + known session)
+  const handleStreamMessage = useCallback(
+    (data: { eventType: string; [key: string]: unknown }) => {
+      if (data.eventType !== "message") return;
+      const event: RuntimeEvent = {
+        at: new Date().toISOString(),
+        message: data as RuntimeEvent["message"],
+      };
+      setLiveEvents((prev) => [...prev, event]);
+    },
+    [],
+  );
+
+  const { connected: wsConnected } = useSessionStream(
+    isActive && sessionRef ? sessionRef : null,
+    { onMessage: handleStreamMessage },
+  );
+
+  const allEvents = [...historicalEvents, ...liveEvents];
 
   if (loading) {
     return (
@@ -98,25 +128,19 @@ export function RunStreamOutput({ runId, isActive }: RunStreamOutputProps) {
     );
   }
 
-  if (error) {
+  if (allEvents.length === 0) {
     return (
       <p className="p-3 [font-size:var(--font-size-sm)] italic text-[var(--text-muted)]">
-        {error}
-      </p>
-    );
-  }
-
-  if (events.length === 0) {
-    return (
-      <p className="p-3 [font-size:var(--font-size-sm)] italic text-[var(--text-muted)]">
-        No stream events recorded.
+        {isActive
+          ? "Waiting for executor output…"
+          : "No stream events recorded."}
       </p>
     );
   }
 
   return (
     <div className="flex max-h-[480px] flex-col gap-1 overflow-y-auto rounded bg-[var(--bg-primary)] p-3 font-mono [font-size:var(--font-size-xs)]">
-      {events.map((event, index) => (
+      {allEvents.map((event, index) => (
         <div key={`${event.at}-${index}`} className="flex gap-2">
           <span className="shrink-0 text-[var(--text-dimmed)]">
             {new Date(event.at).toLocaleTimeString()}
@@ -128,7 +152,7 @@ export function RunStreamOutput({ runId, isActive }: RunStreamOutputProps) {
       ))}
       {isActive && (
         <div className="mt-2 text-[var(--text-muted)] italic">
-          polling for new events…
+          {wsConnected ? "live" : "polling"}…
         </div>
       )}
     </div>
