@@ -268,7 +268,7 @@ const BEHAVIORS: Record<string, BehaviorFn> = {
     const card = probeLegacyCard();
     const input = assembleRuntimeInput(card, probeContract(card));
     const checks = {
-      readonlyRules: input.prompt.includes("READ-ONLY"),
+      readonlyRules: input.prompt.includes("只读循环任务"),
       executorSummaryContract: input.prompt.includes(EXECUTOR_SUMMARY_BEGIN),
       planMode: input.permissionMode === "plan",
     };
@@ -290,7 +290,7 @@ const BEHAVIORS: Record<string, BehaviorFn> = {
     const without = assembleRuntimeInput(card, probeContract(card), []);
     const checks = {
       injected: withProposal.prompt.includes(template),
-      rulesSurvive: withProposal.prompt.includes("READ-ONLY"),
+      rulesSurvive: withProposal.prompt.includes("只读循环任务"),
       notInjectedByDefault: !without.prompt.includes(template),
       appliedRecorded: withProposal.appliedProposals?.length === 1,
     };

@@ -79,27 +79,27 @@ function extractUpdatedFile(responseText: string): string {
 function buildAiEditPrompt(input: AiEditRequest): string {
   const selectionSection =
     input.selectedText && input.selectedText.trim().length > 0
-      ? `Selected text:\n<<<SELECTION\n${input.selectedText}\nSELECTION`
-      : "Selected text:\n<none>";
+      ? `选中文本：\n<<<SELECTION\n${input.selectedText}\nSELECTION`
+      : "选中文本：\n<none>";
 
   return [
-    "You are applying a targeted edit to one source file.",
-    "Do not use tools.",
-    "Preserve code outside the requested change unless the instruction requires otherwise.",
-    "Return the complete updated file content only inside these exact tags:",
+    "你正在对单个源文件进行定向编辑。",
+    "不要使用工具。",
+    "除非指令另有要求，否则保留请求改动之外的代码。",
+    "仅将完整更新后的文件内容放在以下精确标签内：",
     "<updated-file>",
-    "FULL FILE CONTENT",
+    "完整文件内容",
     "</updated-file>",
-    "Do not include markdown fences or any explanation.",
+    "不要包含 markdown 代码块或任何解释。",
     "",
-    `File path: ${input.filePath}`,
+    `文件路径：${input.filePath}`,
     "",
-    "Instruction:",
+    "指令：",
     input.instruction,
     "",
     selectionSection,
     "",
-    "Current file content:",
+    "当前文件内容：",
     "<<<FILE",
     input.fileContent,
     "FILE",

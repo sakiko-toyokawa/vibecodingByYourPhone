@@ -526,7 +526,7 @@ test("memory packet: open failure patterns are assembled into prompt and ledgere
       // executor prompt 携带失败模式账本摘要 (04 单写者表: assembly 读
       // failure-patterns)
       const executorPrompt = supervisor.textsSeen[0] ?? "";
-      assert.match(executorPrompt, /Known failure patterns/);
+      assert.match(executorPrompt, /已知失败模式/);
       assert.match(executorPrompt, /pattern-flaky-test/);
       assert.match(executorPrompt, /flaky test under load/);
 
@@ -583,7 +583,7 @@ test("turn 1 lands runtime-input-bundle.json + prompt.md with structured executi
         summary.run_id,
         "prompt.md",
       );
-      assert.ok(prompt?.includes("Required output"));
+      assert.ok(prompt?.includes("必须留下的输出证据"));
     },
   );
 });

@@ -426,7 +426,7 @@ test("github_prompt policy runs pass GitHub env through supervisor settings", as
 
       const call = await waitForCall(supervisor);
       assert.equal(call?.mode, "bypassPermissions");
-      assert.match(call?.text ?? "", /GitHub issue repair loop/);
+      assert.match(call?.text ?? "", /GitHub issue 修复循环/);
       assert.match(
         call?.cwd ?? "",
         /github-workspaces[/\\]prompt-loops[/\\]github-prompt-loop/,
@@ -570,7 +570,7 @@ test("legacy card without policy: no hook, plan mode, read-only prompt (unchange
       assert.equal(call?.hadHook, false);
       assert.equal(call?.hookResults.length, 0);
       assert.equal(call?.mode, "plan");
-      assert.match(call?.text ?? "", /READ-ONLY/);
+      assert.match(call?.text ?? "", /只读循环任务/);
 
       const state = await waitForState(controlPlane, summary.run_id, [
         "complete",

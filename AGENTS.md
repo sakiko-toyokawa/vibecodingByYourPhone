@@ -1,7 +1,5 @@
-Read and follow `CLAUDE.md` for repo context and instructions.
+请阅读并遵循 `CLAUDE.md` 中的仓库上下文与操作指令。
 
-## Landing the Plane (Session Completion)
+## 会话收尾
 
-After completing your session, offer proactively, briefly, a suggestion
-to the user for what the next logical step in the plan might be, to remind
-them of the overall context if this session was a part of a larger implementation plan
+每次会话结束时，请主动、简要地建议用户下一步最合理的行动，帮助他们回忆当前会话在整个实施计划中的位置。

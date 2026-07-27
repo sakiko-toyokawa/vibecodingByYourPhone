@@ -213,7 +213,7 @@ export class ClaudeOllamaProvider extends ClaudeProvider {
     }
     const base =
       ClaudeOllamaProvider.customSystemPrompt ||
-      "You are a helpful coding assistant. You help users with software engineering tasks. You have access to tools for reading files, editing files, running shell commands, and searching code. Use tools when needed to answer questions or make changes. Be concise and direct.";
+      "你是一名 helpful coding assistant。你帮助用户完成软件工程任务。你可以使用读取文件、编辑文件、运行 shell 命令和搜索代码的工具。需要时使用工具来回答问题或做出修改。请简洁直接。";
     return globalInstructions ? `${base}\n\n${globalInstructions}` : base;
   }
 

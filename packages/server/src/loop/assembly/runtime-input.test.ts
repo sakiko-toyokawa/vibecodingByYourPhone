@@ -58,13 +58,13 @@ test("github_prompt loops assemble as agent-led GitHub repair runs", () => {
   assert.equal(input.env?.GH_TOKEN, "github_pat_secret");
   assert.equal(input.env?.GITHUB_TOKEN, "github_pat_secret");
   assert.match(input.env?.PATH ?? "", /E:[/\\]tools[/\\]gh[/\\]bin/);
-  assert.match(input.prompt, /GitHub issue repair loop/);
-  assert.match(input.prompt, /Use GitHub CLI/);
+  assert.match(input.prompt, /GitHub issue 修复循环/);
+  assert.match(input.prompt, /GitHub CLI/);
   assert.match(input.prompt, /全 GitHub 公开仓库/);
   assert.match(input.prompt, /每次最多选择 1 个 issue/);
-  assert.match(input.prompt, /server-managed parent workspace/);
-  assert.match(input.prompt, /Do NOT fork, push, create a pull request/);
-  assert.match(input.prompt, /PR title and body draft/);
+  assert.match(input.prompt, /服务端管理的主工作区/);
+  assert.match(input.prompt, /不要 fork、push、创建 pull request/);
+  assert.match(input.prompt, /PR 标题和正文草稿/);
   assert.match(input.prompt, /去寻找 agent 项目的 bug 修复/);
 });
 
@@ -81,7 +81,7 @@ test("assembled prompt requires the marked executor summary block (02 §5)", () 
 
   assert.ok(input.prompt.includes(EXECUTOR_SUMMARY_BEGIN));
   assert.ok(input.prompt.includes(EXECUTOR_SUMMARY_END));
-  assert.match(input.prompt, /self-summary/);
+  assert.match(input.prompt, /结构化自述/);
 });
 
 test("extractExecutorSummary: extracts the marked block, null when absent", () => {
@@ -179,8 +179,8 @@ test("execution contract / native_invocation / observability structured (02 §3)
     ...contract.success_criteria,
   ]);
   assert.ok(input.executionContract.constraints.length > 0);
-  assert.ok(input.prompt.includes("Constraints:"));
-  assert.ok(input.prompt.includes("Required output (leave this evidence):"));
+  assert.ok(input.prompt.includes("约束："));
+  assert.ok(input.prompt.includes("必须留下的输出证据："));
   // policy 写卡 → changed_files/commands_run; 该卡验证段为 review
   // (无 static/runtime) → 无 test_results
   assert.deepEqual(input.executionContract.required_output, [

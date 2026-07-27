@@ -186,13 +186,13 @@ export class AssemblyError extends Error {
 /** 策略投影模式下注入执行合约的策略说明（裁决仍由 hook 强制执行）。 */
 function policyPromptLines(profile: PolicyProfile): string[] {
   return [
-    `You are running as an unattended loop task under policy profile '${profile.policy_profile}' (approval mode: ${profile.approval_mode}).`,
+    `你正在以无人值守循环任务运行，策略档：'${profile.policy_profile}'（审批模式：${profile.approval_mode}）。`,
     "",
-    "Policy rules (enforced by the runtime; violations are denied):",
-    "- Local, reversible work — editing files inside the workspace, running tests/builds/lint — is auto-approved and every auto-approval is audited.",
-    "- Hard-gate actions (merge, deploy, delete external resources, publish, bill, notify, close) are blocked and escalate the run to human review. Do NOT attempt them; note them in the report instead.",
-    "- High-risk or out-of-workspace actions are denied or escalated. Stay inside the workspace.",
-    "- Do NOT call ExitPlanMode or AskUserQuestion — the run is unattended; finish by writing the report as plain text.",
+    "策略规则（由运行时强制执行；违规将被拒绝）：",
+    "- 本地、可逆的工作空间内操作 —— 编辑工作区文件、运行测试/构建/lint —— 自动通过，且每次自动通过都会被审计。",
+    "- 硬闸门动作（merge、deploy、删除外部资源、publish、bill、notify、close）会被拦截并升级为人工复核。不要尝试执行；请在报告中记录。",
+    "- 高风险或超出工作区的动作会被拒绝或升级。请始终待在工作区内。",
+    "- 不要调用 ExitPlanMode 或 AskUserQuestion —— 本轮无人值守；以纯文本报告结束任务。",
   ];
 }
 
@@ -203,19 +203,19 @@ function isGitHubPromptLoop(card: LoopCard): boolean {
 function githubPromptLines(github: RuntimeAssemblyContext["github"]): string[] {
   const ghPath = github?.ghPath ?? "gh";
   return [
-    "GitHub issue repair loop",
+    "GitHub issue 修复循环",
     "",
-    "Use GitHub CLI for discovery and repository work.",
-    `- Use GitHub CLI: ${ghPath}`,
-    "- Search across 全 GitHub 公开仓库 unless the user's prompt narrows the scope.",
-    "- Translate the user's natural-language request into GitHub searches yourself; the user should not need search syntax.",
-    "- 每次最多选择 1 个 issue.",
-    "- Prefer issues that are likely to merge: recent maintainer activity, clear reproduction, bug/help wanted/good first issue labels, small surface area, visible contribution or PR guidelines, and tests you can run locally.",
-    "- Before editing, read the issue, repository README, contributing guide, and PR conventions when present.",
-    "- Treat the current working directory as a server-managed parent workspace; clone the selected repository into a subdirectory of it.",
-    "- Clone the selected repository inside this workspace, create a branch, make the smallest reasonable fix, run relevant checks, and create a local git commit.",
-    "- Do NOT fork, push, create a pull request, comment, close issues, release, deploy, or delete external resources.",
-    "- Finish with: selected repo and issue URL, branch, local commit hash, verification commands and results, residual risk, and PR title and body draft.",
+    "使用 GitHub CLI 进行发现与仓库操作。",
+    `- GitHub CLI 路径：${ghPath}`,
+    "- 除非用户提示缩小了范围，否则搜索全 GitHub 公开仓库。",
+    "- 自行将用户的自然语言请求转换为 GitHub 搜索；用户不需要懂搜索语法。",
+    "- 每次最多选择 1 个 issue。",
+    "- 优先选择容易合并的 issue：维护者近期活跃、复现步骤清晰、带有 bug/help wanted/good first issue 标签、影响面小、有可见的贡献或 PR 规范，并且你能在本地运行测试。",
+    "- 编辑前阅读 issue、仓库 README、贡献指南以及 PR 规范（如果有的话）。",
+    "- 将当前工作目录视为服务端管理的主工作区；把选中的仓库克隆到它的子目录中。",
+    "- 在工作区内克隆选中仓库，创建分支，做出最小合理修复，运行相关检查，并创建本地 git 提交。",
+    "- 不要 fork、push、创建 pull request、评论、关闭 issue、release、deploy 或删除外部资源。",
+    "- 结束时提供：选中的仓库和 issue URL、分支、本地提交哈希、验证命令与结果、残留风险，以及 PR 标题和正文草稿。",
   ];
 }
 
@@ -342,64 +342,56 @@ export function assembleRuntimeInput(
     ...(policyActive && profile
       ? policyPromptLines(profile)
       : [
-          "You are running as an unattended, READ-ONLY loop task (permission mode: plan).",
+          "你正在以无人值守、只读循环任务运行（权限模式：plan）。",
           "",
-          "Hard rules (violations are auto-denied):",
-          "- Only scan, read, and report. Do NOT create, modify, or delete any file. Do NOT run mutating commands.",
-          "- Do NOT call ExitPlanMode or AskUserQuestion — every approval request is auto-denied; finish by writing the report as plain text.",
-          "- Use only read-only tools (Read, Glob, Grep, etc.).",
+          "硬性规则（违规将被自动拒绝）：",
+          "- 只能扫描、读取和报告。不要创建、修改或删除任何文件。不要运行变更性命令。",
+          "- 不要调用 ExitPlanMode 或 AskUserQuestion —— 所有审批请求都会被自动拒绝；以纯文本报告结束任务。",
+          "- 只使用只读工具（Read、Glob、Grep 等）。",
         ]),
     // published / canary 的 memory packet 模板注入 prompt（装配消费的
     // 主落点，05 阶段 3 验收 5：新 run 装配确实使用新提案内容）。
     ...(effects.memoryPacketTemplate
-      ? [
-          "",
-          "Memory packet (published improvement proposal):",
-          effects.memoryPacketTemplate,
-        ]
+      ? ["", "Memory packet（已发布改进提案）：", effects.memoryPacketTemplate]
       : []),
     // 02 §3 memory packet: 失败模式账本的 open 模式摘要 (另一条独立路
     // 径 —— 提案模板是"怎么改", 账本摘要是"哪些坑已知")。
     ...(context.memoryPacket
       ? [
           "",
-          "Known failure patterns (failure pattern ledger — do not repeat these):",
+          "已知失败模式（失败模式账本 —— 不要重复这些）：",
           context.memoryPacket,
         ]
       : []),
     "",
-    "Task:",
-    `- Task type: ${contract.task_type.primary}`,
-    `- Goal: ${contract.raw_goal}`,
-    discovery.source ? `- Discovery source: ${discovery.source}` : null,
-    discovery.query ? `- Discovery query: ${discovery.query}` : null,
-    maxItems !== undefined ? `- Report at most ${maxItems} items.` : null,
+    "任务：",
+    `- 任务类型：${contract.task_type.primary}`,
+    `- 目标：${contract.raw_goal}`,
+    discovery.source ? `- 发现来源：${discovery.source}` : null,
+    discovery.query ? `- 发现查询：${discovery.query}` : null,
+    maxItems !== undefined ? `- 最多报告 ${maxItems} 项。` : null,
     "",
-    "Success criteria:",
+    "成功标准：",
     ...contract.success_criteria.map((c) => `- ${c}`),
     ...(executionContract.constraints.length > 0
-      ? [
-          "",
-          "Constraints:",
-          ...executionContract.constraints.map((c) => `- ${c}`),
-        ]
+      ? ["", "约束：", ...executionContract.constraints.map((c) => `- ${c}`)]
       : []),
     "",
-    "Required output (leave this evidence):",
+    "必须留下的输出证据：",
     ...requiredOutput.map((o) => `- ${o}`),
     "",
-    "Report format (plain text, in this order):",
-    "1. Scope scanned",
-    "2. Findings (itemized)",
-    "3. Suggested follow-ups for human review",
+    "报告格式（纯文本，按以下顺序）：",
+    "1. 扫描范围",
+    "2. 发现项（逐条列出）",
+    "3. 建议人工复核的后续事项",
     "",
-    "Executor summary (required; the verifier reads this as your self-report — it aids understanding but does not replace deterministic evidence):",
-    "End your report with a structured self-summary wrapped exactly in these markers:",
+    "执行者摘要（必填；校验者会把它作为你的自述来辅助理解 —— 它只帮助理解，不能替代确定性证据）：",
+    "在报告末尾用以下标记精确包裹结构化自述：",
     EXECUTOR_SUMMARY_BEGIN,
-    "- Done: what you actually did (not what you planned)",
-    "- Not done: what you did not do, and why",
-    "- Risks: open issues the verifier should double-check",
-    "- Files: key files touched or inspected",
+    "- 已完成：你实际做了什么（不是你计划做什么）",
+    "- 未完成：你没做什么，以及原因",
+    "- 风险：校验者应复核的开放问题",
+    "- 文件：触及或检查的关键文件",
     EXECUTOR_SUMMARY_END,
   ]
     .filter((line): line is string => line !== null)
