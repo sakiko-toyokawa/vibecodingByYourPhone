@@ -544,6 +544,12 @@ export function useSession(
 
           return current; // Return unchanged for now, will update when fetch completes
         });
+      } else if (event.activity !== "waiting-input") {
+        // Clear the approval card when the activity bus reports the process
+        // left waiting-input (e.g. an unattended loop auto-denied the request).
+        // Without this the card stays visible and clicking it yields a 400
+        // because the backend no longer has a pending request.
+        setPendingInputRequest(null);
       }
     },
     [projectId, sessionId],
