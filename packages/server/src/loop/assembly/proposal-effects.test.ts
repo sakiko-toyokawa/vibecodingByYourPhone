@@ -144,10 +144,7 @@ test("装配: published 提案内容进入 RuntimeInput (prompt / adapterPolicy 
       payload: { adapter_policy: { timeout_ms: 60_000 } },
     }),
   ]);
-  assert.match(
-    input.prompt,
-    /Memory packet \(published improvement proposal\)/,
-  );
+  assert.match(input.prompt, /Memory packet（已发布改进提案）：/);
   assert.match(input.prompt, /pnpm workspace 规则摘要/);
   assert.deepEqual(input.adapterPolicy, { timeout_ms: 60_000 });
   assert.deepEqual(input.appliedProposals?.sort(), ["p-adapter", "p-template"]);

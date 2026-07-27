@@ -260,6 +260,20 @@ export class RunLedgerStore {
     }
   }
 
+  /** List artifact file names written for a run (empty when none). */
+  async listArtifacts(runId: string): Promise<string[]> {
+    this.assertSafeName(runId, "run_id");
+    try {
+      const files = await fs.readdir(path.join(this.artifactsDir, runId));
+      return files.filter((file) => !file.endsWith(".tmp"));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+  }
+
   /**
    * 统一 URI 读取 (04 L113: resolveUri 统一在 loop/state/, 引用不再是
    * 只写不读)。artifact:// 返回文件内容 (缺失 undefined); ledger:// 返

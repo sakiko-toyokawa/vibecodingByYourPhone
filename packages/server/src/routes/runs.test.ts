@@ -348,6 +348,43 @@ test("POST /:id/budget — 404 未知 run; 400 空预算补丁", async () => {
   });
 });
 
+test("GET /:id/artifacts lists artifact file names; GET /:id/artifacts/:name returns content", async () => {
+  await withFixture(async ({ app, ledgerStore }) => {
+    await ledgerStore.appendEntry("run-1", makeLedgerEntry("run-1"));
+    await ledgerStore.writeArtifact("run-1", "stdout.log", "hello stdout");
+    await ledgerStore.writeArtifact(
+      "run-1",
+      "judgment-report.json",
+      JSON.stringify(JUDGMENT),
+    );
+
+    const listRes = await app.request("/run-1/artifacts");
+    assert.equal(listRes.status, 200);
+    const listBody = (await listRes.json()) as { artifacts: string[] };
+    assert.deepEqual(listBody.artifacts.sort(), [
+      "judgment-report.json",
+      "stdout.log",
+    ]);
+
+    const contentRes = await app.request("/run-1/artifacts/stdout.log");
+    assert.equal(contentRes.status, 200);
+    const contentBody = (await contentRes.json()) as { content: string };
+    assert.equal(contentBody.content, "hello stdout");
+
+    const missingRun = await app.request("/run-ghost/artifacts");
+    assert.equal(missingRun.status, 404);
+
+    const missingArtifact = await app.request(
+      "/run-1/artifacts/no-such-file.txt",
+    );
+    assert.equal(missingArtifact.status, 404);
+    assert.equal(
+      ((await missingArtifact.json()) as { error: string }).error,
+      "artifact_not_found",
+    );
+  });
+});
+
 test("GET /:id — 活跃 run 的首个判定落账前, 不展示上个 run 的 run_state (冒烟实测)", async () => {
   await withFixture(async ({ app, controlPlane, ledgerStore }) => {
     // 上一个 run 完成, run_state 留下终态记录

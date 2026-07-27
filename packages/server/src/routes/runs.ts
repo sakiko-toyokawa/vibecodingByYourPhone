@@ -86,6 +86,42 @@ export function createRunsRoutes(deps: RunsRoutesDeps): Hono {
   });
 
   /**
+   * GET /api/runs/:id/artifacts
+   * 列出该 run 已落盘的 artifact 文件名（stdout / verification / judgment /
+   * executor-summary 等 per-turn 产物）。用于前端展示多轮证据。
+   */
+  app.get("/:id/artifacts", async (c) => {
+    const found = await deps.runService.getRun(c.req.param("id"));
+    if (!found) {
+      return c.json({ error: "run_not_found", message: "Run not found" }, 404);
+    }
+    const artifacts = await deps.runService.listRunArtifacts(c.req.param("id"));
+    return c.json({ artifacts });
+  });
+
+  /**
+   * GET /api/runs/:id/artifacts/:name
+   * 读取指定 artifact 内容。404 当 run 或 artifact 不存在。
+   */
+  app.get("/:id/artifacts/:name", async (c) => {
+    const found = await deps.runService.getRun(c.req.param("id"));
+    if (!found) {
+      return c.json({ error: "run_not_found", message: "Run not found" }, 404);
+    }
+    const content = await deps.runService.readRunArtifact(
+      c.req.param("id"),
+      c.req.param("name"),
+    );
+    if (content === undefined) {
+      return c.json(
+        { error: "artifact_not_found", message: "Artifact not found" },
+        404,
+      );
+    }
+    return c.json({ content });
+  });
+
+  /**
    * POST /api/runs/:id/decision
    * Human response for a needs_human run (03: approve / reject /
    * request_changes / pause + optional feedback). Every call appends a

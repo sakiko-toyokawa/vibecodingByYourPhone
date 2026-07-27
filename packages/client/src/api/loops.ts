@@ -111,4 +111,16 @@ export const loopsApi = {
         body: JSON.stringify({ decision, feedback }),
       },
     ),
+
+  /** List artifact file names written for a run. */
+  listRunArtifacts: (runId: string) =>
+    fetchJSON<{ artifacts: string[] }>(
+      `/runs/${encodeURIComponent(runId)}/artifacts`,
+    ),
+
+  /** Read one artifact's content for a run. */
+  getRunArtifact: (runId: string, name: string) =>
+    fetchJSON<{ content: string }>(
+      `/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(name)}`,
+    ),
 };

@@ -43,6 +43,10 @@ export function LoopDetailPage() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [runDetail, setRunDetail] = useState<RunDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [artifacts, setArtifacts] = useState<string[]>([]);
+  const [selectedArtifact, setSelectedArtifact] = useState<string | null>(null);
+  const [artifactContent, setArtifactContent] = useState<string | null>(null);
+  const [artifactLoading, setArtifactLoading] = useState(false);
   const selectedRunIdRef = useRef<string | null>(null);
   selectedRunIdRef.current = selectedRunId;
 
@@ -89,14 +93,39 @@ export function LoopDetailPage() {
   const handleSelectRun = useCallback(async (runId: string) => {
     setSelectedRunId(runId);
     setDetailLoading(true);
+    setSelectedArtifact(null);
+    setArtifactContent(null);
     try {
-      setRunDetail(await loopsApi.getRun(runId));
+      const [detail, artifactList] = await Promise.all([
+        loopsApi.getRun(runId),
+        loopsApi.listRunArtifacts(runId),
+      ]);
+      setRunDetail(detail);
+      setArtifacts(artifactList.artifacts);
     } catch {
       setRunDetail(null);
+      setArtifacts([]);
     } finally {
       setDetailLoading(false);
     }
   }, []);
+
+  const handleSelectArtifact = useCallback(
+    async (name: string) => {
+      if (!selectedRunId) return;
+      setSelectedArtifact(name);
+      setArtifactLoading(true);
+      try {
+        const { content } = await loopsApi.getRunArtifact(selectedRunId, name);
+        setArtifactContent(content);
+      } catch {
+        setArtifactContent(null);
+      } finally {
+        setArtifactLoading(false);
+      }
+    },
+    [selectedRunId],
+  );
 
   const handleRunNow = useCallback(async () => {
     if (!loopId) return;
@@ -377,6 +406,50 @@ export function LoopDetailPage() {
                                 {tag}
                               </span>
                             ))}
+                          </div>
+                        )}
+
+                        {artifacts.length > 0 && (
+                          <div className="mt-4 border-t border-[var(--border-color)] pt-4">
+                            <h4 className="m-0 mb-3 [font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
+                              Artifacts
+                            </h4>
+                            <div className="flex flex-wrap gap-[var(--space-2)]">
+                              {artifacts.map((name) => (
+                                <button
+                                  key={name}
+                                  type="button"
+                                  onClick={() =>
+                                    void handleSelectArtifact(name)
+                                  }
+                                  className={`rounded-[var(--radius-sm)] border px-3 py-1.5 [font-size:var(--font-size-xs)] font-mono transition-colors ${
+                                    selectedArtifact === name
+                                      ? "border-[var(--accent-rust)] bg-[var(--accent-rust)]/10 text-[var(--accent-rust)]"
+                                      : "border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-muted)] hover:border-[var(--border-hover)]"
+                                  }`}
+                                >
+                                  {name}
+                                </button>
+                              ))}
+                            </div>
+
+                            {selectedArtifact && (
+                              <div className="mt-4 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-primary)] p-4">
+                                <div className="mb-2 flex items-center justify-between">
+                                  <span className="font-mono [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
+                                    {selectedArtifact}
+                                  </span>
+                                  {artifactLoading && (
+                                    <span className="[font-size:var(--font-size-xs)] italic text-[var(--text-muted)]">
+                                      loading...
+                                    </span>
+                                  )}
+                                </div>
+                                <pre className="m-0 max-h-[480px] overflow-auto whitespace-pre-wrap break-all rounded bg-[var(--bg-secondary)] p-3 [font-size:var(--font-size-xs)] text-[var(--text-primary)]">
+                                  {artifactContent ?? "—"}
+                                </pre>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

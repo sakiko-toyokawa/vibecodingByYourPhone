@@ -694,6 +694,19 @@ export class LoopRunService {
     return summaries;
   }
 
+  /** List artifact file names written for a run (empty when none). */
+  async listRunArtifacts(runId: string): Promise<string[]> {
+    return this.deps.runLedgerStore.listArtifacts(runId);
+  }
+
+  /** Read one artifact's content for a run (undefined when missing). */
+  async readRunArtifact(
+    runId: string,
+    name: string,
+  ): Promise<string | undefined> {
+    return this.deps.runLedgerStore.readArtifact(runId, name);
+  }
+
   /** Single run view: active run metadata or the finished ledger entry,
    *  plus the 03 LedgerSummary projection (incl. judgment_report 摘要). */
   async getRun(runId: string): Promise<{

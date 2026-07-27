@@ -157,6 +157,23 @@ test("listRunIds lists ledger files and tolerates a missing runs dir", async () 
   });
 });
 
+test("listArtifacts lists artifact files and tolerates a missing dir", async () => {
+  await withTempDir(async (dataDir) => {
+    const store = new RunLedgerStore({ dataDir });
+    assert.deepEqual(await store.listArtifacts("run-1"), []);
+    await store.writeArtifact("run-1", "stdout.log", "hello");
+    await store.writeArtifact(
+      "run-1",
+      "judgment-report.json",
+      JSON.stringify({ ok: true }),
+    );
+    assert.deepEqual((await store.listArtifacts("run-1")).sort(), [
+      "judgment-report.json",
+      "stdout.log",
+    ]);
+  });
+});
+
 test("unsafe names (path traversal) are rejected", async () => {
   await withTempDir(async (dataDir) => {
     const store = new RunLedgerStore({ dataDir });
