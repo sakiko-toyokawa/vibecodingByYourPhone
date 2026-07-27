@@ -2130,11 +2130,12 @@ export class LoopRunService {
       // 输入引用（02 §5 runtime_event_refs / structured_output）。
       const runtimeEvents: unknown[] = [];
 
-      // Default turn timeout: prevents a hung adapter from blocking the run
-      // forever when no adapter_policy.timeout_seconds is configured. 15min:
-      // a real read-only repo scan legitimately takes 5-10min; a shorter
-      // default kills healthy turns mid-work and discards their report.
-      const timeoutMs = opts.timeoutMs ?? 15 * 60 * 1000;
+      // 无默认轮次超时（2026-07-27 用户决策：硬超时太绝对 —— 真实只读
+      // 扫描常需 5-10min，一刀切会误杀健康轮次并丢弃其报告）。只有
+      // adapter_policy.timeout_seconds 显式配置时才计时；挂起/死循环
+      // 的治理走代办 watchdog（docs/plans/loop-spec-gap-fix-plan.md
+      // 代办节），不靠固定计时。
+      const timeoutMs = opts.timeoutMs ?? 0;
 
       const settle = (ok: boolean, error?: string): void => {
         if (settled) {
@@ -2164,7 +2165,7 @@ export class LoopRunService {
         timer = setTimeout(() => {
           adapterError = new AdapterError(
             "timeout",
-            `turn exceeded timeout (${timeoutMs}ms${opts.timeoutMs ? ", adapter_policy.timeout_seconds" : ", default"})`,
+            `turn exceeded timeout (${timeoutMs}ms, adapter_policy.timeout_seconds)`,
           );
           settle(false, adapterError.message);
         }, timeoutMs);

@@ -220,3 +220,13 @@ memory packet 注入 prompt 并落 artifact、native_invocation 真实投影（a
 - **修壳子优先接线而不是新建**：本过程 80% 的修复是把已有的真机制接到真实消费者上（payload、permission events、失败模式回流、注册表解析），而不是写新代码。
 - **eval 的牙 = 能检出被测对象的真实行为差异**：空转用例（exit 0/1）让管线形式上 fail-closed、实质上无牙——behavior case + applied 记录是解法模板。
 - **冒烟 > 单测**：两个最高危 bug（complete→complete、状态串台）单测全绿也漏，真实环境第二轮必现。
+
+## 代办（backlog）
+
+### 轮次挂起治理：空转检测与死循环检测（替代硬超时）
+
+背景：2026-07-27 用户决策——**轮次不设默认硬超时**（曾设 5min/15min 默认值，太绝对：真实只读扫描常需 5-10min，一刀切会误杀健康轮次、丢弃已完成报告、白烧一轮重试；实证见 run-20260727T142618Z-8d6db6de turn 1）。当前行为：仅 `adapter_policy.timeout_seconds` 显式配置时才计时，否则轮次可以无限运行。挂起风险用下面两项治理，不做固定计时。
+
+- [ ] **空转检测（idle watchdog）**：watchProcess 已逐条收集 runtime events——以"最后一条消息的时间"为活性信号，N 分钟（建议 10min，可配）无任何消息才判挂起 → 杀轮 + failed（归因 timeout/idle）。与硬超时的本质区别：只要在持续产出（思考、读文件、写报告）就永远不误杀，杀的是真正卡死的进程。
+- [ ] **死循环检测（loop stagnation）**：轮次级——连续 N 轮 stdout/报告内容高度相似（哈希或相似度）或同一 blocker fingerprint 重复（`repeated_blocker_count` 已有雏形），提前转 needs_human 而不是烧完 max_turns；轮内级——executor 在同一文件/命令上反复空转（事件流模式识别）可作为后续增强。
+- [ ] **配套**：`adapter_policy.timeout_seconds` 保留为显式兜底（02 §3 adapter 调用必须带超时的合规出口）；前端 Stream Output 已有实时事件流，可在 UI 上直接显示"最后活动于 X 分钟前"，让人一眼识别空转。

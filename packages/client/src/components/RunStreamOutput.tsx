@@ -238,10 +238,28 @@ export function RunStreamOutput({
     { onMessage: handleStreamMessage },
   );
 
-  const historicalEvents = Object.keys(eventsByFile)
+  // Completed turns are merged per file; a divider marks each turn when the
+  // run has more than one, so turn 1 / turn 2 stay distinguishable.
+  const turnGroups = Object.keys(eventsByFile)
     .sort((a, b) => turnOfEventFile(a) - turnOfEventFile(b))
-    .flatMap((name) => eventsByFile[name] ?? []);
-  const allEntries = buildDisplayEntries([...historicalEvents, ...liveEvents]);
+    .map((name) => ({
+      turn: turnOfEventFile(name),
+      entries: buildDisplayEntries(eventsByFile[name] ?? []),
+    }))
+    .filter((group) => group.entries.length > 0);
+
+  const allEntries: DisplayEntry[] = [];
+  for (const group of turnGroups) {
+    if (turnGroups.length > 1) {
+      allEntries.push({
+        at: group.entries[0]?.at ?? "",
+        kind: "info",
+        text: `—— turn ${group.turn} ——`,
+      });
+    }
+    allEntries.push(...group.entries);
+  }
+  allEntries.push(...buildDisplayEntries(liveEvents));
   const displayEntries = allEntries.slice(-MAX_DISPLAY_ENTRIES);
   const hiddenCount = allEntries.length - displayEntries.length;
 
