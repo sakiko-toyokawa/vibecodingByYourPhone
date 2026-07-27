@@ -605,3 +605,97 @@ test("archive with no run → 200; trigger on archived loop → 409 loop_archive
     );
   });
 });
+
+test("restart recovery: pause mid-turn-1 → 重启后 resume 重建上下文, 同 session 续跑至 complete", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-loop-restart-"));
+  try {
+    // --- generation 1: start a run, pause it mid-turn-1, then "die" ---
+    const loopCardStore = new LoopCardStore({ dataDir });
+    await loopCardStore.initialize();
+    await loopCardStore.createLoop(makeCard("loop-it"));
+    const ledgerStore = new RunLedgerStore({ dataDir });
+    const stateStore = new RunStateStore({ dataDir });
+    const events: { type: string }[] = [];
+    const eventBus = {
+      emit: (event: { type: string }) => events.push(event),
+    } as unknown as IEventBus;
+    const controlPlane1 = new ControlPlane({
+      runStateStore: stateStore,
+      runLedgerStore: ledgerStore,
+      eventBus,
+    });
+    const supervisor1 = new FakeSupervisor(); // hangs (autoSucceed = false)
+    const service1 = new LoopRunService({
+      supervisor: supervisor1 as unknown as Supervisor,
+      loopCardStore,
+      runLedgerStore: ledgerStore,
+      controlPlane: controlPlane1,
+      sleep: async () => {},
+      verifyRunFn: fakeVerify as never,
+    });
+    const app1 = createLoopsRoutes({
+      loopCardStore,
+      runService: service1,
+      controlPlane: controlPlane1,
+    });
+
+    const trigger = await triggerRun(app1, "loop-it");
+    assert.equal(trigger.status, 201);
+    const { run } = (await trigger.json()) as { run: { run_id: string } };
+    const runId = run.run_id;
+    await waitFor(() => supervisor1.calls.length === 1, "turn 1 to start");
+    const pause = await patchLoop(app1, "loop-it", { action: "pause" });
+    assert.equal(pause.status, 200);
+
+    // The paused run_state keeps the killed turn's session for a
+    // post-restart resume (06 #32), and the setup-time contract snapshot
+    // is already on disk for context rebuild.
+    const pausedRecord = await stateStore.load("loop-it");
+    assert.equal(pausedRecord?.state, "paused");
+    assert.equal(pausedRecord?.session_ref, SESSION_ID);
+    assert.ok(
+      await ledgerStore.readArtifact(runId, "intent-contract.json"),
+      "contract snapshot persisted at assembly time",
+    );
+
+    // --- generation 2 ("server restart"): fresh in-memory maps, same stores ---
+    const controlPlane2 = new ControlPlane({
+      runStateStore: stateStore,
+      runLedgerStore: ledgerStore,
+      eventBus,
+    });
+    const supervisor2 = new FakeSupervisor();
+    supervisor2.autoSucceed = true;
+    const service2 = new LoopRunService({
+      supervisor: supervisor2 as unknown as Supervisor,
+      loopCardStore,
+      runLedgerStore: ledgerStore,
+      controlPlane: controlPlane2,
+      sleep: async () => {},
+      verifyRunFn: fakeVerify as never,
+    });
+    const app2 = createLoopsRoutes({
+      loopCardStore,
+      runService: service2,
+      controlPlane: controlPlane2,
+    });
+
+    const resume = await patchLoop(app2, "loop-it", { action: "resume" });
+    assert.equal(resume.status, 200);
+
+    const finalState = await waitForState(controlPlane2, runId, ["complete"]);
+    assert.equal(finalState, "complete");
+    const executorCalls = supervisor2.calls.filter(
+      (call) => call.role === "executor",
+    );
+    assert.equal(executorCalls.length, 1);
+    assert.equal(
+      executorCalls[0]?.method,
+      "resume",
+      "rebuilt run resumes the same session after restart",
+    );
+    assert.equal(executorCalls[0]?.sessionId, SESSION_ID);
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});

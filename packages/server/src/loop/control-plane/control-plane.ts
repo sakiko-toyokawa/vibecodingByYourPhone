@@ -192,6 +192,10 @@ export interface PauseSeed {
   /** Contract budget limits; null when setup failed before a contract existed. */
   budget: BudgetLimits | null;
   createdAt: string;
+  /** Session of the in-flight turn being killed, kept so a resume after a
+   *  server restart can continue on the same session (06 #32); null when no
+   *  session had started yet. */
+  sessionRef?: string | null;
 }
 
 interface PendingApproval {
@@ -736,8 +740,9 @@ export class ControlPlane {
         workspace_ref: seed.workspaceRef,
         last_judgment: null,
         pending_approval: null,
-        // 首轮在飞, session_ref 待首轮 judgment 落账时写入 (06 #32)
-        session_ref: null,
+        // 首轮在飞被暂停: 被杀 turn 的 session 一并记录, 重启后 resume
+        // 仍能续上同一 session (06 #32); 无 session (setup 失败) 为 null
+        session_ref: seed.sessionRef ?? null,
         budget: seed.budget ? BudgetSchema.parse({ ...seed.budget }) : null,
         created_at: seed.createdAt,
         updated_at: new Date().toISOString(),

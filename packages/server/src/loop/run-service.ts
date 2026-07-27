@@ -557,6 +557,12 @@ export class LoopRunService {
         workspaceRef: `workspace://${loopId}/${active.runId}`,
         budget: ctx?.contract?.budget ?? null,
         createdAt: active.createdAt,
+        // ctx.sessionRef 要等 turn 结束才赋值; 在飞 turn 的 session 从
+        // 执行中的 Process 取, 供重启后 resume 续上同一 session。
+        sessionRef:
+          this.executingProcesses.get(active.runId)?.sessionId ??
+          ctx?.sessionRef ??
+          null,
       });
       this.terminateExecuting(active.runId);
       return updated;
@@ -895,6 +901,13 @@ export class LoopRunService {
       ctx.card = executableCard;
       ctx.contract = buildIntentContract(executableCard, { runId, source });
       ctx.contractJson = JSON.stringify(ctx.contract, null, 2);
+      // 装配即落盘合约快照 (不等首轮结束): 首轮在飞时被暂停、随后进程
+      // 重启的 run, resume 仍能凭此 artifact 重建执行上下文。
+      await this.deps.runLedgerStore.writeArtifact(
+        runId,
+        "intent-contract.json",
+        ctx.contractJson,
+      );
       const runtimeContext =
         await this.resolveRuntimeAssemblyContext(executableCard);
       // 02 §3 memory packet: 失败模式账本 open 模式的摘要进装配
@@ -1703,16 +1716,38 @@ export class LoopRunService {
     }
     const store = this.deps.runLedgerStore;
     const entry = await store.readEntry(signal.runId);
-    const contractJson = await store.readArtifact(
+    let contractJson = await store.readArtifact(
       signal.runId,
       "intent-contract.json",
     );
     const runState = await this.deps.controlPlane?.getRunState(signal.loopId);
-    if (!entry || !contractJson || !runState) {
+    if (!runState) {
       return null;
     }
     try {
       const executableCard = await this.resolveExecutableCard(stored.card);
+      if (!contractJson) {
+        // 首轮在飞时被暂停 (或早于"装配即落盘"版本的 run): turn 1 未产生
+        // 合约快照与账本, 按卡片重新装配合约、同 run_id 重新开始。更晚
+        // 轮次缺快照则无法忠实重建, 放弃。
+        if (runState.turn !== 1) {
+          return null;
+        }
+        contractJson = JSON.stringify(
+          buildIntentContract(executableCard, {
+            runId: signal.runId,
+            source:
+              stored.card.loop.trigger.type === "schedule" ? "cron" : "manual",
+          }),
+          null,
+          2,
+        );
+      }
+      if (!entry && runState.turn !== 1) {
+        // 缺账本只在首轮暂停时合法 (turn 1 未完成本就无 entry); 更晚
+        // 轮次缺账本则来源/会话无从确定, 放弃。
+        return null;
+      }
       const contract = IntentContractSchema.parse(JSON.parse(contractJson));
       const runtimeContext =
         await this.resolveRuntimeAssemblyContext(executableCard);
@@ -1759,19 +1794,22 @@ export class LoopRunService {
           runId: signal.runId,
           loopId: signal.loopId,
           // 06 偏差 #28: 触发来源实记账本; 旧条目无该字段时按历史约定
-          // 回退 "cron"。
-          source: entry.source ?? "cron",
-          createdAt: entry.created_at,
+          // 回退 "cron"。首轮暂停无账本时按合约快照还原 (ui→manual)。
+          source:
+            entry?.source ?? (contract.source === "cron" ? "cron" : "manual"),
+          createdAt: entry?.created_at ?? runState.created_at,
         },
         card: executableCard,
         contract,
         contractJson,
         input,
         turn: runState.turn,
-        sessionRef:
-          entry.runtime.session_ref === "none"
+        sessionRef: entry
+          ? entry.runtime.session_ref === "none"
             ? null
-            : entry.runtime.session_ref,
+            : entry.runtime.session_ref
+          : // 首轮暂停无账本: 暂停时落进 run_state 的 session_ref (06 #32)
+            runState.session_ref,
         lastJudgment,
         lastJudgmentRef: runState.last_judgment,
         pendingContext: null,
