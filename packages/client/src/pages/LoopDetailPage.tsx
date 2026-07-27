@@ -7,6 +7,7 @@ import {
   loopsApi,
 } from "../api/loops";
 import { PageHeader } from "../components/PageHeader";
+import { RunStreamOutput } from "../components/RunStreamOutput";
 import { useI18n } from "../i18n";
 import { useNavigationLayout } from "../layouts";
 import { activityBus } from "../lib/activityBus";
@@ -418,6 +419,19 @@ export function LoopDetailPage() {
                             ))}
                           </div>
                         )}
+
+                        <div className="mt-4 border-t border-[var(--border-color)] pt-4">
+                          <h4 className="m-0 mb-3 [font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
+                            Stream Output
+                          </h4>
+                          <RunStreamOutput
+                            runId={selectedRunId}
+                            isActive={
+                              runDetail?.run.state === "active" ||
+                              runDetail?.run.state === "retry"
+                            }
+                          />
+                        </div>
 
                         {artifacts.length > 0 && (
                           <div className="mt-4 border-t border-[var(--border-color)] pt-4">

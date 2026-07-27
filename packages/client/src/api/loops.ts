@@ -53,6 +53,8 @@ export interface LedgerSummary {
 export interface RunDetail {
   run: LoopRunSummary;
   ledger_summary: LedgerSummary;
+  /** Session ref of the executor process (for live stream subscription). */
+  session_ref: string | null;
 }
 
 export const loopsApi = {
