@@ -129,6 +129,7 @@ import {
   verificationArtifactName,
   verifyRun,
 } from "./verification/verify-run.js";
+import { type RunWorktree, ensureRunWorktree } from "./worktree/worktree.js";
 
 export type LoopRunErrorCode =
   | "loop_not_found"
@@ -253,6 +254,14 @@ interface RunExecutionContext {
   /** 02 §3 memory packet 的 artifact 内容 (turn 1 落盘; 无 open 模式时
    *  为 null, input_refs.memory_packet 随之 null)。 */
   memoryPacketJson?: string | null;
+  /** worktree 隔离证据 (workspace.strategy: "worktree"): setup 时落
+   *  workspace.json artifact 并引用进 turn 1 artifact_refs; direct 为 null。 */
+  workspaceEvidence?: {
+    originPath: string;
+    worktreePath: string;
+    branch: string;
+    baseSha: string;
+  } | null;
 }
 
 export interface LoopRunServiceDeps {
@@ -912,8 +921,17 @@ export class LoopRunService {
       permissionEvents: [],
     };
     try {
-      const executableCard = await this.resolveExecutableCard(card);
+      const { card: executableCard, worktree } =
+        await this.resolveExecutableCard(card, runId);
       ctx.card = executableCard;
+      ctx.workspaceEvidence = worktree
+        ? {
+            originPath: card.loop.workspace.path ?? "",
+            worktreePath: worktree.path,
+            branch: worktree.branch,
+            baseSha: worktree.baseSha,
+          }
+        : null;
       ctx.contract = buildIntentContract(executableCard, { runId, source });
       ctx.contractJson = JSON.stringify(ctx.contract, null, 2);
       // 装配即落盘合约快照 (不等首轮结束): 首轮在飞时被暂停、随后进程
@@ -923,6 +941,25 @@ export class LoopRunService {
         "intent-contract.json",
         ctx.contractJson,
       );
+      if (ctx.workspaceEvidence) {
+        // worktree 隔离证据: 原目录 / worktree 目录 / 分支 / 基线 SHA,
+        // 供审计"这个 run 在哪里执行、从哪个基线拉取"。
+        await this.deps.runLedgerStore.writeArtifact(
+          runId,
+          "workspace.json",
+          `${JSON.stringify(
+            {
+              strategy: "worktree",
+              origin_path: ctx.workspaceEvidence.originPath,
+              worktree_path: ctx.workspaceEvidence.worktreePath,
+              branch: ctx.workspaceEvidence.branch,
+              base_sha: ctx.workspaceEvidence.baseSha,
+            },
+            null,
+            2,
+          )}\n`,
+        );
+      }
       const runtimeContext =
         await this.resolveRuntimeAssemblyContext(executableCard);
       // 02 §3 memory packet: 失败模式账本 open 模式的摘要进装配
@@ -1001,38 +1038,83 @@ export class LoopRunService {
     };
   }
 
-  private async resolveExecutableCard(card: LoopCard): Promise<LoopCard> {
-    if (!isGitHubPromptLoop(card)) {
-      return card;
+  /**
+   * 运行前改写 card 的统一挂载点：GitHub prompt loop 重写 workspace.path
+   * 到 managed 目录；workspace.strategy "worktree" 创建/复用 run 级隔离
+   * worktree 并把 path 改写为 worktree 目录 —— 下游 assembly / executor /
+   * verifier / diff 取证全部以改写后的 path 为 cwd, 零改动获得隔离。
+   * 返回 worktree 证据供 executeRun 落 workspace.json (direct 为 null)。
+   */
+  private async resolveExecutableCard(
+    card: LoopCard,
+    runId: string,
+  ): Promise<{ card: LoopCard; worktree: RunWorktree | null }> {
+    if (isGitHubPromptLoop(card)) {
+      if (!this.deps.dataDir) {
+        throw new AssemblyError(
+          "GitHub prompt loop cannot start: server data directory is not configured",
+        );
+      }
+      const expectedWorkspacePath = displayGitHubPromptWorkspacePath(
+        card.loop.id,
+      );
+      if (card.loop.workspace.path !== expectedWorkspacePath) {
+        throw new AssemblyError(
+          `GitHub prompt loop cannot start: workspace.path must be '${expectedWorkspacePath}'`,
+        );
+      }
+      const workspacePath = githubPromptWorkspacePath(
+        this.deps.dataDir,
+        card.loop.id,
+      );
+      await mkdir(workspacePath, { recursive: true });
+      return {
+        card: {
+          ...card,
+          loop: {
+            ...card.loop,
+            workspace: {
+              ...card.loop.workspace,
+              strategy: "direct",
+              path: workspacePath,
+            },
+          },
+        },
+        worktree: null,
+      };
+    }
+    if (card.loop.workspace.strategy !== "worktree") {
+      return { card, worktree: null };
+    }
+    const repoPath = card.loop.workspace.path;
+    if (!repoPath) {
+      throw new AssemblyError(
+        `Loop '${card.loop.id}' workspace.strategy is worktree but workspace.path is missing`,
+      );
     }
     if (!this.deps.dataDir) {
       throw new AssemblyError(
-        "GitHub prompt loop cannot start: server data directory is not configured",
+        `Loop '${card.loop.id}' workspace.strategy is worktree but server data directory is not configured`,
       );
     }
-    const expectedWorkspacePath = displayGitHubPromptWorkspacePath(
-      card.loop.id,
-    );
-    if (card.loop.workspace.path !== expectedWorkspacePath) {
-      throw new AssemblyError(
-        `GitHub prompt loop cannot start: workspace.path must be '${expectedWorkspacePath}'`,
-      );
-    }
-    const workspacePath = githubPromptWorkspacePath(
-      this.deps.dataDir,
-      card.loop.id,
-    );
-    await mkdir(workspacePath, { recursive: true });
+    const worktree = await ensureRunWorktree({
+      repoPath,
+      loopId: card.loop.id,
+      runId,
+      dataDir: this.deps.dataDir,
+    });
     return {
-      ...card,
-      loop: {
-        ...card.loop,
-        workspace: {
-          ...card.loop.workspace,
-          strategy: "direct",
-          path: workspacePath,
+      card: {
+        ...card,
+        loop: {
+          ...card.loop,
+          workspace: {
+            ...card.loop.workspace,
+            path: worktree.path,
+          },
         },
       },
+      worktree,
     };
   }
 
@@ -1209,6 +1291,9 @@ export class LoopRunService {
         const artifactRefs = [
           ...(ctx.turn === 1 && ctx.contractJson
             ? [`artifact://${runId}/intent-contract.json`]
+            : []),
+          ...(ctx.turn === 1 && ctx.workspaceEvidence
+            ? [`artifact://${runId}/workspace.json`]
             : []),
           `artifact://${runId}/${stdoutName}`,
         ];
@@ -1740,7 +1825,10 @@ export class LoopRunService {
       return null;
     }
     try {
-      const executableCard = await this.resolveExecutableCard(stored.card);
+      const { card: executableCard } = await this.resolveExecutableCard(
+        stored.card,
+        signal.runId,
+      );
       if (!contractJson) {
         // 首轮在飞时被暂停 (或早于"装配即落盘"版本的 run): turn 1 未产生
         // 合约快照与账本, 按卡片重新装配合约、同 run_id 重新开始。更晚

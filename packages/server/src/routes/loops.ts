@@ -20,6 +20,7 @@ import {
   LoopRunError,
   type LoopRunService,
   type ProposalStore,
+  isGitWorkTree,
 } from "../loop/index.js";
 
 /** POST /:id/runs 请求体 (03): intent_overrides 对 handoff 的本轮覆盖。 */
@@ -102,6 +103,30 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
 
     const card = parsed.data;
     const id = card.loop.id;
+    // worktree 策略创建期校验 (fail-fast): workspace.path 必填且是 git
+    // 工作区 — 不留到 run 启动时才以 setup 失败落账。
+    if (card.loop.workspace.strategy === "worktree") {
+      const repoPath = card.loop.workspace.path;
+      if (!repoPath) {
+        return c.json(
+          {
+            error: "invalid_loop_card",
+            message:
+              "workspace.strategy is worktree but workspace.path is missing",
+          },
+          400,
+        );
+      }
+      if (!(await isGitWorkTree(repoPath))) {
+        return c.json(
+          {
+            error: "invalid_loop_card",
+            message: `workspace.strategy is worktree but '${repoPath}' is not a git work tree`,
+          },
+          400,
+        );
+      }
+    }
     if (loopCardStore.getLoop(id)) {
       return c.json(
         { error: "loop_exists", message: `Loop '${id}' is already registered` },

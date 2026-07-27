@@ -268,6 +268,14 @@ export function LoopDetailPage() {
                     : loop.card.loop.trigger.type}
                 </span>
                 {" · "}
+                {loop.card.loop.workspace.strategy === "worktree" && (
+                  <>
+                    <span className="rounded-[var(--radius-sm)] bg-[var(--accent-rust)]/15 px-1.5 py-0.5 text-xs font-medium text-[var(--accent-rust)]">
+                      worktree
+                    </span>
+                    {" · "}
+                  </>
+                )}
                 {loop.card.loop.policy ? (
                   <span className="rounded-[var(--radius-sm)] bg-[var(--warning-color)]/15 px-1.5 py-0.5 text-xs font-medium text-[var(--warning-color)]">
                     modify

@@ -231,12 +231,20 @@ memory packet 注入 prompt 并落 artifact、native_invocation 真实投影（a
 - [ ] **死循环检测（loop stagnation）**：轮次级——连续 N 轮 stdout/报告内容高度相似（哈希或相似度）或同一 blocker fingerprint 重复（`repeated_blocker_count` 已有雏形），提前转 needs_human 而不是烧完 max_turns；轮内级——executor 在同一文件/命令上反复空转（事件流模式识别）可作为后续增强。
 - [ ] **配套**：`adapter_policy.timeout_seconds` 保留为显式兜底（02 §3 adapter 调用必须带超时的合规出口）；前端 Stream Output 已有实时事件流，可在 UI 上直接显示"最后活动于 X 分钟前"，让人一眼识别空转。
 
-### 验证工作区隔离：worktree 策略落地
+### 验证工作区隔离：worktree 策略落地 ✅ 已实现（2026-07-27）
 
 背景：2026-07-27 实证（run-20260727T150455Z-a40e562e turn 1）——loop 的 verifier 在 `direct` 策略下直接对工作区跑 `pnpm typecheck`，撞上开发者正在编辑的中间状态（TS2554: 参数数量不一致），误判 failed 并白烧一次 retry。executor 报告本身没问题，是"验证读的是活目录"这个架构弱点。
 
-- [ ] LoopCard `workspace.strategy: "worktree"` 的真实实现：run 启动时为验证/执行创建隔离的 git worktree（或至少为 verifier 创建只读快照），验证在快照上跑，结果不受开发者的在飞编辑影响。
-- [ ] 过渡方案（更便宜）：verifier 运行前记录工作区 `git status`/HEAD，验证失败且工作区在验证期间发生过变动时，在 judgment evidence 里标注"工作区非稳定状态，结果可能失真"，供人工分辨真失败与环境噪音。
+实现（本提交）：
+- `loop/worktree/worktree.ts`：`ensureRunWorktree`（run 级 worktree 集中在 `<dataDir>/worktrees/<loop_id>/<run_id>`，从主仓库 HEAD 拉 `loop/<run_id>` 分支；同 run 全 turn 复用、重启后目录仍在天然恢复；非 git 仓库 AssemblyError fail-closed）+ `pruneStaleWorktrees`（开机清理超期 7 天的目录与分支）。
+- `run-service.resolveExecutableCard(card, runId)`：worktree 策略在此把 `workspace.path` 改写为 worktree 目录——assembly / executor / verifier / diff 取证零改动获得隔离；证据落 `workspace.json` artifact 并引用进 turn 1 artifact_refs。
+- 创建期校验：POST /api/loops 带 worktree 策略但 path 缺失/非 git 仓库 → 400。
+- UI：创建表单加工作区策略下拉（direct / worktree），详情页 worktree 徽章。
+- 06 偏差登记：worktree 实体目录集中在 dataDir（spec 未定位置，Yep 扩展决策）；合并回主目录保持人工（硬闸门语义）。
+- 测试：worktree.test.ts 3 例（创建/复用/清理）、run-service-worktree.test.ts 2 例（cwd 隔离 + 证据落账、创建期 400）、loopCardBuilder 策略映射。
+
+遗留（仍在 backlog）：
+- [ ] 过渡方案（更便宜）：verifier 运行前记录工作区 `git status`/HEAD，验证失败且工作区在验证期间发生过变动时，在 judgment evidence 里标注"工作区非稳定状态，结果可能失真"，供人工分辨真失败与环境噪音。（direct 策略仍有价值）
 - [ ] UI 提示：loop 详情页对 `direct` 策略的 loop 显示"验证直接作用于工作区"的提示，让使用者知道跑 loop 期间别在同一目录大改代码。
 
 ### active run 的重启恢复（开机接管在飞 run）

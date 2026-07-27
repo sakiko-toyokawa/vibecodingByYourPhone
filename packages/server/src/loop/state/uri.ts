@@ -9,7 +9,9 @@
  * - ledger://decision-<run_id>    → 同文件, 仅 type=="decision_entry" 的行
  * - intent://<loop_id>            → 注册表查询 (非文件, 只解析不读)
  * - policy://<profile>            → 策略档名 (非文件, 只解析不读)
- * - workspace://<loop_id>/<run_id> → 工作区 (worktrees 未实现, 只解析)
+ * - workspace://<loop_id>/<run_id> → 工作区 (worktree 策略的实体目录在
+ *   <dataDir>/worktrees/<loop_id>/<run_id>, 见 loop/worktree/worktree.ts;
+ *   URI 本身仍只解析不读)
  *
  * 安全: run_id / 文件名做白名单校验并拒绝 `..` 与路径分隔符, 解析结果
  * 必然落在 loops/ 子树内 (防路径逃逸, 同 RunLedgerStore.SAFE_NAME 口径)。

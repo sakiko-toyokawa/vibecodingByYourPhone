@@ -18,3 +18,4 @@ export * from "./state/failure-pattern-store.js";
 export * from "./state/proposal-store.js";
 export * from "./trigger/cron-matcher.js";
 export * from "./trigger/cron-scheduler.js";
+export * from "./worktree/worktree.js";

@@ -76,10 +76,27 @@ function testBuildsWorkspaceLoop(): void {
   assertEqual(card.loop.discovery, undefined);
   assertEqual(card.loop.handoff?.default_task_type, "maintenance");
   assertEqual(card.loop.workspace.path, "E:/projects/my-app");
+  assertEqual(card.loop.workspace.strategy, "direct");
   assertEqual(card.loop.policy, undefined);
+}
+
+function testBuildsWorkspaceLoopWithWorktreeStrategy(): void {
+  const card = buildLoopCard({
+    ...DEFAULT_LOOP_CREATE_FORM,
+    id: "fix-things",
+    workspacePath: "E:/projects/my-app",
+    workspaceStrategy: "worktree",
+    policyMode: "modify",
+    task: "Fix the lint errors.",
+  });
+
+  assertEqual(card.loop.workspace.strategy, "worktree");
+  assertEqual(card.loop.workspace.path, "E:/projects/my-app");
+  assertEqual(card.loop.policy?.profile, "workspace_local_fix");
 }
 
 testBuildsGithubPromptLoop();
 testBuildsWorkspaceLoop();
+testBuildsWorkspaceLoopWithWorktreeStrategy();
 
 console.log("loopCardBuilder tests passed");

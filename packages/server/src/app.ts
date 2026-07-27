@@ -19,6 +19,7 @@ import {
   ProposalStore,
   RunLedgerStore,
   RunStateStore,
+  pruneStaleWorktrees,
 } from "./loop/index.js";
 import { createAuthMiddleware } from "./middleware/auth.js";
 import {
@@ -272,6 +273,11 @@ export function createApp(
       dataDir: options.dataDir,
     });
     cronScheduler.start();
+    // 04 容量与清理: 开机清理超期 run worktree (worktree 隔离策略的
+    // 执行目录, 默认 7 天); 失败仅告警, 不阻塞启动。
+    void pruneStaleWorktrees({ dataDir: options.dataDir }).catch((error) =>
+      console.warn("[worktree] startup prune failed:", error),
+    );
     // 阶段 3 学习侧: 异步 learning worker, 与主链路同进程但崩溃隔离
     // (tick 整体 try/catch + 健康记录, 见 learning/worker.ts). 只读
     // events.jsonl + runs/, 只写 failure-patterns.json / proposals/ /

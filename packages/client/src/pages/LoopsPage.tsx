@@ -511,6 +511,29 @@ export function LoopsPage() {
                           </option>
                         </select>
                       </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="[font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
+                          {t("loopsCreateStrategyLabel")}
+                        </span>
+                        <select
+                          className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-border)]"
+                          value={createForm.workspaceStrategy}
+                          onChange={(event) =>
+                            updateCreateForm(
+                              "workspaceStrategy",
+                              event.target
+                                .value as LoopCreateFormState["workspaceStrategy"],
+                            )
+                          }
+                        >
+                          <option value="direct">
+                            {t("loopsCreateStrategyDirect")}
+                          </option>
+                          <option value="worktree">
+                            {t("loopsCreateStrategyWorktree")}
+                          </option>
+                        </select>
+                      </label>
                     </>
                   ) : (
                     <div className="flex flex-col justify-end gap-1 rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2">
