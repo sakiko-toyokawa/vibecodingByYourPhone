@@ -116,6 +116,71 @@ export async function ensureRunWorktree(opts: {
   return { path: dir, branch, baseSha };
 }
 
+/** worktree 相对基线是否有改动（未提交变更或 loop 分支上的新提交）。 */
+export async function worktreeHasChanges(
+  worktreePath: string,
+  baseSha: string,
+): Promise<boolean> {
+  const status = await git(["-C", worktreePath, "status", "--porcelain"]);
+  if (status.length > 0) {
+    return true;
+  }
+  const count = await git([
+    "-C",
+    worktreePath,
+    "rev-list",
+    `${baseSha}..HEAD`,
+    "--count",
+  ]);
+  return count !== "0";
+}
+
+/**
+ * 合并闸门批准后执行合并：worktree 的未提交改动先落到 loop 分支
+ * （executor 只写文件不提交是常态；commit 身份用 loop 专用，不依赖
+ * 仓库的 user 配置），然后在原仓库 merge --no-ff。冲突时 abort 并抛
+ * 错 —— worktree 与分支保留供人工处理。
+ */
+export async function mergeRunWorktree(opts: {
+  worktreePath: string;
+  originPath: string;
+  branch: string;
+  runId: string;
+}): Promise<{ mergeCommitSha: string }> {
+  const { worktreePath, originPath, branch, runId } = opts;
+  const status = await git(["-C", worktreePath, "status", "--porcelain"]);
+  if (status.length > 0) {
+    await git(["-C", worktreePath, "add", "-A"]);
+    await git([
+      "-c",
+      "user.name=yep-loop",
+      "-c",
+      "user.email=loop@yep-anywhere",
+      "-C",
+      worktreePath,
+      "commit",
+      "-m",
+      `loop run ${runId}: worktree changes`,
+    ]);
+  }
+  try {
+    await git([
+      "-C",
+      originPath,
+      "merge",
+      "--no-ff",
+      branch,
+      "-m",
+      `Merge loop run ${runId} (worktree)`,
+    ]);
+  } catch (error) {
+    await git(["-C", originPath, "merge", "--abort"]).catch(() => {});
+    throw error;
+  }
+  const mergeCommitSha = await git(["-C", originPath, "rev-parse", "HEAD"]);
+  return { mergeCommitSha };
+}
+
 /**
  * 04 容量与清理：清理超过 maxAgeDays（默认 7 天）未动的 run worktree
  * （目录 + loop/<run_id> 分支）。单条失败仅 warn 不中断；返回清理数量。

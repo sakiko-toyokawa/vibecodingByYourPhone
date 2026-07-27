@@ -129,7 +129,12 @@ import {
   verificationArtifactName,
   verifyRun,
 } from "./verification/verify-run.js";
-import { type RunWorktree, ensureRunWorktree } from "./worktree/worktree.js";
+import {
+  type RunWorktree,
+  ensureRunWorktree,
+  mergeRunWorktree,
+  worktreeHasChanges,
+} from "./worktree/worktree.js";
 
 export type LoopRunErrorCode =
   | "loop_not_found"
@@ -1506,6 +1511,57 @@ export class LoopRunService {
             judgmentRef = null;
           }
         }
+        // --- merge gate (worktree 策略 + modify): 验证通过且 worktree
+        // 有改动时不直接 complete — 改写 judgment 升级 needs_human
+        // (requires_human 透传, 02 §6 人工优先), 等人工批准后才把
+        // loop 分支合并回原仓库。合并证据落 merge-gate.json (批准后的
+        // 实际合并从该文件取参, 重启可恢复)。
+        if (
+          outcome.ok &&
+          judgment?.next_action === "complete" &&
+          judgment.overall === "passed" &&
+          ctx.workspaceEvidence &&
+          ctx.card.loop.policy &&
+          (await worktreeHasChanges(
+            ctx.workspaceEvidence.worktreePath,
+            ctx.workspaceEvidence.baseSha,
+          ))
+        ) {
+          judgment = {
+            ...judgment,
+            next_action: "needs_human",
+            requires_human: true,
+            unresolved_risks: [
+              ...judgment.unresolved_risks,
+              `worktree changes pending merge approval: branch ${ctx.workspaceEvidence.branch} → ${ctx.workspaceEvidence.originPath}`,
+            ],
+          };
+          await store.writeArtifact(
+            runId,
+            "merge-gate.json",
+            `${JSON.stringify(
+              {
+                turn: ctx.turn,
+                origin_path: ctx.workspaceEvidence.originPath,
+                worktree_path: ctx.workspaceEvidence.worktreePath,
+                branch: ctx.workspaceEvidence.branch,
+                base_sha: ctx.workspaceEvidence.baseSha,
+                judgment_ref: judgmentRef,
+                created_at: new Date().toISOString(),
+              },
+              null,
+              2,
+            )}\n`,
+          );
+          artifactRefs.push(`artifact://${runId}/merge-gate.json`);
+          // 判定报告同步改写, 与最终控制决策口径一致 (报告说"判过但
+          // 待合并确认", 不留下 complete 与 needs_human 打架的假象)。
+          await store.writeArtifact(
+            runId,
+            verificationArtifactName("judgment-report.json", ctx.turn),
+            `${JSON.stringify(judgment, null, 2)}\n`,
+          );
+        }
         ctx.lastJudgment = judgment;
         ctx.lastJudgmentRef = judgmentRef;
 
@@ -1781,6 +1837,72 @@ export class LoopRunService {
       if (!this.activeByRunId.has(signal.runId)) {
         this.activeByLoop.set(signal.loopId, ctx.active);
         this.activeByRunId.set(signal.runId, ctx.active);
+      }
+    }
+
+    // --- 合并闸门批准 (worktree merge gate): human_approve 且存在当前
+    // 轮的 merge-gate.json 时, 不开新一轮 — 执行 git merge 并经
+    // 控制面终局 (complete / 冲突 failed)。gate.turn 与 run_state 对齐
+    // 才走合并, 防止上一轮遗留的 gate 文件在无关审批上误触发。
+    if (signal.cause === "human_approve") {
+      const gateJson = await this.deps.runLedgerStore.readArtifact(
+        signal.runId,
+        "merge-gate.json",
+      );
+      if (gateJson) {
+        const gate = JSON.parse(gateJson) as {
+          turn: number;
+          origin_path: string;
+          worktree_path: string;
+          branch: string;
+        };
+        const runState = await controlPlane.getRunState(signal.loopId);
+        if (runState?.turn === gate.turn) {
+          let mergeResult: {
+            ok: boolean;
+            merge_commit_sha?: string;
+            error?: string;
+          };
+          try {
+            const merged = await mergeRunWorktree({
+              worktreePath: gate.worktree_path,
+              originPath: gate.origin_path,
+              branch: gate.branch,
+              runId: signal.runId,
+            });
+            mergeResult = { ok: true, merge_commit_sha: merged.mergeCommitSha };
+          } catch (error) {
+            mergeResult = {
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+          await this.deps.runLedgerStore.writeArtifact(
+            signal.runId,
+            "merge-result.json",
+            `${JSON.stringify(
+              {
+                run_id: signal.runId,
+                turn: gate.turn,
+                ...mergeResult,
+                at: new Date().toISOString(),
+              },
+              null,
+              2,
+            )}\n`,
+          );
+          await controlPlane.settleMerge({
+            loopId: signal.loopId,
+            runId: signal.runId,
+            turn: gate.turn,
+            ok: mergeResult.ok,
+            mergeCommitSha: mergeResult.merge_commit_sha ?? null,
+            error: mergeResult.error,
+          });
+          // 合并终局: 释放注册 (不开新一轮, 无 turn 循环)
+          this.releaseRun(signal.runId);
+          return;
+        }
       }
     }
 

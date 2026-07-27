@@ -13,14 +13,15 @@
 
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import type { JudgmentReport, LoopCard, RunState } from "@yep-anywhere/shared";
-import type { Hono } from "hono";
+import { Hono } from "hono";
 import { createLoopsRoutes } from "../routes/loops.js";
+import { createRunsRoutes } from "../routes/runs.js";
 import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { IEventBus } from "../watcher/index.js";
@@ -38,12 +39,20 @@ interface SupervisorCall {
   text: string;
 }
 
-/** Fake Supervisor: 记录 cwd 并立即成功。 */
+/** Fake Supervisor: 记录 cwd 并立即成功; writeChange 时 executor 会在
+ *  cwd (worktree) 里真实写一个文件, 模拟 modify loop 的改动。 */
 class FakeSupervisor {
   readonly calls: SupervisorCall[] = [];
+  writeChange = false;
 
   async startSession(cwd: string, message: { text: string }): Promise<Process> {
     this.calls.push({ cwd, text: message.text });
+    if (this.writeChange && !message.text.includes("Collector input bundle")) {
+      await writeFile(
+        path.join(cwd, "loop-change.txt"),
+        `change at ${Date.now()}\n`,
+      );
+    }
     return {
       sessionId: "session-wt-1",
       subscribe: (listener: (event: unknown) => void) => {
@@ -65,6 +74,15 @@ class FakeSupervisor {
       abort: async () => {},
       respondToInput: () => {},
     } as unknown as Process;
+  }
+}
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -92,7 +110,7 @@ async function makeTempRepo(): Promise<string> {
   return repo;
 }
 
-function makeCard(id: string, repoPath: string): LoopCard {
+function makeCard(id: string, repoPath: string, modify = false): LoopCard {
   return {
     loop: {
       id,
@@ -101,6 +119,14 @@ function makeCard(id: string, repoPath: string): LoopCard {
       verification: { required: ["static"] },
       persistence: { state_file: `state/${id}.json` },
       stop_rules: { max_turns: 3, max_time_minutes: 30, max_retries: 2 },
+      ...(modify
+        ? {
+            policy: {
+              profile: "workspace_local_fix",
+              approval_mode: "bypass" as const,
+            },
+          }
+        : {}),
     },
   };
 }
@@ -159,11 +185,16 @@ async function withFixture(fn: (ctx: Fixture) => Promise<void>): Promise<void> {
       verifyRunFn: fakeVerify as never,
       dataDir,
     });
-    const app = createLoopsRoutes({
-      loopCardStore,
-      runService: service,
-      controlPlane,
-    });
+    const app = new Hono();
+    app.route(
+      "/",
+      createLoopsRoutes({
+        loopCardStore,
+        runService: service,
+        controlPlane,
+      }),
+    );
+    app.route("/", createRunsRoutes({ runService: service, controlPlane }));
     await fn({ app, controlPlane, supervisor, ledgerStore });
   } finally {
     await rm(dataDir, { recursive: true, force: true });
@@ -291,4 +322,150 @@ test("创建期校验: worktree 策略 + 非 git 路径 / 缺路径 → 400 inva
       await rm(notRepo, { recursive: true, force: true });
     }
   });
+});
+
+test("合并闸门: 判过且 worktree 有改动 → needs_human; approve 后合并进原仓库", async (t) => {
+  if (!(await gitAvailable())) {
+    t.skip("git not available");
+    return;
+  }
+  const repo = await makeTempRepo();
+  try {
+    await withFixture(
+      async ({ app, controlPlane, supervisor, ledgerStore }) => {
+        supervisor.writeChange = true;
+        const create = await app.request("/", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(makeCard("loop-mg", repo, true)),
+        });
+        assert.equal(create.status, 201);
+
+        const trigger = await app.request("/loop-mg/runs", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        assert.equal(trigger.status, 201);
+        const { run } = (await trigger.json()) as { run: { run_id: string } };
+
+        // 验证通过但改动待合并确认: 不直接 complete, 升级人工闸门
+        await waitForState(controlPlane, run.run_id, ["needs_human"]);
+        const gateJson = await ledgerStore.readArtifact(
+          run.run_id,
+          "merge-gate.json",
+        );
+        assert.ok(gateJson, "merge-gate.json 落盘");
+        const judgment = JSON.parse(
+          (await ledgerStore.readArtifact(
+            run.run_id,
+            "judgment-report.json",
+          )) ?? "{}",
+        ) as { next_action: string; requires_human: boolean };
+        assert.equal(judgment.next_action, "needs_human");
+        assert.equal(judgment.requires_human, true);
+        // 改动还在隔离 worktree, 未进原仓库
+        assert.equal(
+          await pathExists(path.join(repo, "loop-change.txt")),
+          false,
+        );
+
+        // approve → 执行合并 → complete, 改动进原仓库
+        const decision = await app.request(`/${run.run_id}/decision`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ decision: "approve" }),
+        });
+        assert.equal(decision.status, 200);
+        await waitForState(controlPlane, run.run_id, ["complete"]);
+        assert.ok(
+          await pathExists(path.join(repo, "loop-change.txt")),
+          "approve 后改动合并进原仓库",
+        );
+        const mergeResult = JSON.parse(
+          (await ledgerStore.readArtifact(run.run_id, "merge-result.json")) ??
+            "{}",
+        ) as { ok: boolean; merge_commit_sha?: string };
+        assert.equal(mergeResult.ok, true);
+        assert.ok(mergeResult.merge_commit_sha);
+      },
+    );
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
+test("合并闸门: reject → failed, 改动不进原仓库", async (t) => {
+  if (!(await gitAvailable())) {
+    t.skip("git not available");
+    return;
+  }
+  const repo = await makeTempRepo();
+  try {
+    await withFixture(async ({ app, controlPlane, supervisor }) => {
+      supervisor.writeChange = true;
+      await app.request("/", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(makeCard("loop-rj", repo, true)),
+      });
+      const trigger = await app.request("/loop-rj/runs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const { run } = (await trigger.json()) as { run: { run_id: string } };
+      await waitForState(controlPlane, run.run_id, ["needs_human"]);
+
+      const decision = await app.request(`/${run.run_id}/decision`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision: "reject" }),
+      });
+      assert.equal(decision.status, 200);
+      await waitForState(controlPlane, run.run_id, ["failed"]);
+      assert.equal(
+        await pathExists(path.join(repo, "loop-change.txt")),
+        false,
+        "reject 后改动不得进原仓库",
+      );
+    });
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
+test("合并闸门: worktree 无改动 → 直接 complete, 不进人工闸门", async (t) => {
+  if (!(await gitAvailable())) {
+    t.skip("git not available");
+    return;
+  }
+  const repo = await makeTempRepo();
+  try {
+    await withFixture(
+      async ({ app, controlPlane, supervisor, ledgerStore }) => {
+        // writeChange 保持 false: executor 什么都没改
+        await app.request("/", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(makeCard("loop-nc", repo, true)),
+        });
+        const trigger = await app.request("/loop-nc/runs", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        const { run } = (await trigger.json()) as { run: { run_id: string } };
+        // 没有改动就没有需要人批准的合并 — 直接 complete
+        await waitForState(controlPlane, run.run_id, ["complete"]);
+        assert.equal(
+          await ledgerStore.readArtifact(run.run_id, "merge-gate.json"),
+          undefined,
+        );
+        void supervisor;
+      },
+    );
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
 });

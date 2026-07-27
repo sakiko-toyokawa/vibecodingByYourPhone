@@ -809,6 +809,46 @@ export class ControlPlane {
   }
 
   /**
+   * 合并闸门终局 (worktree 策略 merge gate): 人工批准合并 (needs_human →
+   * active) 后, run service 执行完 git merge 调用 — active → complete
+   * (合并已进原仓库) / failed (合并冲突, worktree 与分支保留供人工处理)。
+   */
+  async settleMerge(input: {
+    loopId: string;
+    runId: string;
+    turn: number;
+    ok: boolean;
+    mergeCommitSha: string | null;
+    error?: string;
+  }): Promise<RunStateRecord> {
+    const record = await this.deps.runStateStore.load(input.loopId);
+    if (!record || record.run_id !== input.runId || record.state !== "active") {
+      throw new ControlPlaneError(
+        "invalid_state",
+        `Loop '${input.loopId}' run is not active (settleMerge requires the post-approve active state)`,
+      );
+    }
+    const { record: updated } = await this.transition({
+      loopId: input.loopId,
+      runId: input.runId,
+      record,
+      to: input.ok ? "complete" : "failed",
+      decision: input.ok ? "complete" : "failed",
+      decisionId: controlDecisionId(
+        input.runId,
+        input.turn,
+        input.ok ? "complete" : "failed",
+      ),
+      reason: input.ok
+        ? `merge gate approved and applied: worktree branch merged into origin (merge commit ${input.mergeCommitSha})`
+        : `merge gate approved but merge failed: ${input.error ?? "unknown error"} (worktree 保留供人工处理)`,
+      nextAction: "none",
+      evidenceRefs: [`artifact://${input.runId}/merge-result.json`],
+    });
+    return updated;
+  }
+
+  /**
    * Supplement a budget_limited run's budget and resume it
    * (budget_limited → active, 状态机.md: 人工补充预算并恢复). `patch` raises
    * one or more max_* fields; the result is re-validated (max_retries <

@@ -240,8 +240,17 @@ memory packet 注入 prompt 并落 artifact、native_invocation 真实投影（a
 - `run-service.resolveExecutableCard(card, runId)`：worktree 策略在此把 `workspace.path` 改写为 worktree 目录——assembly / executor / verifier / diff 取证零改动获得隔离；证据落 `workspace.json` artifact 并引用进 turn 1 artifact_refs。
 - 创建期校验：POST /api/loops 带 worktree 策略但 path 缺失/非 git 仓库 → 400。
 - UI：创建表单加工作区策略下拉（direct / worktree），详情页 worktree 徽章。
-- 06 偏差登记：worktree 实体目录集中在 dataDir（spec 未定位置，Yep 扩展决策）；合并回主目录保持人工（硬闸门语义）。
-- 测试：worktree.test.ts 3 例（创建/复用/清理）、run-service-worktree.test.ts 2 例（cwd 隔离 + 证据落账、创建期 400）、loopCardBuilder 策略映射。
+- 06 偏差登记：worktree 实体目录集中在 dataDir（spec 未定位置，Yep 扩展决策）。
+- 测试：worktree.test.ts 3 例（创建/复用/清理）、run-service-worktree.test.ts（cwd 隔离 + 证据落账、创建期 400）、loopCardBuilder 策略映射。
+
+### 合并闸门（merge gate）✅ 已实现（2026-07-27，接续 worktree）
+
+闭环：隔离执行 → 验证 → 报告 → **人工确认 → 才进主目录**。
+
+- 判过拦截：worktree + policy(modify) 的 run 验证通过且 worktree 有改动时，judgment 改写为 `needs_human`（requires_human 透传，02 §6 人工优先），证据落 `merge-gate.json`（origin/worktree 路径、分支、基线 SHA、turn）；无改动则直接 complete，不空转人工。
+- 批准合并：POST /runs/:id/decision approve → `continueRun` 识别 merge-gate（gate.turn 与 run_state 对齐才触发，防旧 gate 误伤）→ `mergeRunWorktree`（worktree 未提交改动先落 loop 分支 → 原仓库 `merge --no-ff`；冲突 abort 并判 failed，worktree 保留人工处理）→ `controlPlane.settleMerge` 终局（active → complete/failed，证据 merge-result.json）。
+- 拒绝合并：reject → failed（改动不进原仓库）；request_changes → 正常开下一轮继续改。
+- 测试：approve 合并入 origin / reject 不进 / 无改动直 complete（run-service-worktree.test.ts 3 例）。
 
 遗留（仍在 backlog）：
 - [ ] 过渡方案（更便宜）：verifier 运行前记录工作区 `git status`/HEAD，验证失败且工作区在验证期间发生过变动时，在 judgment evidence 里标注"工作区非稳定状态，结果可能失真"，供人工分辨真失败与环境噪音。（direct 策略仍有价值）
