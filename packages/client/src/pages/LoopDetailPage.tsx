@@ -271,6 +271,10 @@ export function LoopDetailPage() {
                   </span>
                 )}
                 {" · "}
+                {t("loopsMaxTurns", {
+                  count: loop.card.loop.stop_rules.max_turns,
+                })}
+                {" · "}
                 {t("loopsCreated", { time: formatTime(loop.created_at) })}
               </p>
             )}
@@ -339,6 +343,18 @@ export function LoopDetailPage() {
                       </p>
                     ) : (
                       <div className="flex flex-col gap-[var(--space-2)] [font-size:var(--font-size-sm)]">
+                        {(runDetail.run.state === "paused" ||
+                          runDetail.run.state === "needs_human" ||
+                          runDetail.run.state === "budget_limited") && (
+                          <p className="m-0 rounded-[var(--radius-sm)] border border-[var(--warning-color)]/40 bg-[var(--warning-color)]/10 p-3 text-[var(--warning-color)]">
+                            {t("loopsRunBlocked", {
+                              state: runDetail.run.state,
+                              reason:
+                                runDetail.ledger_summary.last_decision
+                                  ?.reason ?? "—",
+                            })}
+                          </p>
+                        )}
                         <div className="flex items-start justify-between gap-[var(--space-3)]">
                           <span className="shrink-0 text-[var(--text-muted)]">
                             {t("loopsJudgmentOverall")}
@@ -361,7 +377,16 @@ export function LoopDetailPage() {
                           </span>
                           <span className="text-right text-[var(--text-primary)]">
                             {runDetail.ledger_summary.turns_used} /{" "}
-                            {runDetail.ledger_summary.retries_used}
+                            {runDetail.ledger_summary.max_turns ?? "—"}
+                          </span>
+                        </div>
+                        <div className="flex items-start justify-between gap-[var(--space-3)]">
+                          <span className="shrink-0 text-[var(--text-muted)]">
+                            {t("loopsJudgmentRetries")}
+                          </span>
+                          <span className="text-right text-[var(--text-primary)]">
+                            {runDetail.ledger_summary.retries_used} /{" "}
+                            {runDetail.ledger_summary.max_retries ?? "—"}
                           </span>
                         </div>
                         {collectorReportRef && (

@@ -87,8 +87,14 @@ class FakeSupervisor {
       sessionId,
       subscribe: (listener: (event: unknown) => void) => {
         this.listener = listener;
-        if (this.autoSucceed) {
-          queueMicrotask(() => {
+        queueMicrotask(() => {
+          // A working message before any result, so a killed (paused) turn
+          // still has a partial event stream worth keeping.
+          listener({
+            type: "message",
+            message: { type: "assistant", content: "working on it" },
+          });
+          if (this.autoSucceed) {
             listener({
               type: "message",
               message: {
@@ -99,8 +105,8 @@ class FakeSupervisor {
                 usage: { input_tokens: 10, output_tokens: 5 },
               },
             });
-          });
-        }
+          }
+        });
         return () => {};
       },
       terminate: (reason: string) => {
@@ -323,6 +329,28 @@ test("pause mid-turn: run → paused, process killed, 审批管线无新增排�
       assert.equal(await ledgerStore.readEntry(runId), null);
       assert.equal(service.isRunActive("loop-it"), true);
       assert.equal(loopCardStore.getLoop("loop-it")?.paused, true);
+
+      // The partial turn's event stream survives as an artifact so the
+      // Stream Output panel can show what the executor did before the kill.
+      const partialEvents = await ledgerStore.readArtifact(
+        runId,
+        "runtime-events.jsonl",
+      );
+      assert.ok(partialEvents, "paused run keeps the partial runtime events");
+      assert.match(partialEvents ?? "", /working on it/);
+
+      // Run detail projection for a paused run: paused state, session_ref
+      // kept for resume, budget max + the pausing decision visible.
+      const detail = await service.getRun(runId);
+      assert.equal(detail?.run.state, "paused");
+      assert.equal(
+        detail?.session_ref,
+        SESSION_ID,
+        "session_ref survives for resume",
+      );
+      assert.equal(detail?.ledger_summary.max_turns, 3);
+      assert.equal(detail?.ledger_summary.max_retries, 2);
+      assert.equal(detail?.ledger_summary.last_decision?.decision, "paused");
 
       // New triggers are rejected while paused.
       const during = await triggerRun(app, "loop-it");

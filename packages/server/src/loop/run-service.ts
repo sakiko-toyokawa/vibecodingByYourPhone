@@ -171,6 +171,11 @@ export interface RunSummary {
 export interface LedgerSummary {
   turns_used: number;
   retries_used: number;
+  /** 合约预算上限（控制面预算快照）；run_state 不属于该 run 时为 null */
+  max_turns: number | null;
+  max_retries: number | null;
+  /** 最新一条决策（decision kind + reason），解释 run 为何处于当前状态 */
+  last_decision: { decision: string; reason: string } | null;
   verifier_report_refs: string[];
   judgment_report_ref: string | null;
   collector_report_ref: string | null;
@@ -719,8 +724,11 @@ export class LoopRunService {
     const active = this.activeByRunId.get(runId);
     if (active) {
       // Active run: ledger not yet written, but the executing context may
-      // already carry the session ref (set after executeTurn starts).
-      const ctx = this.executingContexts.get(runId);
+      // already carry the session ref (set after executeTurn starts). For
+      // suspended runs (paused / needs_human / budget_limited) the context
+      // moved out of executingContexts — the ref survives in suspended.
+      const ctx =
+        this.executingContexts.get(runId) ?? this.suspended.get(runId);
       return {
         run: {
           run_id: active.runId,
@@ -751,7 +759,7 @@ export class LoopRunService {
         state:
           this.deps.controlPlane?.currentStateOf(entry.run_id) ??
           entry.final_status,
-        source: "cron",
+        source: entry.source ?? "cron",
         created_at: entry.created_at,
       },
       ledger: entry,
@@ -813,18 +821,32 @@ export class LoopRunService {
     // turns_used / retries_used come from the control-plane's budget snapshot
     // (03: budget 消耗对照 max_turns / max_retries); the run_state belongs to
     // this run only when its run_id matches (same-loop runs are serial but a
-    // newer run may already hold the loop's state file).
+    // newer run may already hold the loop's state file). max_* 同源 — 前端
+    // 按 used / max 展示, 无快照时为 null (显示 "—")。
     let turnsUsed = 1;
     let retriesUsed = 0;
+    let maxTurns: number | null = null;
+    let maxRetries: number | null = null;
     const runState = await this.deps.controlPlane?.getRunState(loopId);
     if (runState && runState.run_id === runId && runState.budget) {
       turnsUsed = runState.budget.used_turns;
       retriesUsed = runState.budget.used_retries;
+      maxTurns = runState.budget.max_turns;
+      maxRetries = runState.budget.max_retries;
     }
+    const lastDecisionEntry = decisionEntries[decisionEntries.length - 1];
 
     return {
       turns_used: turnsUsed,
       retries_used: retriesUsed,
+      max_turns: maxTurns,
+      max_retries: maxRetries,
+      last_decision: lastDecisionEntry
+        ? {
+            decision: lastDecisionEntry.decision,
+            reason: lastDecisionEntry.reason,
+          }
+        : null,
       verifier_report_refs: notApplicable(refs?.verifier_report)
         ? [refs.verifier_report]
         : [],
@@ -1068,6 +1090,23 @@ export class LoopRunService {
         // (active registration kept → same-loop runs stay serial).
         if (this.deps.controlPlane?.currentStateOf(runId) === "paused") {
           blocked = true;
+          // The partial turn writes no ledger entry / judgment, but keep its
+          // captured event stream as an artifact so the Stream Output panel
+          // can show what the executor did before it was killed. A resumed
+          // turn with the same number overwrites it.
+          if (outcome.runtimeEvents && outcome.runtimeEvents.length > 0) {
+            const eventsName =
+              ctx.turn === 1
+                ? "runtime-events.jsonl"
+                : `runtime-events-turn${ctx.turn}.jsonl`;
+            await store.writeArtifact(
+              runId,
+              eventsName,
+              `${outcome.runtimeEvents
+                .map((event) => JSON.stringify(event))
+                .join("\n")}\n`,
+            );
+          }
           this.suspended.set(runId, ctx);
           return;
         }
