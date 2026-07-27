@@ -230,3 +230,11 @@ memory packet 注入 prompt 并落 artifact、native_invocation 真实投影（a
 - [ ] **空转检测（idle watchdog）**：watchProcess 已逐条收集 runtime events——以"最后一条消息的时间"为活性信号，N 分钟（建议 10min，可配）无任何消息才判挂起 → 杀轮 + failed（归因 timeout/idle）。与硬超时的本质区别：只要在持续产出（思考、读文件、写报告）就永远不误杀，杀的是真正卡死的进程。
 - [ ] **死循环检测（loop stagnation）**：轮次级——连续 N 轮 stdout/报告内容高度相似（哈希或相似度）或同一 blocker fingerprint 重复（`repeated_blocker_count` 已有雏形），提前转 needs_human 而不是烧完 max_turns；轮内级——executor 在同一文件/命令上反复空转（事件流模式识别）可作为后续增强。
 - [ ] **配套**：`adapter_policy.timeout_seconds` 保留为显式兜底（02 §3 adapter 调用必须带超时的合规出口）；前端 Stream Output 已有实时事件流，可在 UI 上直接显示"最后活动于 X 分钟前"，让人一眼识别空转。
+
+### 验证工作区隔离：worktree 策略落地
+
+背景：2026-07-27 实证（run-20260727T150455Z-a40e562e turn 1）——loop 的 verifier 在 `direct` 策略下直接对工作区跑 `pnpm typecheck`，撞上开发者正在编辑的中间状态（TS2554: 参数数量不一致），误判 failed 并白烧一次 retry。executor 报告本身没问题，是"验证读的是活目录"这个架构弱点。
+
+- [ ] LoopCard `workspace.strategy: "worktree"` 的真实实现：run 启动时为验证/执行创建隔离的 git worktree（或至少为 verifier 创建只读快照），验证在快照上跑，结果不受开发者的在飞编辑影响。
+- [ ] 过渡方案（更便宜）：verifier 运行前记录工作区 `git status`/HEAD，验证失败且工作区在验证期间发生过变动时，在 judgment evidence 里标注"工作区非稳定状态，结果可能失真"，供人工分辨真失败与环境噪音。
+- [ ] UI 提示：loop 详情页对 `direct` 策略的 loop 显示"验证直接作用于工作区"的提示，让使用者知道跑 loop 期间别在同一目录大改代码。
