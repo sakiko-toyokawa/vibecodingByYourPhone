@@ -2037,6 +2037,10 @@ export class LoopRunService {
       // 输入引用（02 §5 runtime_event_refs / structured_output）。
       const runtimeEvents: unknown[] = [];
 
+      // Default turn timeout: prevents a hung adapter from blocking the run
+      // forever when no adapter_policy.timeout_seconds is configured.
+      const timeoutMs = opts.timeoutMs ?? 5 * 60 * 1000;
+
       const settle = (ok: boolean, error?: string): void => {
         if (settled) {
           return;
@@ -2061,14 +2065,14 @@ export class LoopRunService {
         });
       };
 
-      if (opts.timeoutMs !== undefined && opts.timeoutMs > 0) {
+      if (timeoutMs > 0) {
         timer = setTimeout(() => {
           adapterError = new AdapterError(
             "timeout",
-            `turn exceeded adapter policy timeout (${opts.timeoutMs}ms, adapter_policy.timeout_seconds)`,
+            `turn exceeded timeout (${timeoutMs}ms${opts.timeoutMs ? ", adapter_policy.timeout_seconds" : ", default"})`,
           );
           settle(false, adapterError.message);
-        }, opts.timeoutMs);
+        }, timeoutMs);
         // 计时器不得拖住 server 进程退出
         timer.unref();
       }
