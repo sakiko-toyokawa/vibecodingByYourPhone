@@ -83,7 +83,7 @@ export function createRunsRoutes(deps: RunsRoutesDeps): Hono {
       run_state: runState,
       ledger_summary: found.ledger_summary,
       /** Session ref of the executor process (for live stream subscription). */
-      session_ref: found.ledger?.runtime.session_ref ?? null,
+      session_ref: found.session_ref,
     });
   });
 

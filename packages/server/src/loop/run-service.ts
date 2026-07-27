@@ -714,9 +714,13 @@ export class LoopRunService {
     run: RunSummary;
     ledger: RunLedgerEntry | null;
     ledger_summary: LedgerSummary;
+    session_ref: string | null;
   } | null> {
     const active = this.activeByRunId.get(runId);
     if (active) {
+      // Active run: ledger not yet written, but the executing context may
+      // already carry the session ref (set after executeTurn starts).
+      const ctx = this.executingContexts.get(runId);
       return {
         run: {
           run_id: active.runId,
@@ -731,6 +735,7 @@ export class LoopRunService {
           active.loopId,
           null,
         ),
+        session_ref: ctx?.sessionRef ?? null,
       };
     }
     const entry = await this.deps.runLedgerStore.readEntry(runId);
@@ -755,6 +760,7 @@ export class LoopRunService {
         entry.loop_id,
         entry,
       ),
+      session_ref: entry.runtime.session_ref,
     };
   }
 
