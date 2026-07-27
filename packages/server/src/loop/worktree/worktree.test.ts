@@ -184,3 +184,85 @@ test("pruneStaleWorktrees: 超期目录连同分支一起清理, 未超期保留
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("pruneStaleWorktrees: 保护集中的 runId 即使超龄也不被清理 (04 run 态保护)", async (t) => {
+  if (!(await gitAvailable())) {
+    t.skip("git not available");
+    return;
+  }
+  const repo = await makeTempRepo();
+  const dataDir = await mkdtemp(path.join(tmpdir(), "yep-wt-data-"));
+  try {
+    const kept = await ensureRunWorktree({
+      repoPath: repo,
+      loopId: "loop-it",
+      runId: "run-active",
+      dataDir,
+    });
+    const gone = await ensureRunWorktree({
+      repoPath: repo,
+      loopId: "loop-it",
+      runId: "run-stale",
+      dataDir,
+    });
+    // maxAgeDays=0 → 全部超龄; run-active 在保护集里必须原样保留
+    const pruned = await pruneStaleWorktrees({
+      dataDir,
+      maxAgeDays: 0,
+      protectedRunIds: new Set(["run-active"]),
+    });
+    assert.equal(pruned, 1, "只清未保护的那一个");
+    assert.ok(await pathExists(kept.path), "受保护的 worktree 保留");
+    assert.equal(await pathExists(gone.path), false);
+    const branches = await git(
+      ["branch", "--list", "loop/*", "--format=%(refname:short)"],
+      repo,
+    );
+    assert.equal(branches, "loop/run-active", "受保护分支不删");
+  } finally {
+    await git(
+      [
+        "worktree",
+        "remove",
+        "--force",
+        runWorktreeDir(dataDir, "loop-it", "run-active"),
+      ],
+      repo,
+    ).catch(() => {});
+    await rm(repo, { recursive: true, force: true });
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("pruneStaleWorktrees: 自定义 maxAgeDays 生效 (缩短阈值让新目录也可被清)", async (t) => {
+  if (!(await gitAvailable())) {
+    t.skip("git not available");
+    return;
+  }
+  const repo = await makeTempRepo();
+  const dataDir = await mkdtemp(path.join(tmpdir(), "yep-wt-data-"));
+  try {
+    const fresh = await ensureRunWorktree({
+      repoPath: repo,
+      loopId: "loop-it",
+      runId: "run-fresh",
+      dataDir,
+    });
+    // 阈值缩到 0 (cleanup_rule.max_age_days 的最极端声明): 刚建的目录也超龄
+    const pruned = await pruneStaleWorktrees({ dataDir, maxAgeDays: 0 });
+    assert.equal(pruned, 1);
+    assert.equal(await pathExists(fresh.path), false);
+  } finally {
+    await git(
+      [
+        "worktree",
+        "remove",
+        "--force",
+        runWorktreeDir(dataDir, "loop-it", "run-fresh"),
+      ],
+      repo,
+    ).catch(() => {});
+    await rm(repo, { recursive: true, force: true });
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});

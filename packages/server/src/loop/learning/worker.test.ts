@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { appendFile, mkdtemp, rm } from "node:fs/promises";
+import {
+  appendFile,
+  mkdir,
+  mkdtemp,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -7,7 +15,9 @@ import type {
   DecisionEntry,
   LearningEvent,
   LoopCard,
+  RunStateRecord,
 } from "@yep-anywhere/shared";
+import { RunStateStore } from "../control-plane/run-state-store.js";
 import { FailurePatternStore } from "../state/failure-pattern-store.js";
 import { LearningEventStore } from "../state/learning-event-store.js";
 import type { LoopCardStore } from "../state/loop-card-store.js";
@@ -507,6 +517,129 @@ test("golden tasks 同步: open 失败模式 → golden case 入 eval 集 (只�
     await worker.tick();
     assert.equal((await evalRunner.loadCases()).length, before);
     worker.stop();
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+// --- 04 容量与清理: worktree 周期清理接线 ---
+
+/** 与 cleanup.test.ts 同口径的 run_state fixture。 */
+function makeState(
+  runId: string,
+  state: RunStateRecord["state"],
+): RunStateRecord {
+  return {
+    version: 2,
+    goal_id: "g",
+    run_id: runId,
+    state,
+    turn: 1,
+    intent_version: 1,
+    workspace_ref: `workspace://loop-1/${runId}`,
+    last_judgment: null,
+    pending_approval: null,
+    session_ref: null,
+    budget: {
+      max_tokens: 0,
+      max_time_minutes: 30,
+      max_turns: 3,
+      max_retries: 2,
+      used_tokens: 0,
+      used_time_minutes: 0,
+      used_turns: 1,
+      used_retries: 0,
+    },
+    created_at: "2026-07-01T00:00:00.000Z",
+    updated_at: "2026-07-01T00:00:00.000Z",
+  };
+}
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+test("worktree 清理接线: tick 顺带 prune, 活跃 run 的 worktree 受保护 (04)", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-worker-prune-"));
+  try {
+    // run 态: loop-a 活跃 (保护), loop-b 终态 (可清); 外加一个坏 state
+    // 文件验证容错 (跳过不炸 tick)
+    const runStateStore = new RunStateStore({ dataDir });
+    await runStateStore.save("loop-a", makeState("run-active", "active"));
+    await runStateStore.save("loop-b", makeState("run-done", "complete"));
+    await writeFile(
+      join(dataDir, "loops", "state", "broken.json"),
+      "{not json",
+    );
+
+    // card: loop-a 声明 cleanup_rule.max_age_days = 7 (经 store 读取,
+    // 与 syncGoldenCases 同一访问途径)
+    const card: LoopCard = {
+      loop: {
+        id: "loop-a",
+        trigger: { type: "manual" },
+        workspace: {
+          strategy: "worktree",
+          path: "/tmp/ws",
+          cleanup_rule: { max_age_days: 7 },
+        },
+        verification: { required: ["static"] },
+        persistence: { state_file: ".loop/STATE.md" },
+        stop_rules: { max_turns: 3, max_time_minutes: 10, max_retries: 2 },
+      },
+    };
+    const loopCardStore = {
+      listLoops: () => [
+        {
+          id: "loop-a",
+          card,
+          created_at: "2026-07-01T00:00:00.000Z",
+          updated_at: "2026-07-01T00:00:00.000Z",
+          archived: false,
+        },
+      ],
+    } as LoopCardStore;
+
+    // 两个 30 天未动的 worktree 目录 (非 git 目录 → prune 退化为直接删)
+    const protectedDir = join(dataDir, "worktrees", "loop-a", "run-active");
+    const staleDir = join(dataDir, "worktrees", "loop-b", "run-done");
+    await mkdir(protectedDir, { recursive: true });
+    await mkdir(staleDir, { recursive: true });
+    const old = new Date(Date.now() - 30 * 86_400_000);
+    await utimes(protectedDir, old, old);
+    await utimes(staleDir, old, old);
+
+    const worker = new LearningWorker(
+      {
+        learningEventStore: new LearningEventStore({ dataDir }),
+        failurePatternStore: new FailurePatternStore({ dataDir }),
+        proposalStore: new ProposalStore({ dataDir }),
+        runLedgerStore: new RunLedgerStore({ dataDir }),
+        runStateStore,
+        loopCardStore,
+        dataDir,
+      },
+      { now: () => new Date() },
+    );
+    // 首个 tick 即跑清理 (lastCleanupAt = 0, 不受 cleanupIntervalMs 节流)
+    await worker.tick();
+    worker.stop();
+
+    assert.ok(
+      await pathExists(protectedDir),
+      "活跃 run 的 worktree 超龄也保留",
+    );
+    assert.equal(await pathExists(staleDir), false, "终态超龄 worktree 被清");
+    assert.equal(
+      worker.getHealth().consecutiveFailures,
+      0,
+      "坏 state 文件容错跳过, tick 不记错",
+    );
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }

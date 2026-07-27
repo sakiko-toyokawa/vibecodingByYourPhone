@@ -70,6 +70,14 @@ export const LoopCardSchema = z.object({
       // field that pins a loop to a local checkout; without it a run cannot
       // start a session. Optional so spec-shaped cards still validate.
       path: z.string().optional(),
+      // 04 容量与清理: worktree 清理口径。max_age_days 覆盖默认 7 天保留线;
+      // 无论阈值如何, 活跃/阻塞 run (active/retry/paused/needs_human) 的
+      // worktree 始终保留 (恢复依赖该目录)。缺省整块回退默认 7 天。
+      cleanup_rule: z
+        .object({
+          max_age_days: z.number().positive().optional(),
+        })
+        .optional(),
     }),
     verification: z.object({
       required: z.array(VerificationPhaseSchema),

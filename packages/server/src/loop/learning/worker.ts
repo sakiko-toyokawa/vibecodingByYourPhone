@@ -52,9 +52,22 @@ import type { LearningEventStore } from "../state/learning-event-store.js";
 import type { LoopCardStore } from "../state/loop-card-store.js";
 import type { ProposalStore } from "../state/proposal-store.js";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
+import { pruneStaleWorktrees } from "../worktree/worktree.js";
 import type { EvalCase, EvalRunner } from "./eval-runner.js";
 import type { ProposalPipeline } from "./pipeline.js";
 import { buildSignature, patternIdFor, proposalIdFor } from "./signature.js";
+
+/**
+ * worktree 清理的 run 态保护集 (04: 恢复依赖 worktree 的阻塞/活跃态)。
+ * 与 state/cleanup.ts 的 PROTECTED_STATES 不同: 不含 budget_limited
+ * (该态恢复路径是预算重置后开新 run, 不回原 worktree)。
+ */
+const WORKTREE_PROTECTED_STATES = new Set([
+  "active",
+  "retry",
+  "paused",
+  "needs_human",
+]);
 
 /** 归因类别 → 提案类型 / 风险 / target 提示 (映射表, 改进提案.md 7 类型). */
 export const ATTRIBUTION_TO_PROPOSAL: Record<
@@ -131,6 +144,11 @@ export interface LearningWorkerDeps {
   loopCardStore?: LoopCardStore;
   /** golden task 同步: eval 集写入入口 (可选)。 */
   evalRunner?: EvalRunner;
+  /**
+   * 04 容量与清理: worktree 清理的数据目录 (可选; 缺席时回退默认
+   * ~/.yep-anywhere, 与各 store 同口径)。
+   */
+  dataDir?: string;
 }
 
 export interface LearningWorkerConfig {
@@ -318,8 +336,8 @@ export class LearningWorker {
 
   /**
    * 04 容量与清理: 按 cleanupIntervalMs 节流顺带执行 (账本 20 轮压缩、
-   * artifacts 随账本裁剪、events.jsonl 30 天截断; 活跃 run 全程保护)。
-   * runStateStore 未接线时跳过 (phase-3 测试挂载兼容)。
+   * artifacts 随账本裁剪、events.jsonl 30 天截断、超期 run worktree 清理;
+   * 活跃 run 全程保护)。runStateStore 未接线时跳过 (phase-3 测试挂载兼容)。
    */
   private async maybeRunCleanup(): Promise<void> {
     if (!this.deps.runStateStore) {
@@ -343,6 +361,55 @@ export class LearningWorker {
     ) {
       console.log(
         `[LearningWorker] storage cleanup: ${result.ledgersCompressed} ledgers compressed, ${result.artifactFilesDeleted} artifact files deleted, ${result.eventsTruncated} events truncated`,
+      );
+    }
+    await this.pruneWorktrees();
+  }
+
+  /**
+   * 04 容量与清理: 顺带清理超期 run worktree (worktree.ts 此前只有开机
+   * 一次性调用, 这里补上周期路径)。
+   *
+   * 口径 (钉死, 与 spec 04 对齐):
+   * - run 态保护: state ∈ {active, retry, paused, needs_human} 的 run
+   *   恢复依赖 worktree, 超龄也保留 (budget_limited 不在其列 —— 该态的
+   *   恢复路径是预算重置后开新 run, 见 control-plane 状态机);
+   * - maxAgeDays: 全局调用一次, 取所有 card 声明的
+   *   workspace.cleanup_rule.max_age_days 中的最小值 —— 满足最严格那
+   *   张卡的清理要求, 其余卡的声明值只会更大 (更晚清理), 不会被提前
+   *   误清; per-loop 分别清理留作后续刀。无 card 声明时回退默认 7 天。
+   *
+   * 失败隔离: 清理异常只 warn, 不影响 tick 主流程 (git 调用比账本清理
+   * 更易受环境影响, 单独兜一层)。
+   */
+  private async pruneWorktrees(): Promise<void> {
+    try {
+      const protectedRunIds = new Set<string>();
+      const states = (await this.deps.runStateStore?.list()) ?? [];
+      for (const { state: record } of states) {
+        if (WORKTREE_PROTECTED_STATES.has(record.state)) {
+          protectedRunIds.add(record.run_id);
+        }
+      }
+      let maxAgeDays: number | undefined;
+      for (const stored of this.deps.loopCardStore?.listLoops() ?? []) {
+        const declared = stored.card.loop.workspace.cleanup_rule?.max_age_days;
+        if (declared !== undefined) {
+          maxAgeDays = Math.min(maxAgeDays ?? declared, declared);
+        }
+      }
+      const pruned = await pruneStaleWorktrees({
+        dataDir: this.deps.dataDir,
+        maxAgeDays,
+        protectedRunIds,
+      });
+      if (pruned > 0) {
+        console.log(`[LearningWorker] worktree cleanup: ${pruned} pruned`);
+      }
+    } catch (error) {
+      console.warn(
+        "[LearningWorker] worktree cleanup failed (isolated):",
+        error,
       );
     }
   }

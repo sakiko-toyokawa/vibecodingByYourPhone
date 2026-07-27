@@ -274,8 +274,19 @@ export function createApp(
     });
     cronScheduler.start();
     // 04 容量与清理: 开机清理超期 run worktree (worktree 隔离策略的
-    // 执行目录, 默认 7 天); 失败仅告警, 不阻塞启动。
-    void pruneStaleWorktrees({ dataDir: options.dataDir }).catch((error) =>
+    // 执行目录, 默认 7 天); 活跃/阻塞 run (恢复依赖 worktree) 跳过;
+    // 失败仅告警, 不阻塞启动。
+    void (async () => {
+      const protectedRunIds = new Set<string>();
+      for (const { state: record } of await runStateStore.list()) {
+        if (
+          ["active", "retry", "paused", "needs_human"].includes(record.state)
+        ) {
+          protectedRunIds.add(record.run_id);
+        }
+      }
+      await pruneStaleWorktrees({ dataDir: options.dataDir, protectedRunIds });
+    })().catch((error) =>
       console.warn("[worktree] startup prune failed:", error),
     );
     // 阶段 3 学习侧: 异步 learning worker, 与主链路同进程但崩溃隔离
@@ -301,6 +312,9 @@ export function createApp(
       // golden tasks: 失败模式 → eval 集 (基准与回归.md)
       loopCardStore,
       evalRunner,
+      // 04 容量与清理: worktree 周期清理 (保护集与 cleanup_rule 在
+      // worker 内装配)
+      dataDir: options.dataDir,
     });
     learningWorker.start();
     registerValue("loopRunService", loopRunService);

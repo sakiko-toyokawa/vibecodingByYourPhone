@@ -184,10 +184,14 @@ export async function mergeRunWorktree(opts: {
 /**
  * 04 容量与清理：清理超过 maxAgeDays（默认 7 天）未动的 run worktree
  * （目录 + loop/<run_id> 分支）。单条失败仅 warn 不中断；返回清理数量。
+ * protectedRunIds 命中的 run（活跃/阻塞态，恢复依赖 worktree）跳过且
+ * 不计入 pruned —— 调用方从 run_state 扫描装配（04: 不动任何当前活跃
+ * run 引用的对象）。
  */
 export async function pruneStaleWorktrees(opts: {
   dataDir?: string;
   maxAgeDays?: number;
+  protectedRunIds?: ReadonlySet<string>;
 }): Promise<number> {
   const root = path.join(opts.dataDir ?? defaultDataDir(), "worktrees");
   const cutoff =
@@ -207,6 +211,10 @@ export async function pruneStaleWorktrees(opts: {
       continue;
     }
     for (const runId of runIds) {
+      // run 态保护: 活跃/阻塞 run 的 worktree 恢复时还要用, 超龄也不清
+      if (opts.protectedRunIds?.has(runId)) {
+        continue;
+      }
       const dir = path.join(root, loopId, runId);
       try {
         const stat = await fs.stat(dir);
