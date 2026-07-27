@@ -54,9 +54,22 @@ export function managedGitHubWorkspacePath(loopId: string): string {
     : "managed://github-workspaces/prompt-loops/new-loop";
 }
 
+/** Strip surrounding quotes that users sometimes paste into path inputs. */
+function stripSurroundingQuotes(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
 export function buildLoopCard(form: LoopCreateFormState): LoopCard {
   const id = form.id.trim();
   const task = form.task.trim();
+  const workspacePath = stripSurroundingQuotes(form.workspacePath);
   const maxTurns = parsePositiveInt(form.maxTurns, 1);
   const maxRetries = Math.min(
     parseNonNegativeInt(form.maxRetries, 0),
@@ -129,7 +142,7 @@ export function buildLoopCard(form: LoopCreateFormState): LoopCard {
       },
       workspace: {
         strategy: "direct",
-        path: form.workspacePath.trim(),
+        path: workspacePath,
       },
       ...(form.policyMode === "modify"
         ? {

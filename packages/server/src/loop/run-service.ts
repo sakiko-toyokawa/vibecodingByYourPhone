@@ -94,6 +94,7 @@ import {
 } from "../sdk/adapter-error.js";
 import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
+import type { QueueFullResponse } from "../supervisor/Supervisor.js";
 import type { QueuedResponse } from "../supervisor/WorkerQueue.js";
 import { describeAdapter } from "./assembly/adapter-info.js";
 import { resolveAdapterPolicy } from "./assembly/adapter-policy.js";
@@ -1949,20 +1950,35 @@ export class LoopRunService {
       model: adapterPolicy.model ?? loopRuntime(ctx.card)?.model,
     };
 
-    const result = isFirstTurn
-      ? await this.deps.supervisor.startSession(
-          ctx.input.cwd,
-          message,
-          ctx.input.permissionMode,
-          sessionSettings,
-        )
-      : await this.deps.supervisor.resumeSession(
-          ctx.sessionRef as string,
-          ctx.input.cwd,
-          message,
-          ctx.input.permissionMode,
-          sessionSettings,
-        );
+    let result: Process | QueuedResponse | QueueFullResponse;
+    try {
+      result = isFirstTurn
+        ? await this.deps.supervisor.startSession(
+            ctx.input.cwd,
+            message,
+            ctx.input.permissionMode,
+            sessionSettings,
+          )
+        : await this.deps.supervisor.resumeSession(
+            ctx.sessionRef as string,
+            ctx.input.cwd,
+            message,
+            ctx.input.permissionMode,
+            sessionSettings,
+          );
+    } catch (error) {
+      // startSession can throw synchronously (e.g. adapter spawn failure on
+      // an invalid workspace path). Convert it to a failed ExecutionOutcome
+      // so runTurns writes a ledger entry instead of crashing silently.
+      const message_ = error instanceof Error ? error.message : String(error);
+      return {
+        ok: false,
+        finalText: "",
+        sessionRef: "none",
+        error: `session start failed: ${message_}`,
+        usage: null,
+      };
+    }
 
     if ("error" in result && result.error === "queue_full") {
       return {
