@@ -450,6 +450,7 @@ export function LoopDetailPage() {
                             Stream Output
                           </h4>
                           <RunStreamOutput
+                            key={selectedRunId}
                             runId={selectedRunId}
                             isActive={
                               runDetail?.run.state === "active" ||

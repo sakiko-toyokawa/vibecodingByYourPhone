@@ -1742,6 +1742,12 @@ export class LoopRunService {
           null,
           2,
         );
+        // 快照落盘: 下次重启直接按正常路径重建, 不再依赖本兜底。
+        await store.writeArtifact(
+          signal.runId,
+          "intent-contract.json",
+          contractJson,
+        );
       }
       if (!entry && runState.turn !== 1) {
         // 缺账本只在首轮暂停时合法 (turn 1 未完成本就无 entry); 更晚
@@ -2085,6 +2091,10 @@ export class LoopRunService {
     }
 
     const proc = result as Process;
+    // 立即暴露 session: getRun / Stream Output 在轮中即可订阅实时流
+    // (此前要等 outcome 返回才赋值, 首轮在飞期间 session_ref 恒 null)。
+    // runTurns 在 outcome 返回后用同值再赋一次。
+    ctx.sessionRef = proc.sessionId;
     // Registered so PATCH pause can kill the executing turn (选项 A);
     // removed again when watchProcess settles.
     this.executingProcesses.set(ctx.active.runId, proc);

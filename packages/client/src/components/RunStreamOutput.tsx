@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { loopsApi } from "../api/loops";
 import { useSessionStream } from "../hooks/useSessionStream";
 
@@ -45,6 +45,13 @@ function parseRuntimeEvents(content: string): RuntimeEvent[] {
       }
     })
     .filter((event): event is RuntimeEvent => event !== null);
+}
+
+/** runtime-events.jsonl → turn 1; runtime-events-turnN.jsonl → turn N. */
+function turnOfEventFile(name: string): number {
+  const match = /^runtime-events(?:-turn(\d+))?\.jsonl$/.exec(name);
+  if (!match) return Number.POSITIVE_INFINITY;
+  return match[1] ? Number(match[1]) : 1;
 }
 
 /**
@@ -158,31 +165,48 @@ function kindLabel(kind: DisplayEntry["kind"]): string {
 
 /**
  * Live stream output for a loop run.
- * - Finished runs: reads runtime-events.jsonl for historical events.
+ * - History: reads every runtime-events[-turnN].jsonl artifact (one per
+ *   completed turn, concatenated in turn order; each file is fetched once —
+ *   completed turns are immutable).
  * - Active runs: also subscribes to the executor session via WebSocket for
  *   real-time messages, merging stream deltas into readable entries.
+ *
+ * Render with `key={runId}` so switching runs remounts with fresh state.
  */
 export function RunStreamOutput({
   runId,
   isActive,
   sessionRef,
 }: RunStreamOutputProps) {
-  const [historicalEvents, setHistoricalEvents] = useState<RuntimeEvent[]>([]);
+  /** file name -> parsed events (completed-turn files never change) */
+  const [eventsByFile, setEventsByFile] = useState<
+    Record<string, RuntimeEvent[]>
+  >({});
   const [liveEvents, setLiveEvents] = useState<RuntimeEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadedFilesRef = useRef<Set<string>>(new Set());
 
   const loadHistorical = useCallback(async () => {
     try {
-      const { content } = await loopsApi.getRunArtifact(
-        runId,
-        "runtime-events.jsonl",
-      );
-      setHistoricalEvents(parseRuntimeEvents(content));
+      const { artifacts } = await loopsApi.listRunArtifacts(runId);
+      const eventFiles = artifacts
+        .filter((name) => turnOfEventFile(name) !== Number.POSITIVE_INFINITY)
+        .sort((a, b) => turnOfEventFile(a) - turnOfEventFile(b));
+      for (const name of eventFiles) {
+        if (loadedFilesRef.current.has(name)) continue;
+        try {
+          const { content } = await loopsApi.getRunArtifact(runId, name);
+          loadedFilesRef.current.add(name);
+          const events = parseRuntimeEvents(content);
+          setEventsByFile((prev) => ({ ...prev, [name]: events }));
+        } catch {
+          // A turn's file may vanish mid-listing; retry next poll.
+        }
+      }
       setError(null);
     } catch {
-      setHistoricalEvents([]);
-      setError("runtime-events.jsonl not available yet");
+      setError("runtime events not available yet");
     } finally {
       setLoading(false);
     }
@@ -214,6 +238,9 @@ export function RunStreamOutput({
     { onMessage: handleStreamMessage },
   );
 
+  const historicalEvents = Object.keys(eventsByFile)
+    .sort((a, b) => turnOfEventFile(a) - turnOfEventFile(b))
+    .flatMap((name) => eventsByFile[name] ?? []);
   const allEntries = buildDisplayEntries([...historicalEvents, ...liveEvents]);
   const displayEntries = allEntries.slice(-MAX_DISPLAY_ENTRIES);
   const hiddenCount = allEntries.length - displayEntries.length;
