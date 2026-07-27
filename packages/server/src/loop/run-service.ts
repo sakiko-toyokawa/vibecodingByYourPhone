@@ -2131,8 +2131,10 @@ export class LoopRunService {
       const runtimeEvents: unknown[] = [];
 
       // Default turn timeout: prevents a hung adapter from blocking the run
-      // forever when no adapter_policy.timeout_seconds is configured.
-      const timeoutMs = opts.timeoutMs ?? 5 * 60 * 1000;
+      // forever when no adapter_policy.timeout_seconds is configured. 15min:
+      // a real read-only repo scan legitimately takes 5-10min; a shorter
+      // default kills healthy turns mid-work and discards their report.
+      const timeoutMs = opts.timeoutMs ?? 15 * 60 * 1000;
 
       const settle = (ok: boolean, error?: string): void => {
         if (settled) {
