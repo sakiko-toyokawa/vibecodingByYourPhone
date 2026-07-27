@@ -61,10 +61,17 @@ export function LoopDetailPage() {
       setLoop(storedLoop);
       setRuns(runList);
       setError(null);
-      // Refresh the open judgment panel too (state may have changed)
+      // Refresh the open judgment panel too (state may have changed),
+      // including the artifact list — turn artifacts (stdout, summaries,
+      // reports) land as the run progresses.
       if (selectedRunIdRef.current) {
         try {
-          setRunDetail(await loopsApi.getRun(selectedRunIdRef.current));
+          const [detail, artifactList] = await Promise.all([
+            loopsApi.getRun(selectedRunIdRef.current),
+            loopsApi.listRunArtifacts(selectedRunIdRef.current),
+          ]);
+          setRunDetail(detail);
+          setArtifacts(artifactList.artifacts);
         } catch {
           // Keep showing the stale detail; the list still refreshed
         }
@@ -343,6 +350,13 @@ export function LoopDetailPage() {
                       </p>
                     ) : (
                       <div className="flex flex-col gap-[var(--space-2)] [font-size:var(--font-size-sm)]">
+                        {!judgment &&
+                          (runDetail.run.state === "active" ||
+                            runDetail.run.state === "retry") && (
+                            <p className="m-0 rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] p-3 text-[var(--text-muted)]">
+                              {t("loopsJudgmentPending")}
+                            </p>
+                          )}
                         {(runDetail.run.state === "paused" ||
                           runDetail.run.state === "needs_human" ||
                           runDetail.run.state === "budget_limited") && (

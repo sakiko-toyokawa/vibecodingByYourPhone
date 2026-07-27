@@ -1018,6 +1018,7 @@
   "loopsJudgmentRetries": "Wiederholungen",
   "loopsMaxTurns": "max. {count} Runden",
   "loopsRunBlocked": "Lauf ist {state}. Grund: {reason}",
+  "loopsJudgmentPending": "Runde läuft — Ergebnis und Bericht erscheinen nach Abschluss und Verifizierung",
   "loopsFailureTags": "Fehler-Tags",
   "loopApprovalTitle": "Loop benötigt Genehmigung",
   "loopApprovalApprove": "Genehmigen",

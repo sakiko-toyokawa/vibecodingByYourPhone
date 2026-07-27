@@ -1018,6 +1018,7 @@
   "loopsJudgmentRetries": "重试",
   "loopsMaxTurns": "最多 {count} 轮",
   "loopsRunBlocked": "运行当前处于 {state} 状态。原因：{reason}",
+  "loopsJudgmentPending": "轮次执行中——判定结论与报告将在本轮完成并验证后产生",
   "loopsFailureTags": "失败标签",
   "loopApprovalTitle": "循环需要人工审批",
   "loopApprovalApprove": "通过",

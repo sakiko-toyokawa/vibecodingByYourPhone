@@ -1018,6 +1018,7 @@
   "loopsJudgmentRetries": "Tentatives",
   "loopsMaxTurns": "max {count} tours",
   "loopsRunBlocked": "L'exécution est {state}. Raison : {reason}",
+  "loopsJudgmentPending": "Tour en cours — le verdict et le rapport arrivent une fois le tour terminé et vérifié",
   "loopsFailureTags": "Étiquettes d’échec",
   "loopApprovalTitle": "Approbation requise pour la boucle",
   "loopApprovalApprove": "Approuver",

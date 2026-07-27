@@ -744,10 +744,13 @@ export class LoopRunService {
           created_at: active.createdAt,
         },
         ledger: null,
+        // 首轮在飞时 run_state 尚未落账 — 预算上限从执行上下文的合约
+        // 兜底, 前端不再显示 "—"。
         ledger_summary: await this.buildLedgerSummary(
           runId,
           active.loopId,
           null,
+          ctx?.contract?.budget ?? null,
         ),
         session_ref: ctx?.sessionRef ?? null,
       };
@@ -783,15 +786,24 @@ export class LoopRunService {
     runId: string,
     loopId: string,
     entry: RunLedgerEntry | null,
+    /** 首轮在飞时 run_state 尚未落账, 用执行上下文合约的预算上限兜底 */
+    fallbackBudget?: { max_turns: number; max_retries: number } | null,
   ): Promise<LedgerSummary> {
     const refs = entry?.verification_refs;
     const notApplicable = (ref: string | undefined): ref is string =>
       ref !== undefined && ref !== "not_applicable";
 
     let judgmentSummary: LedgerSummary["judgment_summary"] = null;
+    // 判定文件名随轮次走 (judgment-report[-turnN].json): 已完成 run 以
+    // 账本 verification_refs 的引用为准, 在飞 run 回退首轮名。
+    const judgmentName = notApplicable(refs?.judgment_report)
+      ? (refs?.judgment_report ?? "").slice(
+          (refs?.judgment_report ?? "").lastIndexOf("/") + 1,
+        )
+      : "judgment-report.json";
     const judgmentJson = await this.deps.runLedgerStore.readArtifact(
       runId,
-      "judgment-report.json",
+      judgmentName,
     );
     if (judgmentJson) {
       try {
@@ -839,6 +851,9 @@ export class LoopRunService {
       retriesUsed = runState.budget.used_retries;
       maxTurns = runState.budget.max_turns;
       maxRetries = runState.budget.max_retries;
+    } else if (fallbackBudget) {
+      maxTurns = fallbackBudget.max_turns;
+      maxRetries = fallbackBudget.max_retries;
     }
     const lastDecisionEntry = decisionEntries[decisionEntries.length - 1];
 

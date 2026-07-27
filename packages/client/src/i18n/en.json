@@ -1018,6 +1018,7 @@
   "loopsJudgmentRetries": "Retries",
   "loopsMaxTurns": "max {count} turns",
   "loopsRunBlocked": "Run is {state}. Reason: {reason}",
+  "loopsJudgmentPending": "Turn in flight — the judgment and report land once the turn completes and verification finishes",
   "loopsFailureTags": "Failure tags",
   "loopApprovalTitle": "Loop approval required",
   "loopApprovalApprove": "Approve",

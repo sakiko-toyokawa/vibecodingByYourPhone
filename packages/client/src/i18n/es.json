@@ -1018,6 +1018,7 @@
   "loopsJudgmentRetries": "Reintentos",
   "loopsMaxTurns": "máx. {count} turnos",
   "loopsRunBlocked": "La ejecución está {state}. Motivo: {reason}",
+  "loopsJudgmentPending": "Turno en curso — el veredicto y el informe aparecerán al completarse y verificarse",
   "loopsFailureTags": "Etiquetas de fallo",
   "loopApprovalTitle": "El bucle requiere aprobación",
   "loopApprovalApprove": "Aprobar",
