@@ -238,3 +238,11 @@ memory packet 注入 prompt 并落 artifact、native_invocation 真实投影（a
 - [ ] LoopCard `workspace.strategy: "worktree"` 的真实实现：run 启动时为验证/执行创建隔离的 git worktree（或至少为 verifier 创建只读快照），验证在快照上跑，结果不受开发者的在飞编辑影响。
 - [ ] 过渡方案（更便宜）：verifier 运行前记录工作区 `git status`/HEAD，验证失败且工作区在验证期间发生过变动时，在 judgment evidence 里标注"工作区非稳定状态，结果可能失真"，供人工分辨真失败与环境噪音。
 - [ ] UI 提示：loop 详情页对 `direct` 策略的 loop 显示"验证直接作用于工作区"的提示，让使用者知道跑 loop 期间别在同一目录大改代码。
+
+### active run 的重启恢复（开机接管在飞 run）
+
+背景：2026-07-27 实证（run-20260727T150455Z-a40e562e）——paused run 的重启恢复已修（b8b51b3），但 **active 态的 run 在服务器重启后无人接管**：runTurns 随进程死亡，run_state 停在 active/retry，开机没有任何扫描把它捞起来；界面回退显示账本里最后一轮的 final_status（如 "retry"），看起来永远卡住；首轮在飞时甚至连账本/run_state 都没有，run 直接消失（run-20260727T153203Z-cffdae0e）。当天两次实证均为开发模式下用户按 UI 的 Reload / Ctrl+Shift+R（该快捷键是重启后端而非刷新页面）触发。
+
+- [ ] 开机恢复扫描：服务启动时遍历 run_state，对 state=active/retry 且有 run_id 的记录，按 rebuildContext 重建上下文并续跑（等价于 resume）；首轮在飞（无 run_state）的 run 无从恢复，应在操作侧避免（见下）。
+- [ ] 重启防护：POST /server/restart 在有 active run 时返回 409 + 提示先暂停（或先自动暂停所有 active run 再重启，重启后自动 resume——已有 pause/resume 原语可组合）。
+- [ ] UI 警示强化：ReloadBanner 的 "N active sessions will be interrupted" 对 loop run 场景写明"正在运行的 loop 会被杀死且无法恢复"；考虑把 Ctrl+Shift+R 从"重启后端"改为仅刷新前端（用户肌肉记忆 = 浏览器硬刷新，误杀率高）。
