@@ -27,10 +27,16 @@ interface DisplayEntry {
   text: string;
 }
 
+/** Only parse the tail of large runtime-events.jsonl files (performance). */
+const MAX_PARSE_LINES = 1000;
+/** Only display the latest N merged entries (performance). */
+const MAX_DISPLAY_ENTRIES = 50;
+
 function parseRuntimeEvents(content: string): RuntimeEvent[] {
-  return content
-    .split("\n")
-    .filter((line) => line.trim().length > 0)
+  const lines = content.split("\n").filter((line) => line.trim().length > 0);
+  const tail =
+    lines.length > MAX_PARSE_LINES ? lines.slice(-MAX_PARSE_LINES) : lines;
+  return tail
     .map((line) => {
       try {
         return JSON.parse(line) as RuntimeEvent;
@@ -209,6 +215,8 @@ export function RunStreamOutput({
   );
 
   const allEntries = buildDisplayEntries([...historicalEvents, ...liveEvents]);
+  const displayEntries = allEntries.slice(-MAX_DISPLAY_ENTRIES);
+  const hiddenCount = allEntries.length - displayEntries.length;
 
   if (loading) {
     return (
@@ -230,7 +238,13 @@ export function RunStreamOutput({
 
   return (
     <div className="flex max-h-[480px] flex-col gap-2 overflow-y-auto rounded bg-[var(--bg-primary)] p-3">
-      {allEntries.map((entry, index) => (
+      {hiddenCount > 0 && (
+        <div className="[font-size:var(--font-size-xs)] italic text-[var(--text-dimmed)]">
+          … {hiddenCount} earlier entries hidden (showing latest{" "}
+          {displayEntries.length}) …
+        </div>
+      )}
+      {displayEntries.map((entry, index) => (
         <div key={`${entry.at}-${index}`} className="flex gap-2">
           <span className="shrink-0 font-mono [font-size:var(--font-size-xs)] text-[var(--text-dimmed)]">
             {new Date(entry.at).toLocaleTimeString()}
