@@ -319,3 +319,43 @@ test("github_prompt legacy (no policy) branch also injects GitHub env", () => {
   assert.equal(input.env?.GITHUB_TOKEN, "github_pat_secret");
   assert.match(input.env?.PATH ?? "", /E:[/\\]tools[/\\]gh[/\\]bin/);
 });
+
+test("contract.target.files 装配为「重点范围」注意力提示小节（02 §2）", () => {
+  const card: LoopCard = {
+    loop: {
+      id: "target-loop",
+      trigger: { type: "manual" },
+      handoff: {
+        task: "审查 packages/server/src/loop/run-service.ts 的停止逻辑",
+      },
+      workspace: { strategy: "direct", path: "/tmp/x" },
+      verification: { required: [] },
+      persistence: { state_file: ".loop/STATE.md" },
+      stop_rules: { max_turns: 3, max_time_minutes: 10, max_retries: 2 },
+    },
+  } as LoopCard;
+  const contract = buildIntentContract(card, {
+    runId: "run-1",
+    source: "manual",
+  });
+  assert.deepEqual(contract.target?.files, [
+    "packages/server/src/loop/run-service.ts",
+  ]);
+
+  const input = assembleRuntimeInput(card, contract);
+  assert.match(input.prompt, /重点范围（注意力提示，非访问控制/);
+  assert.match(input.prompt, /- packages\/server\/src\/loop\/run-service\.ts/);
+
+  // 无 target 的 contract 不出现该小节
+  const plainCard: LoopCard = {
+    loop: {
+      ...card.loop,
+      handoff: { task: "扫描工作区并总结最近的改动" },
+    },
+  } as LoopCard;
+  const plainInput = assembleRuntimeInput(
+    plainCard,
+    buildIntentContract(plainCard, { runId: "run-2", source: "manual" }),
+  );
+  assert.ok(!plainInput.prompt.includes("重点范围"));
+});

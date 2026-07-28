@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { LoopCard } from "@yep-anywhere/shared";
-import { buildIntentContract } from "./intent-contract.js";
+import { buildIntentContract, extractTargetFiles } from "./intent-contract.js";
 
 function makeCard(overrides: Partial<LoopCard["loop"]> = {}): LoopCard {
   return {
@@ -80,4 +80,62 @@ test("stop_on_repeated_failure projects into contract stop_rules (02 §2)", () =
     source: "manual",
   });
   assert.equal(withoutRule.stop_rules, undefined);
+});
+
+test("extractTargetFiles: 提取相对路径 token，剥离标点并去重", () => {
+  const files = extractTargetFiles(
+    "修复 `packages/server/src/loop/run-service.ts`, 以及 (src/foo/bar.tsx)。 再看 packages/server/src/loop/run-service.ts 一遍",
+  );
+  assert.deepEqual(files, [
+    "packages/server/src/loop/run-service.ts",
+    "src/foo/bar.tsx",
+  ]);
+});
+
+test("extractTargetFiles: 丢弃绝对路径、Windows 盘符与 .. 逃逸", () => {
+  assert.deepEqual(extractTargetFiles("看 /etc/nginx/nginx.conf"), []);
+  assert.deepEqual(extractTargetFiles("看 C:/Users/admin/a.ts"), []);
+  assert.deepEqual(extractTargetFiles("看 ../outside/secret.ts"), []);
+});
+
+test("extractTargetFiles: 无扩展名或无斜杠的 token 不算路径", () => {
+  assert.deepEqual(extractTargetFiles("阅读 README 和 src/ 目录"), []);
+});
+
+test("extractTargetFiles: 上限 20 个", () => {
+  const task = Array.from({ length: 30 }, (_, i) => `src/f${i}.ts`).join(" ");
+  const files = extractTargetFiles(task);
+  assert.equal(files.length, 20);
+  assert.equal(files[19], "src/f19.ts");
+});
+
+test("buildIntentContract: task 含路径时填 target.files（02 §2）", () => {
+  const contract = buildIntentContract(
+    makeCard({
+      handoff: {
+        task: "审查 packages/server/src/loop/run-service.ts 的停止逻辑",
+      },
+    }),
+    { runId: "run-7", source: "manual" },
+  );
+  // symbols 无从可靠识别，不填
+  assert.equal(contract.target?.symbols, undefined);
+  assert.deepEqual(contract.target, {
+    files: ["packages/server/src/loop/run-service.ts"],
+  });
+});
+
+test("buildIntentContract: 纯自然语言 task 不设 target 字段（如实缺省）", () => {
+  const contract = buildIntentContract(
+    makeCard({ handoff: { task: "扫描工作区并总结最近的改动" } }),
+    { runId: "run-8", source: "manual" },
+  );
+  assert.equal(contract.target, undefined);
+
+  // 无 handoff.task 时同样不设
+  const noTask = buildIntentContract(makeCard(), {
+    runId: "run-9",
+    source: "manual",
+  });
+  assert.equal(noTask.target, undefined);
 });

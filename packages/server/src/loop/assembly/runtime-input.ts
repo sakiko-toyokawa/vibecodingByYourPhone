@@ -376,6 +376,17 @@ export function assembleRuntimeInput(
     ...(executionContract.constraints.length > 0
       ? ["", "约束：", ...executionContract.constraints.map((c) => `- ${c}`)]
       : []),
+    // 02 §2 target.files 的最小消费：作为"重点范围"进 prompt，提示
+    // executor 优先关注这些文件。这只是注意力提示，不是访问控制 —— 不缩
+    // 权限、不做强制约束（权限边界仍由 permission/policy 层裁决），也
+    // 不禁止读取其他文件。
+    ...(contract.target?.files?.length
+      ? [
+          "",
+          "重点范围（注意力提示，非访问控制 —— 优先关注以下文件，但不限制读取其他文件）：",
+          ...contract.target.files.map((f) => `- ${f}`),
+        ]
+      : []),
     "",
     "必须留下的输出证据：",
     ...requiredOutput.map((o) => `- ${o}`),

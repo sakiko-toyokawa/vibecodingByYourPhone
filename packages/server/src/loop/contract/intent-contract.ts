@@ -18,6 +18,8 @@
  * - no clarification / ambiguity flow (requires_clarification = false)
  * - the contract is validated against IntentContractSchema before use and
  *   snapshotted to the run's artifacts by the run service
+ * - target.files（02 §2）由 handoff.task 自由文本启发式提取（见
+ *   extractTargetFiles 的口径注释），提取为空时字段如实缺省
  */
 
 import {
@@ -76,6 +78,47 @@ export function buildBudgetLimits(card: LoopCard): BudgetLimits {
   };
 }
 
+/** target.files 提取上限（防止超长 task 文本灌入大量候选）。 */
+const MAX_TARGET_FILES = 20;
+
+/**
+ * 从 handoff.task 自由文本启发式提取 target.files（02 §2 的收敛目标文件）。
+ *
+ * 口径与限制（诚实口径，注释钉死）：
+ * - task 是自由任务描述文本，LoopCard 没有精确的文件/符号来源，只能做
+ *   形态匹配：含 "/" 且以扩展名结尾的 token 视为相对路径候选（如
+ *   packages/server/src/loop/run-service.ts、src/foo/bar.tsx）。
+ * - 剥离 token 首尾的常见标点（引号、反引号、逗号、句号、括号等）后再
+ *   判定；结果去重，最多保留 MAX_TARGET_FILES 个。
+ * - 只认相对路径形态：以 "/" 开头（POSIX 绝对路径）、含 ":"（Windows
+ *   盘符或 URL）、含 ".."（父目录逃逸）的候选一律丢弃。
+ * - symbols 不填：自由文本里无法可靠区分符号名与普通单词，宁缺不伪造。
+ * - 一个候选都提不到时返回空数组，调用方不设 target 字段（optional 字
+ *   段如实缺省，不伪造）。
+ */
+export function extractTargetFiles(task: string): string[] {
+  const files: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of task.split(/\s+/)) {
+    // 剥离首尾标点（含常见中文标点）；路径内部字符（/ . - _ 字母数字）
+    // 不受影响。
+    const token = raw.replace(
+      /^[\\"'`([{<（【《“”‘’]+|[\\"'`)\]}>,.;:!?。，、；：？！”’）】》]+$/g,
+      "",
+    );
+    if (!token.includes("/")) continue;
+    if (!/\.[A-Za-z0-9]{1,10}$/.test(token)) continue;
+    if (token.startsWith("/") || token.includes(":") || token.includes("..")) {
+      continue;
+    }
+    if (seen.has(token)) continue;
+    seen.add(token);
+    files.push(token);
+    if (files.length >= MAX_TARGET_FILES) break;
+  }
+  return files;
+}
+
 export function buildIntentContract(
   card: LoopCard,
   options: { runId: string; source: ContractSource },
@@ -109,6 +152,11 @@ export function buildIntentContract(
     constraints.push(`max_items_per_run=${handoff.max_items_per_run}`);
   }
 
+  // 02 §2 target.files：从 handoff.task 自由文本启发式提取相对路径形态
+  // 的候选（见 extractTargetFiles 的口径注释）。无 task 或提取为空时不设
+  // target（optional 字段如实缺省）；symbols 无从可靠识别，不填。
+  const targetFiles = handoff.task ? extractTargetFiles(handoff.task) : [];
+
   return IntentContractSchema.parse({
     intent_id: `intent-${options.runId}`,
     source: options.source === "cron" ? "cron" : "ui",
@@ -132,6 +180,7 @@ export function buildIntentContract(
       : ["只读扫描完成并产出报告文本", "工作区未产生任何写改动"],
     constraints,
     budget: buildBudgetLimits(card),
+    ...(targetFiles.length > 0 ? { target: { files: targetFiles } } : {}),
     // 02 §2 stop_rules 投影: card 的 stop_on_repeated_failure →
     // repetition.max_same_failure (control-plane 按同一阻断指纹计数消费;
     // safety/ambiguity 段机制未建, 不投影)。
