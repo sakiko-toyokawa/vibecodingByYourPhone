@@ -70,3 +70,6 @@ packages/desktop/src-tauri/binaries/
 
 # Workspace temp files
 workspace/
+
+# Loop human-readable state projection (04-存储约定: 事实源在 ~/.yep-anywhere/loops/, 此目录由 control-plane 重写, 不入库)
+.loop/
