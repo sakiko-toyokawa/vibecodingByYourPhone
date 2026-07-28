@@ -129,7 +129,11 @@ class VerifyFakeSupervisor {
   }
 }
 
-function makeCard(withPolicy: boolean, provider?: string): LoopCard {
+function makeCard(
+  withPolicy: boolean,
+  provider?: string,
+  requiredArtifacts?: string[],
+): LoopCard {
   return {
     loop: {
       id: "loop-verify",
@@ -141,6 +145,9 @@ function makeCard(withPolicy: boolean, provider?: string): LoopCard {
       ...(withPolicy ? { policy: { approval_mode: "bypass" as const } } : {}),
       ...(provider
         ? ({ runtime: { provider } } as { runtime: { provider: string } })
+        : {}),
+      ...(requiredArtifacts
+        ? { observability: { required_artifacts: requiredArtifacts } }
         : {}),
     },
   };
@@ -171,6 +178,8 @@ async function withFixture(
     proposals?: ImprovementProposal[];
     /** supervisor 进程永不发声 (adapter_policy 超时用例)。 */
     silent?: boolean;
+    /** card 声明 observability.required_artifacts (产物存在性校验用例)。 */
+    requiredArtifacts?: string[];
   },
   fn: (ctx: {
     service: LoopRunService;
@@ -211,7 +220,11 @@ async function withFixture(
         by: "human",
       });
     }
-    const card = makeCard(opts.withPolicy, opts.provider);
+    const card = makeCard(
+      opts.withPolicy,
+      opts.provider,
+      opts.requiredArtifacts,
+    );
     const loopCardStore = {
       getLoop: (id: string) =>
         id === card.loop.id
@@ -584,6 +597,113 @@ test("turn 1 lands runtime-input-bundle.json + prompt.md with structured executi
         "prompt.md",
       );
       assert.ok(prompt?.includes("必须留下的输出证据"));
+    },
+  );
+});
+
+test("observability.required_artifacts: 本轮缺该产物 → judgment evidence 标注, verdict 不变", async () => {
+  await withFixture(
+    {
+      withPolicy: false,
+      scripted: [],
+      // WS 非 git 仓库 → diff 捕获为 null, diff.patch 不落盘 → 应判缺失
+      requiredArtifacts: ["diff.patch", "stdout.log"],
+      verifyRunFn: PASSED_VERIFY,
+    },
+    async ({ service, controlPlane, ledgerStore }) => {
+      const summary = await service.startRun("loop-verify", "manual");
+      const state = await waitForState(controlPlane, summary.run_id, [
+        "complete",
+      ]);
+      // 口径钉死: 只标注不改 verdict —— passed/complete 不受影响
+      assert.equal(state, "complete");
+
+      // 判定报告同步改写, 缺失标注进 evidence (stdout.log 存在则不标注)
+      const report = JSON.parse(
+        (await ledgerStore.readArtifact(
+          summary.run_id,
+          "judgment-report.json",
+        )) ?? "",
+      );
+      assert.ok(
+        report.evidence.includes("missing_required_artifact:diff.patch"),
+      );
+      assert.ok(
+        !report.evidence.includes("missing_required_artifact:stdout.log"),
+      );
+      assert.equal(report.overall, "passed");
+      assert.equal(report.next_action, "complete");
+
+      // 控制决策 evidence_refs 同步携带标注
+      const decisions = await ledgerStore.readDecisionEntries(summary.run_id);
+      const control = decisions.find((d) => d.decision === "complete");
+      assert.ok(
+        control?.evidence_refs.includes("missing_required_artifact:diff.patch"),
+      );
+    },
+  );
+});
+
+test("observability.required_artifacts: 产物齐全 → 无标注", async () => {
+  await withFixture(
+    {
+      withPolicy: false,
+      scripted: [],
+      // stdout.log 恒落盘; executor-summary.md 由 fake 的标记块自述落盘
+      requiredArtifacts: ["stdout.log", "executor-summary.md"],
+      verifyRunFn: PASSED_VERIFY,
+    },
+    async ({ service, controlPlane, ledgerStore }) => {
+      const summary = await service.startRun("loop-verify", "manual");
+      const state = await waitForState(controlPlane, summary.run_id, [
+        "complete",
+      ]);
+      assert.equal(state, "complete");
+
+      const decisions = await ledgerStore.readDecisionEntries(summary.run_id);
+      const control = decisions.find((d) => d.decision === "complete");
+      assert.ok(
+        !control?.evidence_refs.some((ref) =>
+          ref.startsWith("missing_required_artifact:"),
+        ),
+      );
+    },
+  );
+});
+
+test("observability.required_artifacts 未声明 → 零开销, 无标注", async () => {
+  await withFixture(
+    {
+      withPolicy: false,
+      scripted: [],
+      verifyRunFn: PASSED_VERIFY,
+    },
+    async ({ service, controlPlane, ledgerStore }) => {
+      const summary = await service.startRun("loop-verify", "manual");
+      const state = await waitForState(controlPlane, summary.run_id, [
+        "complete",
+      ]);
+      assert.equal(state, "complete");
+
+      const decisions = await ledgerStore.readDecisionEntries(summary.run_id);
+      const control = decisions.find((d) => d.decision === "complete");
+      assert.ok(
+        !control?.evidence_refs.some((ref) =>
+          ref.startsWith("missing_required_artifact:"),
+        ),
+      );
+      // 未声明时检查不触发: 判定报告 (mergeEvidence 分支落盘) 无产物标注
+      const report = JSON.parse(
+        (await ledgerStore.readArtifact(
+          summary.run_id,
+          "judgment-report.json",
+        )) ?? "",
+      );
+      assert.ok(
+        !report.evidence.some((ref: string) =>
+          ref.startsWith("missing_required_artifact:"),
+        ),
+      );
     },
   );
 });

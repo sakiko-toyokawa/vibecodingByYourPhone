@@ -124,6 +124,7 @@ import type { FailurePatternStore } from "./state/failure-pattern-store.js";
 import type { LoopCardStore } from "./state/loop-card-store.js";
 import type { ProposalStore } from "./state/proposal-store.js";
 import type { RunLedgerStore } from "./state/run-ledger-store.js";
+import { checkRequiredArtifacts } from "./verification/required-artifacts.js";
 import {
   type VerificationRefs,
   verificationArtifactName,
@@ -1548,6 +1549,40 @@ export class LoopRunService {
               ],
             };
             judgmentRef = null;
+          }
+        }
+        // --- observability.required_artifacts 校验 (judgment 落账前) ---
+        // card 声明必备产物时逐项检查本 run 的产物目录, 缺失项以
+        // `missing_required_artifact:<name>` 标注进 judgment evidence。
+        // 口径钉死: 只标注, 不改 verdict 语义 (不降级、不升级
+        // needs_human) —— 无告警通道, 先做到可查。
+        // 验证层崩溃分支 (judgmentRef=null) 已有 verification-error 证据,
+        // 跳过本检查, 不在崩溃 judgment 上叠噪音; card 未声明时零开销。
+        const requiredArtifacts =
+          ctx.card.loop.observability?.required_artifacts;
+        if (
+          verificationRan &&
+          judgment &&
+          judgmentRef &&
+          requiredArtifacts?.length
+        ) {
+          const artifactAnnotations = await checkRequiredArtifacts({
+            artifactsDir: store.artifactsDirFor(runId),
+            required: requiredArtifacts,
+            turn: ctx.turn,
+          });
+          if (artifactAnnotations.length > 0) {
+            judgment = {
+              ...judgment,
+              evidence: [...judgment.evidence, ...artifactAnnotations],
+            };
+            // 判定报告同步改写, 与最终落账 judgment 口径一致 (同下方
+            // merge-gate 的改写约定, 不留报告与决策打架的假象)。
+            await store.writeArtifact(
+              runId,
+              verificationArtifactName("judgment-report.json", ctx.turn),
+              `${JSON.stringify(judgment, null, 2)}\n`,
+            );
           }
         }
         // --- merge gate (worktree 策略 + modify): 验证通过且 worktree

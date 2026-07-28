@@ -106,9 +106,16 @@ export const LoopCardSchema = z.object({
       .optional(),
     observability: z
       .object({
+        // 【无消费者，待 06 登记】signals 无告警/看板通道消费。
         signals: z.array(z.string()).optional(),
+        // 消费者：server loop/run-service.ts judgment 落账前的产物存在性
+        // 校验 (verification/required-artifacts.ts)——缺失项以
+        // `missing_required_artifact:<name>` 标注进 judgment evidence,
+        // 不改 verdict 语义。
         required_artifacts: z.array(z.string()).optional(),
+        // 【无消费者，待 06 登记】dashboard_tags 无看板通道消费。
         dashboard_tags: z.array(z.string()).optional(),
+        // 【无消费者，待 06 登记】alert_triggers 无告警通道消费。
         alert_triggers: z.array(z.string()).optional(),
       })
       .optional(),
