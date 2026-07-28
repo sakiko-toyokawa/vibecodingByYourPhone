@@ -12,6 +12,10 @@
  * 升级人工。档名不在注册表时回落风险模型.md 推荐默认值（旧卡兼容，
  * 与阶段 2 行为一致）。
  *
+ * card 级增量：card.loop.human_gate.required_for（02 §1 "必须人工闸门的
+ * 情形"）在解析时并入 hard_gates——card 声明"这些情形必须人工闸门"，与
+ * 硬闸门同路径升级 needs_human。
+ *
  * 返回 null 表示 card 未声明 policy —— run 保持阶段 0/1 的只读 plan
  * 行为（策略投影不参与，交互式与既有 loop 行为零变化）。
  */
@@ -91,13 +95,23 @@ export function resolvePolicyProfile(
   }
   const name = nameOverride ?? policy.profile ?? `loop_${policy.approval_mode}`;
   const definition = NAMED_PROFILES[name] ?? {};
+  const baseGates = definition.hard_gates
+    ? [...definition.hard_gates]
+    : [...ALL_HARD_GATES];
+  // card 级 human_gate.required_for 并入硬闸门（求并集、去重）——card 声明
+  // "这些情形必须人工闸门"，与硬闸门同路径升级 needs_human。required_for
+  // 词汇与硬闸门动作词同空间（merge/deploy/delete/publish/bill/notify/
+  // close）；未识别的词原样保留——裁决器按字符串匹配（arbiter.ts 的
+  // hard_gates.includes），不匹配即不生效、不报错。
+  const requiredFor = card.loop.human_gate?.required_for ?? [];
+  const hardGates = [
+    ...new Set<string>([...baseGates, ...requiredFor]),
+  ] as HardGateAction[];
   return {
     policy_profile: name,
     approval_mode: policy.approval_mode,
     risk_rules: { ...DEFAULT_RISK_RULES, ...definition.risk_rules },
-    hard_gates: definition.hard_gates
-      ? [...definition.hard_gates]
-      : [...ALL_HARD_GATES],
+    hard_gates: hardGates,
     // 人工闸门与Bypass.md "Bypass 下允许的东西"：本地、可回滚、可审计。
     bypass_scope: definition.bypass_scope ?? {
       allow_workspace_write: true,

@@ -222,3 +222,49 @@ test("profile carries the authoritative hard-gate list and default risk rules", 
     critical: "human_required",
   });
 });
+
+test("card-declared human_gate.required_for escalates through the hard-gate path", () => {
+  // card 声明 close 必须人工闸门；resolvePolicyProfile 把它并入 hard_gates
+  // 后，裁决与硬闸门同路径（decision=hard_gate 且 reason 是 hard-gate 命中，
+  // 不是 risk_rules 的 human_required 升级）。
+  const card = {
+    loop: {
+      id: "loop-hg",
+      trigger: { type: "manual" },
+      workspace: { strategy: "direct", path: WS },
+      verification: { required: [] },
+      persistence: { state_file: "state/loop-hg.json" },
+      stop_rules: { max_turns: 3, max_time_minutes: 30, max_retries: 2 },
+      policy: { approval_mode: "bypass" },
+      human_gate: { required_for: ["close"] },
+    },
+  } as unknown as LoopCard;
+  const profile = resolvePolicyProfile(card);
+  assert.ok(profile);
+  const verdict = arbitrate(
+    profile,
+    "Bash",
+    { command: "gh issue close 1" },
+    { workspacePath: WS },
+  );
+  assert.equal(verdict.decision, "hard_gate");
+  assert.match(verdict.reason, /hard gate 'close' hit/);
+});
+
+test("counterfactual: a gate word absent from hard_gates is not hard-gate blocked", () => {
+  // 反证并入逻辑的意义：把 close 从 hard_gates 拿掉后，同一动作不再命中
+  // 硬闸门路径（reason 无 hard-gate 命中字样；critical 风险仍经
+  // risk_rules.human_required 升级，decision 不变、路径不同）。
+  const withoutClose: PolicyProfile = {
+    ...BYPASS,
+    hard_gates: BYPASS.hard_gates.filter((g) => g !== "close"),
+  };
+  const verdict = arbitrate(
+    withoutClose,
+    "Bash",
+    { command: "gh issue close 1" },
+    { workspacePath: WS },
+  );
+  assert.equal(verdict.decision, "hard_gate");
+  assert.doesNotMatch(verdict.reason, /hard gate/);
+});

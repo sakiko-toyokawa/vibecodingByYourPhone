@@ -120,6 +120,8 @@ export const LoopCardSchema = z.object({
         resume_rule: z.string().optional(),
       })
       .optional(),
+    // human_gate.required_for 消费者：server loop/policy/profiles.ts
+    // resolvePolicyProfile——解析时并入 hard_gates，与硬闸门同路径升级人工。
     human_gate: z
       .object({
         required_for: z.array(z.string()).optional(),
