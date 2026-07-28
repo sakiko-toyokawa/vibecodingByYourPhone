@@ -131,6 +131,12 @@ import {
   verifyRun,
 } from "./verification/verify-run.js";
 import {
+  WORKSPACE_UNSTABLE_ANNOTATION,
+  type WorkspaceSnapshot,
+  captureWorkspaceSnapshot,
+  workspaceSnapshotChanged,
+} from "./verification/workspace-stability.js";
+import {
   type RunWorktree,
   ensureRunWorktree,
   mergeRunWorktree,
@@ -1439,6 +1445,8 @@ export class LoopRunService {
         let verificationRan = false;
         let judgment: JudgmentReport | null = null;
         let judgmentRef: string | null = null;
+        // direct 策略验证前的工作区快照 (见下方 stability 标注段)。
+        let preVerifySnapshot: WorkspaceSnapshot | null = null;
 
         const requiredPhases = ctx.card.loop.verification.required;
         if (requiredPhases.length > 0 && ctx.contract && workspacePath) {
@@ -1453,6 +1461,13 @@ export class LoopRunService {
           )
             .filter((pattern) => pattern.status === "open")
             .map((pattern) => pattern.pattern_id);
+          // direct 策略的验证期间稳定性比对 (worktree 隔离无此问题):
+          // verifier 子进程运行前取工作区 git 快照, 验证后比对 —— 非
+          // git 工作区 / git 不可用为 null, 整个机制跳过不报错。
+          preVerifySnapshot =
+            ctx.card.loop.workspace.strategy === "direct" && workspacePath
+              ? await captureWorkspaceSnapshot(workspacePath)
+              : null;
           try {
             // 修复计划 #12: card 的 verifier_chain 含 review 时, collector
             // session 的报告转成 review 段 verifier_report 参与聚合
@@ -1549,6 +1564,46 @@ export class LoopRunService {
               ],
             };
             judgmentRef = null;
+          }
+        }
+        // --- direct 策略: 验证期间工作区稳定性标注 (judgment 落账前) ---
+        // verifier 运行前后各取一次 git 快照, 有变动且本轮未判过时把
+        // `workspace_unstable_during_verification` 标注进 judgment
+        // evidence, 供人工分辨真失败与环境噪音 (direct 策略下验证直接
+        // 作用于活工作区)。口径钉死:
+        // - 只标注, 不改 verdict 语义 (同 B3 required_artifacts 约定);
+        // - 只在未判过时标注 —— 失真风险只在失败判定时影响判断, 通过
+        //   的结果标注是纯噪音;
+        // - 验证层崩溃分支 (judgmentRef=null) 跳过, 不在崩溃 judgment
+        //   上叠噪音; 快照缺失 (非 git 工作区) 时机制整体已跳过。
+        if (
+          verificationRan &&
+          judgment &&
+          judgmentRef &&
+          preVerifySnapshot &&
+          workspacePath
+        ) {
+          const postVerifySnapshot =
+            await captureWorkspaceSnapshot(workspacePath);
+          const verificationPassed =
+            judgment.overall === "passed" &&
+            judgment.next_action === "complete";
+          if (
+            postVerifySnapshot &&
+            workspaceSnapshotChanged(preVerifySnapshot, postVerifySnapshot) &&
+            !verificationPassed
+          ) {
+            judgment = {
+              ...judgment,
+              evidence: [...judgment.evidence, WORKSPACE_UNSTABLE_ANNOTATION],
+            };
+            // 判定报告同步改写, 与最终落账 judgment 口径一致 (同 B3 /
+            // merge-gate 的改写约定)。
+            await store.writeArtifact(
+              runId,
+              verificationArtifactName("judgment-report.json", ctx.turn),
+              `${JSON.stringify(judgment, null, 2)}\n`,
+            );
           }
         }
         // --- observability.required_artifacts 校验 (judgment 落账前) ---

@@ -1019,6 +1019,7 @@
   "loopsJudgmentNextAction": "次のアクション",
   "loopsJudgmentTurns": "ターン",
   "loopsJudgmentRetries": "リトライ",
+  "loopsDirectWorkspaceHint": "検証はこのワークスペースに直接作用します——実行中は同じディレクトリでの大きな変更を避けてください",
   "loopsMaxTurns": "最大 {count} ターン",
   "loopsRunBlocked": "実行は {state} です。理由: {reason}",
   "loopsJudgmentPending": "ターン実行中——判定とレポートはターン完了・検証後に生成されます",

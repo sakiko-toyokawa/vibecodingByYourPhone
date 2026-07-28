@@ -1019,6 +1019,7 @@
   "loopsJudgmentNextAction": "Next action",
   "loopsJudgmentTurns": "Turns",
   "loopsJudgmentRetries": "Retries",
+  "loopsDirectWorkspaceHint": "Verification runs directly in this workspace — avoid heavy edits in this directory while a run is active",
   "loopsMaxTurns": "max {count} turns",
   "loopsRunBlocked": "Run is {state}. Reason: {reason}",
   "loopsJudgmentPending": "Turn in flight — the judgment and report land once the turn completes and verification finishes",

@@ -1019,6 +1019,7 @@
   "loopsJudgmentNextAction": "Próxima acción",
   "loopsJudgmentTurns": "Turnos",
   "loopsJudgmentRetries": "Reintentos",
+  "loopsDirectWorkspaceHint": "La verificación actúa directamente sobre este directorio — evita hacer grandes cambios aquí mientras haya una ejecución activa",
   "loopsMaxTurns": "máx. {count} turnos",
   "loopsRunBlocked": "La ejecución está {state}. Motivo: {reason}",
   "loopsJudgmentPending": "Turno en curso — el veredicto y el informe aparecerán al completarse y verificarse",

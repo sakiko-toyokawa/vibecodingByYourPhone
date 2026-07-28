@@ -253,8 +253,8 @@ memory packet 注入 prompt 并落 artifact、native_invocation 真实投影（a
 - 测试：approve 合并入 origin / reject 不进 / 无改动直 complete（run-service-worktree.test.ts 3 例）。
 
 遗留（仍在 backlog）：
-- [ ] 过渡方案（更便宜）：verifier 运行前记录工作区 `git status`/HEAD，验证失败且工作区在验证期间发生过变动时，在 judgment evidence 里标注"工作区非稳定状态，结果可能失真"，供人工分辨真失败与环境噪音。（direct 策略仍有价值）
-- [ ] UI 提示：loop 详情页对 `direct` 策略的 loop 显示"验证直接作用于工作区"的提示，让使用者知道跑 loop 期间别在同一目录大改代码。
+- [x] 过渡方案（更便宜）：verifier 运行前记录工作区 `git status`/HEAD，验证失败且工作区在验证期间发生过变动时，在 judgment evidence 里标注"工作区非稳定状态，结果可能失真"，供人工分辨真失败与环境噪音。（direct 策略仍有价值） ✅ 已实现（2026-07-28，本次提交：`loop/verification/workspace-stability.ts` 快照/比对 + run-service 验证前后比对，未判过才标注并同步改写 judgment-report.json）
+- [x] UI 提示：loop 详情页对 `direct` 策略的 loop 显示"验证直接作用于工作区"的提示，让使用者知道跑 loop 期间别在同一目录大改代码。 ✅ 已实现（2026-07-28，本次提交：`WorkspaceStrategyBadge` 组件，direct 显示徽标+提示，i18n 六语言）
 
 ### active run 的重启恢复（开机接管在飞 run）
 

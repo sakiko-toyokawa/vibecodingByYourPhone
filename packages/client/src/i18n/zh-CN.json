@@ -1019,6 +1019,7 @@
   "loopsJudgmentNextAction": "下一步动作",
   "loopsJudgmentTurns": "轮次",
   "loopsJudgmentRetries": "重试",
+  "loopsDirectWorkspaceHint": "验证直接作用于该工作区——run 期间避免在同一目录大改代码",
   "loopsMaxTurns": "最多 {count} 轮",
   "loopsRunBlocked": "运行当前处于 {state} 状态。原因：{reason}",
   "loopsJudgmentPending": "轮次执行中——判定结论与报告将在本轮完成并验证后产生",

@@ -1019,6 +1019,7 @@
   "loopsJudgmentNextAction": "Prochaine action",
   "loopsJudgmentTurns": "Tours",
   "loopsJudgmentRetries": "Tentatives",
+  "loopsDirectWorkspaceHint": "La vérification agit directement sur ce répertoire — évitez d'y apporter de grosses modifications pendant une exécution",
   "loopsMaxTurns": "max {count} tours",
   "loopsRunBlocked": "L'exécution est {state}. Raison : {reason}",
   "loopsJudgmentPending": "Tour en cours — le verdict et le rapport arrivent une fois le tour terminé et vérifié",

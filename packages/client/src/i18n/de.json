@@ -1019,6 +1019,7 @@
   "loopsJudgmentNextAction": "Nächste Aktion",
   "loopsJudgmentTurns": "Runden",
   "loopsJudgmentRetries": "Wiederholungen",
+  "loopsDirectWorkspaceHint": "Die Verifizierung wirkt direkt auf dieses Verzeichnis — vermeide größere Änderungen hier, solange ein Lauf aktiv ist",
   "loopsMaxTurns": "max. {count} Runden",
   "loopsRunBlocked": "Lauf ist {state}. Grund: {reason}",
   "loopsJudgmentPending": "Runde läuft — Ergebnis und Bericht erscheinen nach Abschluss und Verifizierung",

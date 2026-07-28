@@ -6,6 +6,7 @@ import {
   type StoredLoop,
   loopsApi,
 } from "../api/loops";
+import { WorkspaceStrategyBadge } from "../components/LoopWorkspaceHint";
 import { PageHeader } from "../components/PageHeader";
 import { RunStreamOutput } from "../components/RunStreamOutput";
 import { useI18n } from "../i18n";
@@ -268,14 +269,10 @@ export function LoopDetailPage() {
                     : loop.card.loop.trigger.type}
                 </span>
                 {" · "}
-                {loop.card.loop.workspace.strategy === "worktree" && (
-                  <>
-                    <span className="rounded-[var(--radius-sm)] bg-[var(--accent-rust)]/15 px-1.5 py-0.5 text-xs font-medium text-[var(--accent-rust)]">
-                      worktree
-                    </span>
-                    {" · "}
-                  </>
-                )}
+                <WorkspaceStrategyBadge
+                  strategy={loop.card.loop.workspace.strategy}
+                  directHint={t("loopsDirectWorkspaceHint")}
+                />
                 {loop.card.loop.policy ? (
                   <span className="rounded-[var(--radius-sm)] bg-[var(--warning-color)]/15 px-1.5 py-0.5 text-xs font-medium text-[var(--warning-color)]">
                     modify
