@@ -58,7 +58,9 @@ import type {
 import { BudgetSchema } from "@yep-anywhere/shared";
 import type { IEventBus } from "../../watcher/index.js";
 import type { LearningEventStore } from "../state/learning-event-store.js";
+import type { LoopCardStore } from "../state/loop-card-store.js";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
+import { projectStateMd } from "../state/state-md-projection.js";
 import { type ControlDecisionKind, decideControl } from "./decide.js";
 import type { RunStateStore } from "./run-state-store.js";
 import { assertLegalTransition } from "./state-machine.js";
@@ -220,6 +222,12 @@ export interface ControlPlaneDeps {
    * are logged and never affect run progression.
    */
   learningEventStore?: LearningEventStore;
+  /**
+   * Optional: LoopCard 注册表 (只读), 供 .loop/STATE.md 人可读投影取
+   * workspace.path 与 persistence.state_file (04-存储约定)。未接线时
+   * 跳过投影, 不影响主链路。
+   */
+  loopCardStore?: Pick<LoopCardStore, "getLoop">;
 }
 
 /** The options a needs_human run offers (03: full set). */
@@ -296,6 +304,8 @@ export class ControlPlane {
   private resumeListeners: ((signal: ResumeSignal) => void)[] = [];
   /** In-flight fire-and-forget learning_event appends (settle hook for tests). */
   private pendingLearningEvents: Promise<void>[] = [];
+  /** In-flight fire-and-forget STATE.md projections (settle hook for tests). */
+  private pendingStateMdProjections: Promise<void>[] = [];
 
   constructor(deps: ControlPlaneDeps) {
     this.deps = deps;
@@ -1034,6 +1044,16 @@ export class ControlPlane {
       timestamp: now,
     });
 
+    // 04-存储约定 .loop/STATE.md 人可读投影: 每次状态迁移后整体重写
+    // 原 workspace 的 STATE.md。接线点选在这里 (transition 是所有状态
+    // 迁移的唯一出口 —— applyJudgment 各终态/needs_human/retry、
+    // submitDecision、pauseActive、resumePaused、settleMerge、
+    // supplementBudget、beginTurn 的 budget_limited 全部经此), 而不是
+    // run-service 代笔: control-plane 本就是 run_state 的单写者, 投影
+    // 跟着同一迁移走才能保证"单写者"语义字面上成立。fire-and-forget
+    // (只发不等), 失败只 warn (投影不是事实源)。
+    this.emitStateMdProjection(loopId, updated);
+
     // 阶段 3 learning_event (02 §8.4): a terminal decision (complete /
     // failed / budget_limited) or a decision carrying failure_tags emits
     // one learning signal for the async learning worker. Fire-and-forget
@@ -1093,6 +1113,58 @@ export class ControlPlane {
    */
   async settleLearningEvents(): Promise<void> {
     await Promise.all(this.pendingLearningEvents);
+  }
+
+  /**
+   * Fire-and-forget .loop/STATE.md 投影 (04-存储约定)。从 LoopCard 取
+   * workspace.path (原仓库路径 —— worktree 策略下投影仍写原 workspace,
+   * 口径见 state-md-projection.ts 文件头) 与 persistence.state_file;
+   * card 缺失或未配 workspace.path 时跳过 (投影无目标, 不算错误)。
+   * projectStateMd 自身绝不抛, 这里的 .catch 只是兜底。
+   */
+  private emitStateMdProjection(loopId: string, record: RunStateRecord): void {
+    const store = this.deps.loopCardStore;
+    if (!store) {
+      return;
+    }
+    const card = store.getLoop(loopId)?.card;
+    const workspacePath = card?.loop.workspace.path;
+    if (!card || !workspacePath) {
+      return;
+    }
+    const pending: Promise<void> = projectStateMd({
+      workspacePath,
+      stateFile: card.loop.persistence.state_file,
+      snapshot: {
+        loopId,
+        runId: record.run_id,
+        state: record.state,
+        turn: record.turn,
+        budget: record.budget,
+        sessionRef: record.session_ref,
+        updatedAt: record.updated_at,
+      },
+    }).catch((error) => {
+      console.warn(
+        `[ControlPlane] STATE.md projection failed for loop ${loopId} (只发不等, run 推进不受影响):`,
+        error,
+      );
+    });
+    this.pendingStateMdProjections.push(pending);
+    void pending.finally(() => {
+      const index = this.pendingStateMdProjections.indexOf(pending);
+      if (index >= 0) {
+        this.pendingStateMdProjections.splice(index, 1);
+      }
+    });
+  }
+
+  /**
+   * Test hook: wait for in-flight fire-and-forget STATE.md projections.
+   * Production code never awaits projections (只发不等).
+   */
+  async settleStateMdProjections(): Promise<void> {
+    await Promise.all(this.pendingStateMdProjections);
   }
 
   /**

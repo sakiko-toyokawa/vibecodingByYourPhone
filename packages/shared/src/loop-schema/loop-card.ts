@@ -155,9 +155,9 @@ export const LoopCardSchema = z.object({
       })
       .optional(),
     persistence: z.object({
-      // 【仅有约定无投影·已挂账 06 偏差 #27】04-存储约定.md 要求
-      // .loop/STATE.md 人可读投影, 但 05 各阶段未排期, 运行时无读写;
-      // 该字段当前仅作声明 (测试 fixture 填充)。
+      // 消费者: server loop/state/state-md-projection.ts —— control-plane
+      // 每次状态迁移后把该文件整体重写为人可读投影 (04-存储约定,
+      // 06 偏差 #27 待翻账)。
       state_file: z.string(),
     }),
     stop_rules: StopRulesSchema,

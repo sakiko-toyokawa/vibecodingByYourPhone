@@ -235,6 +235,9 @@ export function createApp(
       runLedgerStore,
       eventBus: options.eventBus,
       learningEventStore,
+      // .loop/STATE.md 人可读投影 (04-存储约定): 迁移时读 card 的
+      // workspace.path / persistence.state_file
+      loopCardStore,
     });
     // 阶段 3 学习侧: proposalStore 是 server 进程单例 (提案单写者) —
     // run-service 装配消费、learning worker、提案 API 都经同一个实例,
