@@ -103,6 +103,40 @@ test("自定义 case: 应通过却失败 → scorecard.ok=false 并指明失败 
   });
 });
 
+test("scope 白名单: 只跑白名单内 case, 未知 id 跳过且如实可见", async () => {
+  await withRunner(async ({ runner }) => {
+    const all = await runner.loadCases(); // 触发内置集落盘
+    const picked = all.slice(0, 2).map((c) => c.case_id);
+    const scorecard = await runner.run({
+      mode: "regression",
+      scope: [...picked, "no-such-case"],
+    });
+    assert.equal(scorecard.ok, true);
+    assert.equal(scorecard.total, 2);
+    assert.deepEqual(
+      scorecard.results.map((r) => r.case_id),
+      picked,
+    );
+    assert.deepEqual(scorecard.scope?.requested, [...picked, "no-such-case"]);
+    assert.deepEqual(scorecard.scope?.matched, picked);
+    assert.deepEqual(scorecard.scope?.unknown_ids, ["no-such-case"]);
+  });
+});
+
+test("scope 白名单过滤后 0 个 case → 不通过 (fail-closed, 空跑不得当通过)", async () => {
+  await withRunner(async ({ runner }) => {
+    const scorecard = await runner.run({
+      mode: "regression",
+      scope: ["no-such-case"],
+    });
+    assert.equal(scorecard.ok, false);
+    assert.equal(scorecard.total, 0);
+    assert.equal(scorecard.failed, 0);
+    assert.deepEqual(scorecard.scope?.matched, []);
+    assert.deepEqual(scorecard.scope?.unknown_ids, ["no-such-case"]);
+  });
+});
+
 test("cases.json 损坏 → invalid_cases (fail-closed, 闸门不得放行)", async () => {
   await withRunner(async ({ dataDir, runner }) => {
     await mkdir(join(dataDir, "loops/eval"), { recursive: true });

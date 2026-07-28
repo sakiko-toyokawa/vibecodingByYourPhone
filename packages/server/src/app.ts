@@ -303,6 +303,8 @@ export function createApp(
     const proposalPipeline = new ProposalPipeline({
       proposalStore,
       evalRunner,
+      // regression 档按提案 target 关联 loop 读 card 的 regression_scope
+      loopCardStore,
     });
     const learningWorker = new LearningWorker({
       learningEventStore,

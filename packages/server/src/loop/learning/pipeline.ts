@@ -22,7 +22,9 @@
  * - shadow: 旁路评估 —— 复跑 eval 集落一份 mode=shadow 的 scorecard 作为
  *   "若启用会如何" 的评估记录, 装配不消费 shadow 提案 (不改装配)。
  * - regression: 调 eval-runner 复跑最小集, 全部通过 → canary; 任一失败 →
- *   rolled_back, scorecard 引用写进 history reason (可审计)。
+ *   rolled_back, scorecard 引用写进 history reason (可审计)。提案关联
+ *   loop 的 card 声明了 eval.regression_scope 时, 复跑范围按该白名单
+ *   过滤 (见 advanceOne)。
  * - canary: 小范围启用 —— 装配层只对打了 canary 标记的 loop 生效 (按
  *   loop_id 匹配, 见 assembly/proposal-effects.ts)。
  * - approved → published: 全量生效。**两个人工闸门不在本服务内** ——
@@ -48,6 +50,7 @@ import type {
   ProposalCreatedBy,
   ProposalType,
 } from "@yep-anywhere/shared";
+import type { LoopCardStore } from "../state/loop-card-store.js";
 import type { ProposalStore } from "../state/proposal-store.js";
 import type { EvalRunner, EvalScorecard } from "./eval-runner.js";
 
@@ -75,6 +78,8 @@ export function isMetaRuleProposal(proposal: ImprovementProposal): boolean {
 export interface ProposalPipelineDeps {
   proposalStore: ProposalStore;
   evalRunner: EvalRunner;
+  /** regression 档按提案 target 关联 loop 读 card (eval.regression_scope 消费) */
+  loopCardStore: LoopCardStore;
 }
 
 /** 格式化 scorecard.applied 供提案 history 引用 (评估了什么可审计). */
@@ -156,12 +161,27 @@ export class ProposalPipeline {
       return;
     }
     // shadow → regression 档: eval 最小集复跑是发布闸门, 全过才放行。
+    // LoopCard eval.regression_scope 消费 (spec 02 §1): 提案 target 形态
+    // 是 "<loop_id>.<槽位>" (worker buildProposal 拼装; 无关联 loop 时
+    // 仅槽位名), 取首段作 loop id 经 LoopCardStore 读 card; card 声明了
+    // 非空 regression_scope 时作为 case id 白名单传给 eval-runner ——
+    // 只复跑该 loop 关心的 case (过滤口径与 fail-closed 语义见
+    // eval-runner run 的 scope 注释)。无 card 或未声明 → 不传 scope,
+    // 全量复跑 (现状行为不变)。
+    const loopId = proposal.target.split(".")[0];
+    const regressionScope = loopId
+      ? this.deps.loopCardStore.getLoop(loopId)?.card.loop.eval
+          ?.regression_scope
+      : undefined;
     let scorecard: EvalScorecard;
     try {
       scorecard = await this.deps.evalRunner.run({
         mode: "regression",
         proposalId: proposal.proposal_id,
         proposal,
+        ...(regressionScope && regressionScope.length > 0
+          ? { scope: regressionScope }
+          : {}),
       });
     } catch (error) {
       // fail-closed (元规则保护 2): eval 集缺失/损坏视为闸门不通过
@@ -172,6 +192,11 @@ export class ProposalPipeline {
       });
       return;
     }
+    // scope 白名单参与时如实写进 history (命中/未知 id 可审计; 0 命中即
+    // fail-closed 不通过的原因也由此可见)
+    const scopeInfo = scorecard.scope
+      ? `; regression_scope 白名单: 请求 ${scorecard.scope.requested.length} 命中 ${scorecard.scope.matched.length}${scorecard.scope.unknown_ids.length > 0 ? `, 未知 id: ${scorecard.scope.unknown_ids.join(", ")}` : ""}`
+      : "";
     if (scorecard.ok) {
       await this.deps.proposalStore.transitionStatus(
         proposal.proposal_id,
@@ -179,7 +204,7 @@ export class ProposalPipeline {
         {
           stage: "regression",
           by: "worker",
-          reason: `regression 通过 (${scorecard.passed}/${scorecard.total}): scorecard eval/results/${scorecard.scorecard_id}.json; ${formatApplied(scorecard.applied)}`,
+          reason: `regression 通过 (${scorecard.passed}/${scorecard.total}): scorecard eval/results/${scorecard.scorecard_id}.json; ${formatApplied(scorecard.applied)}${scopeInfo}`,
         },
       );
     } else {
@@ -190,7 +215,7 @@ export class ProposalPipeline {
       await this.deps.proposalStore.rollback(proposal.proposal_id, {
         stage: "regression",
         by: "worker",
-        reason: `regression 未通过 (${scorecard.failed}/${scorecard.total} 失败: ${failedCases}): scorecard eval/results/${scorecard.scorecard_id}.json`,
+        reason: `regression 未通过 (${scorecard.failed}/${scorecard.total} 失败: ${failedCases}): scorecard eval/results/${scorecard.scorecard_id}.json${scopeInfo}`,
       });
     }
   }

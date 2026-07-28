@@ -94,8 +94,13 @@ export const LoopCardSchema = z.object({
         })
         .optional(),
     }),
-    // 【无消费者·已挂账 06 偏差 #27】eval 配置块: eval runner 只读全局
-    // cases.json, 不读任何 card 配置; per-loop eval 计划未排期。
+    // eval 配置块:
+    // - regression_scope 消费者: server loop/learning/pipeline.ts regression
+    //   档 —— 按提案 target 关联的 loop 读 card, 非空时作为 case id 白名单
+    //   传给 eval-runner 只复跑白名单内 case (未知 id 跳过并记入
+    //   scorecard.scope.unknown_ids; 过滤后 0 个 case fail-closed 不通过)。
+    // - eval_plan / baseline / canary_rule 【无消费者，待 06 登记】per-loop
+    //   eval 计划/基线/canary 规则均未排期。
     eval: z
       .object({
         eval_plan: z.string().optional(),

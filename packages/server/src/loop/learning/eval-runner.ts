@@ -134,6 +134,15 @@ export interface EvalScorecard {
   /** 全部 case 符合预期 */
   ok: boolean;
   results: EvalCaseResult[];
+  /**
+   * scope 白名单过滤的如实记录 (run 携带 scope 时才有): 请求的白名单、
+   * 实际命中的 case、cases.json 里不存在的未知 id —— 跳过不静默。
+   */
+  scope?: {
+    requested: string[];
+    matched: string[];
+    unknown_ids: string[];
+  };
 }
 
 export class EvalRunnerError extends Error {
@@ -626,17 +635,40 @@ export class EvalRunner {
   }
 
   /**
-   * 复跑整个 eval 集并持久化 scorecard 到 eval/results/。regression 档的
-   * 放行判据是返回值的 ok (全部 case 符合预期)。携带提案本体时,
-   * behavior case 真实应用其 payload 并在 scorecard.applied 记录。
+   * 复跑 eval 集并持久化 scorecard 到 eval/results/ (携带 scope 时只复跑
+   * 白名单内的 case)。regression 档的放行判据是返回值的 ok (全部 case
+   * 符合预期)。携带提案本体时, behavior case 真实应用其 payload 并在
+   * scorecard.applied 记录。
    */
   async run(options: {
     mode: "shadow" | "regression";
     proposalId?: string;
     /** 被评估的提案本体 (shadow/regression 档由管线传入) */
     proposal?: ImprovementProposal;
+    /**
+     * case id 白名单 (LoopCard eval.regression_scope 的消费者入口, 由
+     * pipeline regression 档按提案关联 loop 的 card 传入): 提供时只跑
+     * 白名单内的 case。口径 (fail-closed, 与管线哲学一致):
+     * - 白名单 id 在 cases.json 不存在 → 跳过, 记入 scorecard.scope
+     *   .unknown_ids (如实可见, 不静默);
+     * - 过滤后 0 个 case → scorecard.ok=false, 空跑不得当通过
+     *   (scorecard.scope.matched 为空即原因)。
+     */
+    scope?: string[];
   }): Promise<EvalScorecard> {
-    const cases = await this.loadCases();
+    const allCases = await this.loadCases();
+    let cases = allCases;
+    let scopeRecord: EvalScorecard["scope"];
+    if (options.scope) {
+      const whitelist = new Set(options.scope);
+      const known = new Set(allCases.map((evalCase) => evalCase.case_id));
+      cases = allCases.filter((evalCase) => whitelist.has(evalCase.case_id));
+      scopeRecord = {
+        requested: options.scope,
+        matched: cases.map((evalCase) => evalCase.case_id),
+        unknown_ids: options.scope.filter((id) => !known.has(id)),
+      };
+    }
     const proposalId = options.proposal?.proposal_id ?? options.proposalId;
     const behaviorCtx: BehaviorContext = {
       proposal: options.proposal,
@@ -659,8 +691,10 @@ export class EvalRunner {
       total: results.length,
       passed: results.length - failed,
       failed,
+      // results.length > 0: 白名单过滤后 0 个 case 也算不通过 (fail-closed)
       ok: failed === 0 && results.length > 0,
       results,
+      ...(scopeRecord ? { scope: scopeRecord } : {}),
     };
     await fs.mkdir(this.resultsDir, { recursive: true });
     await fs.writeFile(
