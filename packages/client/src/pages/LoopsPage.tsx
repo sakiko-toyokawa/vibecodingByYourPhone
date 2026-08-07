@@ -631,7 +631,57 @@ export function LoopsPage() {
                       />
                       {t("loopsCreateVerifyRuntime")}
                     </label>
+                    <label className="flex items-center gap-2 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                      <input
+                        type="checkbox"
+                        checked={createForm.verifyInteraction}
+                        onChange={(event) =>
+                          updateCreateForm(
+                            "verifyInteraction",
+                            event.target.checked,
+                          )
+                        }
+                      />
+                      {t("loopsCreateVerifyInteraction")}
+                    </label>
                   </div>
+
+                  {createForm.verifyInteraction && (
+                    <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
+                      <label className="flex flex-col gap-1">
+                        <span className="[font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
+                          {t("loopsCreateInteractionUrlLabel")}
+                        </span>
+                        <input
+                          className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-border)]"
+                          value={createForm.interactionUrl}
+                          onChange={(event) =>
+                            updateCreateForm(
+                              "interactionUrl",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="http://localhost:3400"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="[font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
+                          {t("loopsCreateInteractionStartCommandLabel")}
+                        </span>
+                        <input
+                          className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-border)]"
+                          value={createForm.interactionStartCommand}
+                          onChange={(event) =>
+                            updateCreateForm(
+                              "interactionStartCommand",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="pnpm dev"
+                        />
+                      </label>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <label className="flex flex-col gap-1">

@@ -193,6 +193,15 @@ async function withFixture(
         sleeps.push(ms);
       },
       verifyRunFn: makeVerify(judgments) as never,
+      loopWatchdog: {
+        turnIdleTimeoutMs: 10 * 60 * 1000,
+        turnIdleCheckIntervalMs: 30 * 1000,
+        // Disable stagnation / idle / repeated-blocker detection so existing
+        // retry budget tests are not affected by the new loop guards.
+        stagnationSimilarTurnsThreshold: 100,
+        idleNoProgressTurnsThreshold: 100,
+        repeatedBlockerThreshold: 100,
+      },
     });
     await fn({
       service,

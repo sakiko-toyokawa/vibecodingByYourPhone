@@ -470,6 +470,8 @@ export {
 export {
   type IntentContract,
   IntentContractSchema,
+  type SecurityLevel,
+  SecurityLevelSchema,
 } from "./loop-schema/intent-contract.js";
 export {
   type Budget,
@@ -502,7 +504,15 @@ export {
   VerifierReportSchema,
   type VerifierStatus,
   VerifierStatusSchema,
+  type VerifierIssue,
+  VerifierIssueSchema,
 } from "./loop-schema/verification.js";
+export {
+  type VerificationRule,
+  VerificationRuleSchema,
+  type VerificationRuleSet,
+  VerificationRuleSetSchema,
+} from "./loop-schema/verification-rules.js";
 export {
   type DecisionEntry,
   DecisionEntrySchema,
@@ -565,3 +575,9 @@ export {
   type ProposalType,
   ProposalTypeSchema,
 } from "./loop-schema/learning.js";
+export {
+  type SubTask,
+  SubTaskSchema,
+  type TaskPlan,
+  TaskPlanSchema,
+} from "./loop-schema/task-plan.js";

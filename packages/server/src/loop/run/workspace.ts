@@ -1,0 +1,158 @@
+/**
+ * Workspace resolution helpers for loop runs.
+ *
+ * Extracted from run-service.ts during Phase-3 refactoring.
+ */
+
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+import type { LoopCard } from "@yep-anywhere/shared";
+import { AssemblyError } from "../assembly/runtime-input.js";
+import type { RuntimeAssemblyContext } from "../assembly/runtime-input.js";
+import { type RunWorktree, ensureRunWorktree } from "../worktree/worktree.js";
+import type { GithubCredentialStore, GithubToolProvisioner } from "./types.js";
+
+export function isGitHubPromptLoop(card: LoopCard): boolean {
+  return card.loop.discovery?.source === "github_prompt";
+}
+
+export function displayGitHubPromptWorkspacePath(loopId: string): string {
+  return `managed://github-workspaces/prompt-loops/${loopId}`;
+}
+
+export function githubPromptWorkspacePath(
+  dataDir: string,
+  loopId: string,
+): string {
+  return path.join(dataDir, "github-workspaces", "prompt-loops", loopId);
+}
+
+export function loopRuntime(
+  card: LoopCard,
+): { provider?: string; model?: string } | undefined {
+  return (card.loop as { runtime?: { provider?: string; model?: string } })
+    .runtime;
+}
+
+export interface ResolveExecutableCardResult {
+  card: LoopCard;
+  worktree: RunWorktree | null;
+}
+
+/**
+ * 运行前改写 card 的统一挂载点：GitHub prompt loop 重写 workspace.path
+ * 到 managed 目录；workspace.strategy "worktree" 创建/复用 run 级隔离
+ * worktree 并把 path 改写为 worktree 目录 —— 下游 assembly / executor /
+ * verifier / diff 取证全部以改写后的 path 为 cwd, 零改动获得隔离。
+ * 返回 worktree 证据供 executeRun 落 workspace.json (direct 为 null)。
+ */
+export async function resolveExecutableCard(
+  card: LoopCard,
+  runId: string,
+  deps: {
+    dataDir?: string;
+  },
+): Promise<ResolveExecutableCardResult> {
+  if (isGitHubPromptLoop(card)) {
+    if (!deps.dataDir) {
+      throw new AssemblyError(
+        "GitHub prompt loop cannot start: server data directory is not configured",
+      );
+    }
+    const expectedWorkspacePath = displayGitHubPromptWorkspacePath(
+      card.loop.id,
+    );
+    if (card.loop.workspace.path !== expectedWorkspacePath) {
+      throw new AssemblyError(
+        `GitHub prompt loop cannot start: workspace.path must be '${expectedWorkspacePath}'`,
+      );
+    }
+    const workspacePath = githubPromptWorkspacePath(deps.dataDir, card.loop.id);
+    await mkdir(workspacePath, { recursive: true });
+    return {
+      card: {
+        ...card,
+        loop: {
+          ...card.loop,
+          workspace: {
+            ...card.loop.workspace,
+            strategy: "direct",
+            path: workspacePath,
+          },
+        },
+      },
+      worktree: null,
+    };
+  }
+  if (card.loop.workspace.strategy !== "worktree") {
+    return { card, worktree: null };
+  }
+  const repoPath = card.loop.workspace.path;
+  if (!repoPath) {
+    throw new AssemblyError(
+      `Loop '${card.loop.id}' workspace.strategy is worktree but workspace.path is missing`,
+    );
+  }
+  if (!deps.dataDir) {
+    throw new AssemblyError(
+      `Loop '${card.loop.id}' workspace.strategy is worktree but server data directory is not configured`,
+    );
+  }
+  const worktree = await ensureRunWorktree({
+    repoPath,
+    loopId: card.loop.id,
+    runId,
+    dataDir: deps.dataDir,
+  });
+  return {
+    card: {
+      ...card,
+      loop: {
+        ...card.loop,
+        workspace: {
+          ...card.loop.workspace,
+          path: worktree.path,
+        },
+      },
+    },
+    worktree,
+  };
+}
+
+export interface ResolveRuntimeAssemblyContextDeps {
+  githubCredentialStore?: GithubCredentialStore;
+  githubToolProvisioner?: GithubToolProvisioner;
+}
+
+export async function resolveRuntimeAssemblyContext(
+  card: LoopCard,
+  deps: ResolveRuntimeAssemblyContextDeps,
+): Promise<RuntimeAssemblyContext> {
+  if (!isGitHubPromptLoop(card)) {
+    return {};
+  }
+  if (!deps.githubCredentialStore) {
+    throw new AssemblyError(
+      "GitHub prompt loop cannot start: GitHub credential store is not configured",
+    );
+  }
+  if (!deps.githubToolProvisioner) {
+    throw new AssemblyError(
+      "GitHub prompt loop cannot start: GitHub CLI provisioner is not configured",
+    );
+  }
+
+  const token = await deps.githubCredentialStore.getToken();
+  if (!token) {
+    throw new AssemblyError(
+      "GitHub prompt loop cannot start: save a GitHub token before running this loop",
+    );
+  }
+  const tool = await deps.githubToolProvisioner.ensureGh();
+  if (!tool.path) {
+    throw new AssemblyError(
+      "GitHub prompt loop cannot start: managed GitHub CLI path is unavailable",
+    );
+  }
+  return { github: { token, ghPath: tool.path } };
+}

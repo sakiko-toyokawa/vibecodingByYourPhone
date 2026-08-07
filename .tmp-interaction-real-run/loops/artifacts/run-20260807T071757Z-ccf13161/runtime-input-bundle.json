@@ -1,0 +1,72 @@
+{
+  "goal_id": "intent-run-20260807T071757Z-ccf13161",
+  "run_id": "run-20260807T071757Z-ccf13161",
+  "turn": 1,
+  "execution_contract": {
+    "goal": "Do not modify files. Verify that the Yep Anywhere web UI at the interaction URL loads and shows the Loops page or app shell.",
+    "scope": [
+      "E:/projects/vibecodingByYourPhone-main"
+    ],
+    "success_criteria": [
+      "任务目标完成并产出报告文本",
+      "修改不超出工作区边界",
+      "未尝试硬闸门动作"
+    ],
+    "constraints": [
+      "workspace_bounded"
+    ],
+    "required_output": [
+      "summary",
+      "known_risks",
+      "changed_files",
+      "commands_run"
+    ]
+  },
+  "native_invocation": {
+    "adapter": "codex",
+    "bridge": "app_server",
+    "surface": "json_rpc",
+    "mode": "exec",
+    "cwd_ref": "workspace://interaction-real-1786087077568",
+    "timeout_seconds": null,
+    "resume_ref": null
+  },
+  "context_injection": {
+    "prompt_ref": "artifact://run-20260807T071757Z-ccf13161/prompt.md",
+    "instruction_overlay_ref": null,
+    "memory_packet_ref": null,
+    "mcp_config_ref": null
+  },
+  "policy_projection": {
+    "policy_intent_ref": "policy://loop_bypass",
+    "sandbox": "read-only",
+    "approval_or_permission_mode": "bypass_self_approve_with_audit",
+    "allowed_tools": [],
+    "disallowed_tools": [],
+    "hard_gates": [
+      "merge",
+      "deploy",
+      "delete",
+      "publish",
+      "bill",
+      "notify",
+      "close"
+    ]
+  },
+  "observability": {
+    "capture_stdout": true,
+    "capture_stderr": false,
+    "capture_structured_output": true,
+    "capture_transcript": false,
+    "capture_diff": true,
+    "capture_exit_code": true,
+    "capture_test_output": true
+  },
+  "budget_remaining": {
+    "max_tokens": 0,
+    "max_time_minutes": 10,
+    "max_turns": 1,
+    "max_retries": 0
+  },
+  "permission_bridge_ref": null
+}

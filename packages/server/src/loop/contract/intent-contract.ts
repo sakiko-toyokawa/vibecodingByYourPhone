@@ -28,6 +28,8 @@ import {
   type IntentContract,
   IntentContractSchema,
   type LoopCard,
+  type SecurityLevel,
+  type TaskPlan,
 } from "@yep-anywhere/shared";
 
 export type ContractSource = "cron" | "manual";
@@ -121,7 +123,11 @@ export function extractTargetFiles(task: string): string[] {
 
 export function buildIntentContract(
   card: LoopCard,
-  options: { runId: string; source: ContractSource },
+  options: {
+    runId: string;
+    source: ContractSource;
+    plan?: TaskPlan;
+  },
 ): IntentContract {
   const loop = card.loop;
   const discovery = loop.discovery ?? {};
@@ -132,6 +138,18 @@ export function buildIntentContract(
   // 阶段 0/1 的只读形状。裁决依据是 card 原始字段，不引入 policy 模块依赖。
   const approvalMode = loop.policy?.approval_mode;
   const writeCapable = approvalMode !== undefined && approvalMode !== "manual";
+
+  // 安全等级：由 approval_mode / policy 确定，决定执行器使用哪种权限模式。
+  // GitHub prompt 模式需要 full_access（gh 命令涉及网络访问）；无 policy 的
+  // legacy GitHub prompt 保持 read_only（与阶段 0/1 行为一致）。
+  const isGitHubPrompt = discovery.source === "github_prompt";
+  const securityLevel: SecurityLevel = isGitHubPrompt
+    ? writeCapable
+      ? "full_access"
+      : "read_only"
+    : writeCapable
+      ? "workspace_write"
+      : "read_only";
 
   const rawGoal =
     handoff.task ??
@@ -181,6 +199,7 @@ export function buildIntentContract(
     constraints,
     budget: buildBudgetLimits(card),
     ...(targetFiles.length > 0 ? { target: { files: targetFiles } } : {}),
+    ...(options.plan ? { plan: options.plan } : {}),
     // 02 §2 stop_rules 投影: card 的 stop_on_repeated_failure →
     // repetition.max_same_failure (control-plane 按同一阻断指纹计数消费;
     // safety/ambiguity 段机制未建, 不投影)。
@@ -193,5 +212,6 @@ export function buildIntentContract(
           },
         }
       : {}),
+    security_level: securityLevel,
   });
 }

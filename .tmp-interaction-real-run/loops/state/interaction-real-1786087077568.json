@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "goal_id": "intent-run-20260807T071757Z-ccf13161",
+  "run_id": "run-20260807T071757Z-ccf13161",
+  "state": "needs_human",
+  "turn": 1,
+  "intent_version": 1,
+  "workspace_ref": "workspace://interaction-real-1786087077568/run-20260807T071757Z-ccf13161",
+  "last_judgment": "artifact://run-20260807T071757Z-ccf13161/judgment-report.json",
+  "pending_approval": {
+    "request_id": "decision-run-20260807T071757Z-ccf13161-t1-needs_human",
+    "run_id": "run-20260807T071757Z-ccf13161",
+    "reason": "judgment overall == inconclusive, not automatically retryable (next_action: escalate); escalating to needs_human",
+    "entered_at": "2026-08-07T07:20:04.963Z"
+  },
+  "budget": {
+    "max_tokens": 0,
+    "max_time_minutes": 10,
+    "max_turns": 1,
+    "max_retries": 0,
+    "used_tokens": 0,
+    "used_time_minutes": 0.6901833333333334,
+    "used_turns": 1,
+    "used_retries": 0
+  },
+  "session_ref": "019fdb15-f860-7730-8dca-35e55e957f61",
+  "created_at": "2026-08-07T07:17:57.582Z",
+  "updated_at": "2026-08-07T07:20:04.966Z"
+}

@@ -1,0 +1,6 @@
+{
+  "task_type": "read_only_report",
+  "outcome": "一份只讀掃描報告：列出發現與建議，不對工作區做任何修改（報告即結果）",
+  "success_criteria": ["只讀掃描完成並產出報告文本", "工作區未產生任何寫改動"],
+  "constraints": ["read_only"]
+}

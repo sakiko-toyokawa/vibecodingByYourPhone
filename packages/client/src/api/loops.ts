@@ -62,6 +62,12 @@ export interface RunDetail {
   session_ref: string | null;
 }
 
+export interface InteractionDepsStatus {
+  status: "ready" | "missing" | "unsupported";
+  message: string;
+  installCommand?: string;
+}
+
 export const loopsApi = {
   listLoops: () => fetchJSON<{ loops: StoredLoop[] }>("/loops"),
 
@@ -77,6 +83,22 @@ export const loopsApi = {
       current_run_state: unknown;
       last_run_summary: unknown;
     }>(`/loops/${encodeURIComponent(loopId)}`),
+
+  getInteractionDeps: (loopId: string) =>
+    fetchJSON<InteractionDepsStatus>(
+      `/loops/${encodeURIComponent(loopId)}/interaction-deps`,
+    ),
+
+  installInteractionDeps: (loopId: string, installCommand?: string) =>
+    fetchJSON<{ ok: boolean; command: string; output: string }>(
+      `/loops/${encodeURIComponent(loopId)}/interaction-deps/install`,
+      {
+        method: "POST",
+        body: JSON.stringify(
+          installCommand ? { install_command: installCommand } : {},
+        ),
+      },
+    ),
 
   listRuns: (loopId: string) =>
     fetchJSON<{ runs: LoopRunSummary[] }>(

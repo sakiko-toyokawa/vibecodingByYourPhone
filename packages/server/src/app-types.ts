@@ -130,6 +130,16 @@ export interface AppOptions {
   voiceInputEnabled?: boolean;
   /** Allowed directory prefixes for serving local images. Default: ["/tmp"] */
   allowedImagePaths?: string[];
+  /** Turn idle timeout in ms for loop runs. 0 disables idle detection. */
+  loopTurnIdleTimeoutMs?: number;
+  /** Interval between loop turn idle checks in ms. */
+  loopTurnIdleCheckIntervalMs?: number;
+  /** Number of consecutive similar turn outputs before loop stagnation escalation. */
+  loopStagnationSimilarTurnsThreshold?: number;
+  /** Number of consecutive retry turns with no workspace diff progress before escalating to needs_human. */
+  loopIdleNoProgressTurnsThreshold?: number;
+  /** Number of times the same blocker fingerprint may recur in needs_human decisions before forcing failed. */
+  loopRepeatedBlockerThreshold?: number;
 }
 
 export interface AppResult {

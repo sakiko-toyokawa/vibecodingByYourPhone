@@ -76,6 +76,7 @@ class VerifyFakeSupervisor {
   constructor(
     private readonly scripted: { tool: string; input: unknown }[],
     private readonly silent = false,
+    private readonly providerErrorBeforeEmptyResult?: string,
   ) {}
 
   async startSession(
@@ -106,6 +107,20 @@ class VerifyFakeSupervisor {
           return () => {};
         }
         queueMicrotask(() => {
+          if (this.providerErrorBeforeEmptyResult) {
+            listener({
+              type: "message",
+              message: {
+                type: "error",
+                error: this.providerErrorBeforeEmptyResult,
+              },
+            });
+            listener({
+              type: "message",
+              message: { type: "result", session_id: sessionId },
+            });
+            return;
+          }
           listener({
             type: "message",
             message: { type: "assistant", message: { content: [] } },
@@ -178,6 +193,8 @@ async function withFixture(
     proposals?: ImprovementProposal[];
     /** supervisor 进程永不发声 (adapter_policy 超时用例)。 */
     silent?: boolean;
+    /** Emits a provider error followed by an empty result message. */
+    providerErrorBeforeEmptyResult?: string;
     /** card 声明 observability.required_artifacts (产物存在性校验用例)。 */
     requiredArtifacts?: string[];
   },
@@ -237,7 +254,11 @@ async function withFixture(
             }
           : undefined,
     } as LoopCardStore;
-    const supervisor = new VerifyFakeSupervisor(opts.scripted, opts.silent);
+    const supervisor = new VerifyFakeSupervisor(
+      opts.scripted,
+      opts.silent,
+      opts.providerErrorBeforeEmptyResult,
+    );
     const service = new LoopRunService({
       supervisor: supervisor as unknown as Supervisor,
       loopCardStore,
@@ -517,6 +538,43 @@ test("adapter_policy: timeout_seconds kills a hanging turn as adapter timeout (#
         latest?.runtime.adapter_capability_snapshot ?? "",
         /adapterPolicy\[timeout_seconds=0.05\]/,
       );
+    },
+  );
+});
+
+test("provider error followed by empty result fails the run instead of completing with empty output", async () => {
+  await withFixture(
+    {
+      withPolicy: false,
+      scripted: [],
+      providerErrorBeforeEmptyResult: "provider stream failed: rate limit",
+      verifyRunFn: PASSED_VERIFY,
+    },
+    async ({ service, controlPlane, ledgerStore }) => {
+      const summary = await service.startRun("loop-verify", "manual");
+      const state = await waitForState(controlPlane, summary.run_id, [
+        "failed",
+      ]);
+      assert.equal(state, "failed");
+
+      const stdout = await ledgerStore.readArtifact(
+        summary.run_id,
+        "stdout.log",
+      );
+      assert.match(stdout ?? "", /provider stream failed: rate limit/);
+
+      const decisions = await ledgerStore.readDecisionEntries(summary.run_id);
+      const failed = decisions.find((d) => d.decision === "failed");
+      assert.ok(failed, "failed control decision ledgered");
+      assert.match(failed.reason, /adapter hard error/);
+      assert.deepEqual(failed.failure_tags, ["runtime_blackbox_error"]);
+
+      const runtimeEvents = await ledgerStore.readArtifact(
+        summary.run_id,
+        "runtime-events.jsonl",
+      );
+      assert.ok(runtimeEvents?.includes('"type":"error"'));
+      assert.ok(runtimeEvents?.includes('"type":"result"'));
     },
   );
 });

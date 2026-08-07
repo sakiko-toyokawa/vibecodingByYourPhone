@@ -1,0 +1,14 @@
+{
+  "verifier_phase": "interaction",
+  "status": "inconclusive",
+  "evidence_refs": [
+    "artifact://run-20260807T071757Z-ccf13161/interaction-deps.json",
+    "artifact://run-20260807T071757Z-ccf13161/interaction-agent-output.txt"
+  ],
+  "unresolved_risks": [
+    "interaction agent 輸出無法解析為合法 Playwright 腳本 JSON"
+  ],
+  "recommendation": "escalate",
+  "confidence": 0.1,
+  "requires_human": false
+}

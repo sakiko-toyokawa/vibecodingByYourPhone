@@ -58,6 +58,28 @@ export type VerifierRecommendation = z.infer<
   typeof VerifierRecommendationSchema
 >;
 
+/**
+ * VerifierIssue — 结构化问题条目（P0 扩展，对齐
+ * verifier_system_design.md §4 的 issues[]）。可选：旧报告无该字段。
+ */
+export const VerifierIssueSchema = z.object({
+  id: z.string(),
+  severity: z.enum(["critical", "major", "minor", "info"]),
+  layer: VerificationPhaseSchema,
+  location: z
+    .object({
+      file: z.string(),
+      line: z.number().optional(),
+      column: z.number().optional(),
+    })
+    .optional(),
+  message: z.string(),
+  suggestion: z.string().optional(),
+  auto_fixable: z.boolean().optional(),
+  fix: z.string().optional(),
+});
+export type VerifierIssue = z.infer<typeof VerifierIssueSchema>;
+
 export const VerifierReportSchema = z.object({
   // 该报告来自四段中哪一段（枚举复用 loop-card 的 VerificationPhaseSchema）
   verifier_phase: VerificationPhaseSchema,
@@ -69,6 +91,15 @@ export const VerifierReportSchema = z.object({
   confidence: z.number().min(0).max(1),
   // 该 verifier 是否要求人工介入
   requires_human: z.boolean().default(false),
+  // --- P0 扩展字段（可选；旧报告不带，不破坏兼容） ---
+  // 0.0 ~ 1.0 的量化评分（Rubric 加权和；L4 Verifier Agent 使用）
+  score: z.number().min(0).max(1).optional(),
+  // 结构化问题列表（按优先级排序）
+  issues: z.array(VerifierIssueSchema).optional(),
+  // 整体是否可自动修复（issues 级 auto_fixable 的聚合视图）
+  auto_fixable: z.boolean().optional(),
+  // 顶层修复建议（供 retry context / 人工参考）
+  suggested_fix: z.string().optional(),
 });
 export type VerifierReport = z.infer<typeof VerifierReportSchema>;
 

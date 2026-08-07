@@ -1465,6 +1465,11 @@ export class Process {
       this.abortFn();
     }
 
+    // Mark the process as terminated so resumeSession does not try to reuse it.
+    // This must happen before waiting for exit, because abort() is often called
+    // when the turn needs to be interrupted (e.g., timeout, pause, or user abort).
+    this.markTerminated("aborted by user or system");
+
     // Wait for CLI process to fully exit (with timeout to avoid hanging)
     const timeout = new Promise<void>((resolve) => setTimeout(resolve, 5000));
     await Promise.race([this._exitPromise, timeout]);

@@ -39,31 +39,53 @@
  *    side of PATCH pause (主动暂停，不走审批管线).
  *
  * control-plane is the only writer of state/<loop_id>.json (04-存储约定).
+ *
+ * Phase-3 refactor: the implementation has been split into focused
+ * sub-modules under control-plane/; this file is a thin facade that
+ * wires them together.
  */
 
-import { createHash } from "node:crypto";
 import type {
   Budget,
   BudgetLimits,
-  DecisionEntry,
-  DecisionKind,
-  FailureTag,
-  IntentContract,
-  JudgmentReport,
-  LearningEvent,
-  RunDecisionAction,
   RunState,
   RunStateRecord,
 } from "@yep-anywhere/shared";
 import { BudgetSchema } from "@yep-anywhere/shared";
-import type { IEventBus } from "../../watcher/index.js";
-import type { LearningEventStore } from "../state/learning-event-store.js";
-import type { LoopCardStore } from "../state/loop-card-store.js";
-import type { RunLedgerStore } from "../state/run-ledger-store.js";
-import { projectStateMd } from "../state/state-md-projection.js";
+import { blockerFingerprint } from "./blocker.js";
+import {
+  exhaustedAtTurnStart,
+  exhaustedFields,
+  maybeWarnBudget,
+} from "./budget.js";
+import { findRun, findWaitingRun, runExists } from "./lookup.js";
+import {
+  notifyResolved,
+  notifyResume,
+  settleLearningEvents,
+  settleStateMdProjections,
+} from "./side-effects.js";
+import { controlDecisionId } from "./transition.js";
+import { attributeFailureTags, transition } from "./transition.js";
+import type {
+  ApplyJudgmentInput,
+  ApplyJudgmentResult,
+  BeginTurnResult,
+  ControlPlaneDeps,
+  ControlPlaneState,
+  PauseSeed,
+  ResumeSignal,
+} from "./types.js";
+export type {
+  ApplyJudgmentInput,
+  ApplyJudgmentResult,
+  BeginTurnResult,
+  ControlPlaneDeps,
+  PauseSeed,
+  ResumeSignal,
+  TurnUsage,
+} from "./types.js";
 import { type ControlDecisionKind, decideControl } from "./decide.js";
-import type { RunStateStore } from "./run-state-store.js";
-import { assertLegalTransition } from "./state-machine.js";
 
 export type ControlPlaneErrorCode =
   | "run_not_found"
@@ -78,156 +100,6 @@ export class ControlPlaneError extends Error {
     super(message);
     this.name = "ControlPlaneError";
   }
-}
-
-/** Per-turn resource consumption reported by the run service. */
-export interface TurnUsage {
-  /**
-   * Tokens consumed by the turn (AdapterOutput usage, 02 §4); null when the
-   * runtime did not expose usage — the budget counter is left unchanged,
-   * never fabricated.
-   */
-  tokens: number | null;
-  /** Wall-clock minutes the turn took (execution + verification). */
-  timeMinutes: number;
-}
-
-export interface ApplyJudgmentInput {
-  loopId: string;
-  runId: string;
-  turn: number;
-  goalId: string;
-  workspaceRef: string;
-  /** Whether the run's execution turn succeeded. */
-  executionOk: boolean;
-  /** Whether the verification layer ran (card requires phases). */
-  verificationRan: boolean;
-  /** Aggregated judgment_report; null when verification did not run. */
-  judgment: JudgmentReport | null;
-  /** artifact:// ref of judgment-report.json; null when verification did not run. */
-  judgmentRef: string | null;
-  /** Run creation time (ISO 8601), used for the state record's created_at. */
-  createdAt: string;
-  /** Budget limits from the IntentContract (数值唯一权威来源, 02 §2). */
-  budget: BudgetLimits;
-  /** This turn's consumption, accumulated into the run's budget snapshot. */
-  usage: TurnUsage;
-  /**
-   * Set when the run was terminated by a unified adapter hard error
-   * (02-schema契约.md §4). The failure attribution (失败模式账本 vocabulary)
-   * is recorded on the control decision entry. Adapter hard errors are
-   * terminal: they decide `failed` via executionOk=false and never bridge
-   * to needs_human (see the run-service call-site comment).
-   */
-  adapterFailure?: {
-    code: string;
-    failureTag: FailureTag;
-    message: string;
-  };
-  /**
-   * Set when the policy projection intercepted a hard-gate / high-risk
-   * action during the turn (05 阶段 2 验收 4: 硬闸门拦截升级 needs_human,
-   * bypass 下仍被拦 — bypass ≠ 绕过硬闸门). Forces the control decision
-   * to needs_human unless the turn already failed terminally; the policy
-   * ref lands on the decision entry's policy_refs.
-   */
-  policyEscalation?: {
-    action: string;
-    reason: string;
-    policyRef: string;
-  };
-  /**
-   * 合约的非预算停止规则 (02 §2 stop_rules; 当前只有
-   * repetition.max_same_failure 被消费: 同一阻断指纹重复超过上限即停,
-   * needs_human 循环打断为终态 failed —— 预算与停止规则.md "同一
-   * verifier 同一错误重复 → 停止或人工")。
-   */
-  stopRules?: IntentContract["stop_rules"];
-  /** 本轮执行的 session 引用 (06 偏差 #32: run_state.session_ref,
-   *  前端据此订阅对应 session 的消息流)。 */
-  sessionRef?: string;
-  /** 工作区 diff 摘要 (git diff --stat 文本, 由 run-service 捕获)。仅在
-   *  升级 needs_human 时随 run-decision-required 事件透传给前端;
-   *  缺失则事件不携带 diff_summary 字段。 */
-  diffSummary?: string;
-}
-
-export interface ApplyJudgmentResult {
-  state: ControlDecisionKind;
-  entry: DecisionEntry;
-  /** Budget snapshot after accumulating this turn (drives retry backoff). */
-  budget: Budget;
-  /** True when this exact transition was already ledgered (repeat trigger). */
-  idempotent: boolean;
-}
-
-/**
- * ResumeSignal — a blocked run (needs_human / paused / budget_limited)
- * came back to active; the run service continues it with a new turn.
- */
-export interface ResumeSignal {
-  runId: string;
-  loopId: string;
-  cause:
-    | "human_approve"
-    | "human_request_changes"
-    | "resume_signal"
-    | "budget_supplemented";
-  /** Human feedback to inject into the next turn's context, when given. */
-  feedback?: string;
-}
-
-export interface BeginTurnResult {
-  /** False when the pre-turn budget check stopped the run (budget_limited). */
-  ok: boolean;
-  state: RunState;
-  record: RunStateRecord;
-}
-
-/**
- * Seed for pausing a run whose first turn is still in flight: turn 1 has no
- * run_state record yet (it is first written at judgment time), so PATCH
- * pause materializes one from the run service's execution context before
- * driving active → paused.
- */
-export interface PauseSeed {
-  runId: string;
-  turn: number;
-  goalId: string;
-  workspaceRef: string;
-  /** Contract budget limits; null when setup failed before a contract existed. */
-  budget: BudgetLimits | null;
-  createdAt: string;
-  /** Session of the in-flight turn being killed, kept so a resume after a
-   *  server restart can continue on the same session (06 #32); null when no
-   *  session had started yet. */
-  sessionRef?: string | null;
-}
-
-interface PendingApproval {
-  loopId: string;
-  requestId: string;
-}
-
-export interface ControlPlaneDeps {
-  runStateStore: RunStateStore;
-  runLedgerStore: RunLedgerStore;
-  /** Optional: events are only broadcast when a bus is wired. */
-  eventBus?: IEventBus;
-  /**
-   * Optional: learning_event sink (阶段 3). When wired, a run reaching a
-   * terminal decision (complete / failed / budget_limited) or a decision
-   * carrying failure_tags appends one learning_event to
-   * learning/events.jsonl — fire-and-forget (只发不等), emission failures
-   * are logged and never affect run progression.
-   */
-  learningEventStore?: LearningEventStore;
-  /**
-   * Optional: LoopCard 注册表 (只读), 供 .loop/STATE.md 人可读投影取
-   * workspace.path 与 persistence.state_file (04-存储约定)。未接线时
-   * 跳过投影, 不影响主链路。
-   */
-  loopCardStore?: Pick<LoopCardStore, "getLoop">;
 }
 
 /** The options a needs_human run offers (03: full set). */
@@ -258,62 +130,27 @@ function recommendedDecision(nextAction: string | undefined): string {
   }
 }
 
-/** Deterministic decision_id = idempotency key (run_id + turn + target/cause). */
-function controlDecisionId(runId: string, turn: number, to: RunState): string {
-  return `decision-${runId}-t${turn}-${to}`;
-}
-
-function normalizeBlockerParts(parts: string[]): string[] {
-  return parts
-    .map((part) => part.trim().replace(/\s+/g, " ").toLowerCase())
-    .filter((part) => part.length > 0)
-    .sort();
-}
-
-function blockerFingerprint(
-  judgment: JudgmentReport | null,
-  policyEscalation?: ApplyJudgmentInput["policyEscalation"],
-): string | undefined {
-  if (!judgment && !policyEscalation) {
-    return undefined;
-  }
-  const payload = {
-    next_action: judgment?.next_action ?? "none",
-    risks: normalizeBlockerParts(judgment?.unresolved_risks ?? []),
-    evidence: normalizeBlockerParts(judgment?.evidence ?? []),
-    policy_action: policyEscalation?.action ?? null,
-    policy_reason: policyEscalation?.reason
-      ? normalizeBlockerParts([policyEscalation.reason])[0]
-      : null,
-  };
-  return `blocker:${createHash("sha256")
-    .update(JSON.stringify(payload))
-    .digest("hex")
-    .slice(0, 16)}`;
-}
-
 export class ControlPlane {
   private readonly deps: ControlPlaneDeps;
-  /** run_id -> pending approval (in-memory index; rebuilt from state files) */
-  private pending = new Map<string, PendingApproval>();
-  /** run_id -> loop_id (in-memory index; rebuilt from state files on scan) */
-  private runIndex = new Map<string, string>();
-  /** run_id -> latest known state (drives API state projections) */
-  private statesByRunId = new Map<string, RunState>();
+  private readonly state: ControlPlaneState;
   private resolvedListeners: ((runId: string, state: RunState) => void)[] = [];
   private resumeListeners: ((signal: ResumeSignal) => void)[] = [];
-  /** In-flight fire-and-forget learning_event appends (settle hook for tests). */
-  private pendingLearningEvents: Promise<void>[] = [];
-  /** In-flight fire-and-forget STATE.md projections (settle hook for tests). */
-  private pendingStateMdProjections: Promise<void>[] = [];
 
   constructor(deps: ControlPlaneDeps) {
     this.deps = deps;
+    this.state = {
+      pending: new Map(),
+      runIndex: new Map(),
+      statesByRunId: new Map(),
+      pendingLearningEvents: [],
+      pendingStateMdProjections: [],
+      budgetWarned: new Set(),
+    };
   }
 
   /** Latest known state for a run (undefined if never seen this process). */
   currentStateOf(runId: string): RunState | undefined {
-    return this.statesByRunId.get(runId);
+    return this.state.statesByRunId.get(runId);
   }
 
   /**
@@ -352,7 +189,7 @@ export class ControlPlane {
    * broadcast loop-state-changed, and bridge needs_human.
    */
   async applyJudgment(input: ApplyJudgmentInput): Promise<ApplyJudgmentResult> {
-    this.runIndex.set(input.runId, input.loopId);
+    this.state.runIndex.set(input.runId, input.loopId);
     const existing = await this.deps.runStateStore.load(input.loopId);
 
     // Idempotent replay: this turn was already judged (the run left active
@@ -403,7 +240,7 @@ export class ControlPlane {
       used_tokens: base.used_tokens + (input.usage.tokens ?? 0),
       used_time_minutes: base.used_time_minutes + input.usage.timeMinutes,
     };
-    const exhausted = this.exhaustedFields(budget, input.turn);
+    const exhausted = exhaustedFields(budget, input.turn);
     const canRetry = exhausted.length === 0;
 
     const decision = decideControl({
@@ -425,7 +262,7 @@ export class ControlPlane {
     }
     // 03 "loop-budget-warning": budget 消耗越过 80% 阈值时广播
     // (一次/run/字段; budget_limited 本身走 loop-state-changed 不重复)。
-    this.maybeWarnBudget(input, budget);
+    maybeWarnBudget(this.deps, this.state, input, budget);
 
     const now = new Date().toISOString();
     const record: RunStateRecord = {
@@ -455,10 +292,11 @@ export class ControlPlane {
       decision.kind === "needs_human"
         ? blockerFingerprint(input.judgment, input.policyEscalation)
         : undefined;
+    const priorEntries = await this.deps.runLedgerStore.readDecisionEntries(
+      input.runId,
+    );
     const repeatedBlockerCount = fingerprint
-      ? (
-          await this.deps.runLedgerStore.readDecisionEntries(input.runId)
-        ).filter(
+      ? priorEntries.filter(
           (entry) =>
             entry.decision === "needs_human" &&
             entry.blocker_fingerprint === fingerprint,
@@ -493,7 +331,7 @@ export class ControlPlane {
       record: updated,
       entry,
       idempotent,
-    } = await this.transition({
+    } = await transition(this.deps, this.state, {
       loopId: input.loopId,
       runId: input.runId,
       record,
@@ -518,7 +356,7 @@ export class ControlPlane {
       // intent_error / context_error / memory_packet_error 需要 verifier
       // 侧的归因分类能力, eval_regression 由 eval 体系自身产出, 均不在
       // 此挂载 (无生产信号, 不伪造)。
-      failureTags: this.attributeFailureTags(input),
+      failureTags: attributeFailureTags(input),
       patch: {
         turn: input.turn,
         budget,
@@ -536,7 +374,7 @@ export class ControlPlane {
     });
 
     if (!idempotent && decision.kind === "needs_human") {
-      this.pending.set(input.runId, {
+      this.state.pending.set(input.runId, {
         loopId: input.loopId,
         requestId,
       });
@@ -579,7 +417,7 @@ export class ControlPlane {
    * goes active → budget_limited (先触者停) and ok=false is returned.
    */
   async beginTurn(runId: string, nextTurn: number): Promise<BeginTurnResult> {
-    const found = await this.findRun(runId);
+    const found = await findRun(this.deps, this.state, runId);
     if (!found) {
       throw new ControlPlaneError("run_not_found", `Run '${runId}' not found`);
     }
@@ -587,7 +425,7 @@ export class ControlPlane {
     const { loopId } = found;
 
     if (record.state === "retry") {
-      const resumed = await this.transition({
+      const resumed = await transition(this.deps, this.state, {
         loopId,
         runId,
         record,
@@ -617,9 +455,9 @@ export class ControlPlane {
       // 每轮开始前检查（预算与停止规则.md 检查点）：能否开新一轮只看
       // turns / time / tokens —— retry 预算在判定为 retry 时已消耗并授权，
       // 不在此重复闸门（否则 max_retries=1 永远走不到第一轮 retry）。
-      const exhausted = this.exhaustedAtTurnStart(budget);
+      const exhausted = exhaustedAtTurnStart(budget);
       if (exhausted.length > 0) {
-        const limited = await this.transition({
+        const limited = await transition(this.deps, this.state, {
           loopId,
           runId,
           record,
@@ -644,6 +482,165 @@ export class ControlPlane {
   }
 
   /**
+   * Advance to the next subtask turn without a terminal control decision.
+   * Used by the planner-driven multi-turn loop when a subtask completes but
+   * more subtasks remain. Creates or updates the run_state record so the
+   * next turn can begin, while keeping the run in `active` state.
+   *
+   * When `advance` is provided, also appends a truthful `subtask_advance`
+   * decision entry: the subtask PASSED verification, so the entry carries no
+   * failure_tags and consumes no retry budget (教训: 此前由 run-service 把
+   * judgment 改写成 failed/retry 借道 applyJudgment, 导致 phantom
+   * verification_error 归因、retry 预算白烧、判定报告失真 —— 见
+   * decision.ts 文件头 subtask_advance 条目)。推进轮的 token/time 消耗
+   * 仍如实累积进预算快照。
+   *
+   * Turn-budget guard: advancing needs headroom for the next turn; when
+   * nextTurn would exceed max_turns the run goes budget_limited instead
+   * (先触者停), same as a retry with no headroom.
+   */
+  async advanceSubtaskTurn(
+    runId: string,
+    loopId: string,
+    nextTurn: number,
+    budget: BudgetLimits,
+    sessionRef?: string | null,
+    advance?: {
+      /** The turn whose subtask just completed (nextTurn - 1). */
+      completedTurn: number;
+      /** 1-based position of the subtask that just completed. */
+      subtaskIndex: number;
+      subtaskCount: number;
+      judgment: import("@yep-anywhere/shared").JudgmentReport | null;
+      usage: { tokens: number | null; timeMinutes: number };
+    },
+  ): Promise<RunStateRecord> {
+    this.state.runIndex.set(runId, loopId);
+    const existing = await this.deps.runStateStore.load(loopId);
+    const base: Budget =
+      existing?.budget ??
+      BudgetSchema.parse({
+        ...budget,
+        used_tokens: 0,
+        used_time_minutes: 0,
+        used_turns: 0,
+        used_retries: 0,
+      });
+    const now = new Date().toISOString();
+    // 推进轮消耗如实累积 (与 applyJudgment 的逐轮累积口径一致); retry
+    // 预算不动 —— 推进不是重试。used_turns = 已完成轮次: nextTurn 尚未
+    // 开始, 不能预记 (预记会让该轮未执行就被 pause 的 run 在 resume 时
+    // 误判 budget_limited, UI 也会在该轮未跑时提前显示 N/N)。
+    const merged: Budget = advance
+      ? {
+          ...base,
+          used_turns: advance.completedTurn,
+          used_tokens: base.used_tokens + (advance.usage.tokens ?? 0),
+          used_time_minutes: base.used_time_minutes + advance.usage.timeMinutes,
+        }
+      : { ...base, used_turns: nextTurn };
+
+    if (advance) {
+      // 诚实的推进决策: 子任务判过, 不是失败重试 —— 无 failure_tags,
+      // 不消耗 retry 预算。幂等键 = run + 完成轮 + subtask_advance。
+      // 落账先于下方的轮次预算护栏: 即使护栏拦下, "子任务判过、应推进"
+      // 也是事实; 重启重建按 subtask_advance 计数推导子任务索引, 护栏
+      // 路径漏记会让索引回退到已完成的子任务 (重跑一遍)。
+      const entry: import("@yep-anywhere/shared").DecisionEntry = {
+        decision_id: controlDecisionId(
+          runId,
+          advance.completedTurn,
+          "subtask_advance",
+        ),
+        loop_id: loopId,
+        run_id: runId,
+        decision: "subtask_advance",
+        reason: `subtask ${advance.subtaskIndex}/${advance.subtaskCount} passed verification (judgment overall == passed); planner advances to subtask ${advance.subtaskIndex + 1} — multi-turn decomposition, not a failure retry (no retry budget consumed, no failure attribution)`,
+        evidence_refs: advance.judgment?.evidence ?? [],
+        policy_refs: [],
+        next_action: "advance_subtask",
+        budget: merged,
+        created_at: now,
+      };
+      const entries = await this.deps.runLedgerStore.readDecisionEntries(runId);
+      if (!entries.some((e) => e.decision_id === entry.decision_id)) {
+        await this.deps.runLedgerStore.appendDecisionEntry(runId, entry);
+      }
+    }
+
+    // Turn-budget guard: no headroom for the turn we are about to start →
+    // budget_limited (active → budget_limited 是合法转移; max_turns 先触
+    // 者停, 预算与停止规则.md)。max_retries 不在此检查 —— 推进不消费
+    // retry 预算; time/token 在终局轮 applyJudgment 仍会兜底。
+    if (advance && nextTurn > merged.max_turns) {
+      const record: RunStateRecord = {
+        version: 2,
+        goal_id: existing?.goal_id ?? `intent-${runId}`,
+        run_id: runId,
+        state: "active",
+        turn: advance.completedTurn,
+        intent_version: existing?.intent_version ?? 1,
+        workspace_ref:
+          existing?.workspace_ref ?? `workspace://${loopId}/${runId}`,
+        last_judgment: existing?.last_judgment ?? null,
+        pending_approval: existing?.pending_approval ?? null,
+        budget: merged,
+        session_ref: sessionRef ?? existing?.session_ref ?? null,
+        created_at: existing?.created_at ?? now,
+        updated_at: now,
+      };
+      const { record: limited } = await transition(this.deps, this.state, {
+        loopId,
+        runId,
+        record,
+        to: "budget_limited",
+        decision: "budget_limited",
+        decisionId: controlDecisionId(
+          runId,
+          advance.completedTurn,
+          "budget_limited",
+        ),
+        reason: `subtask ${advance.subtaskIndex}/${advance.subtaskCount} passed, but no turn budget left to start subtask ${advance.subtaskIndex + 1} (max_turns ${merged.max_turns} exhausted; 预算与停止规则.md 先触者停)`,
+        nextAction: "none",
+        evidenceRefs: advance.judgment?.evidence ?? [],
+        patch: { turn: advance.completedTurn, budget: merged },
+      });
+      return limited;
+    }
+
+    const record: RunStateRecord = {
+      version: 2,
+      goal_id: existing?.goal_id ?? `intent-${runId}`,
+      run_id: runId,
+      state: "active",
+      turn: nextTurn,
+      intent_version: existing?.intent_version ?? 1,
+      workspace_ref:
+        existing?.workspace_ref ?? `workspace://${loopId}/${runId}`,
+      last_judgment: existing?.last_judgment ?? null,
+      pending_approval: existing?.pending_approval ?? null,
+      budget: merged,
+      session_ref: sessionRef ?? existing?.session_ref ?? null,
+      created_at: existing?.created_at ?? now,
+      updated_at: now,
+    };
+
+    await this.deps.runStateStore.save(loopId, record);
+    this.state.statesByRunId.set(runId, "active");
+    this.deps.eventBus?.emit({
+      type: "loop-state-changed",
+      loop_id: loopId,
+      run_id: runId,
+      from_state: existing?.state ?? "active",
+      to_state: "active",
+      turn: nextTurn,
+      reason: `subtask advanced to turn ${nextTurn}`,
+      timestamp: record.updated_at,
+    });
+    return record;
+  }
+
+  /**
    * Answer a needs_human run (POST /api/runs/:id/decision).
    *
    * Phase-2 transition table (03-API契约.md 完整迁移表, 状态机.md):
@@ -654,7 +651,7 @@ export class ControlPlane {
    */
   async submitDecision(
     runId: string,
-    action: RunDecisionAction,
+    action: import("@yep-anywhere/shared").RunDecisionAction,
     feedback?: string,
   ): Promise<RunStateRecord> {
     if (action === "request_changes" && !feedback?.trim()) {
@@ -664,9 +661,9 @@ export class ControlPlane {
       );
     }
 
-    const waiting = await this.findWaitingRun(runId);
+    const waiting = await findWaitingRun(this.deps, this.state, runId);
     if (!waiting) {
-      if (await this.runExists(runId)) {
+      if (await runExists(this.deps, this.state, runId)) {
         throw new ControlPlaneError(
           "invalid_state",
           `Run '${runId}' is not waiting for a human decision (not in needs_human)`,
@@ -690,7 +687,7 @@ export class ControlPlane {
     }
     const target: RunState =
       action === "reject" ? "failed" : action === "pause" ? "paused" : "active";
-    const decisionKind: DecisionKind =
+    const decisionKind: import("@yep-anywhere/shared").DecisionKind =
       target === "active"
         ? "resumed"
         : target === "failed"
@@ -698,7 +695,10 @@ export class ControlPlane {
           : "paused";
 
     const now = new Date().toISOString();
-    const reasonByAction: Record<RunDecisionAction, string> = {
+    const reasonByAction: Record<
+      import("@yep-anywhere/shared").RunDecisionAction,
+      string
+    > = {
       approve:
         "human approved; run resumes with the human response carried back (03: needs_human → active)",
       reject: "human rejected the run",
@@ -706,7 +706,7 @@ export class ControlPlane {
         "human requested changes; feedback is injected into the next turn's context (03: needs_human → active)",
       pause: "human paused the run from needs_human",
     };
-    const { record: updated } = await this.transition({
+    const { record: updated } = await transition(this.deps, this.state, {
       loopId,
       runId,
       record,
@@ -735,17 +735,17 @@ export class ControlPlane {
             },
       patch: { pending_approval: null },
     });
-    this.pending.delete(runId);
+    this.state.pending.delete(runId);
 
     if (target === "active") {
-      this.notifyResume({
+      notifyResume(this.resumeListeners, {
         runId,
         loopId,
         cause: action === "approve" ? "human_approve" : "human_request_changes",
         feedback,
       });
     } else if (target === "failed") {
-      this.notifyResolved(runId, target);
+      notifyResolved(this.resolvedListeners, runId, target);
     }
     // paused: the run stays suspended (and registered) until resumePaused —
     // same blocking semantics as needs_human, minus the approval payload.
@@ -802,7 +802,7 @@ export class ControlPlane {
         `Loop '${loopId}' run is '${record.state}', not active (pause requires an active run; needs_human runs are paused via POST /api/runs/:id/decision)`,
       );
     }
-    const { record: updated } = await this.transition({
+    const { record: updated } = await transition(this.deps, this.state, {
       loopId,
       runId: record.run_id,
       record,
@@ -836,7 +836,7 @@ export class ControlPlane {
         `Loop '${loopId}' run is '${record.state}', not paused (resume requires a paused run)`,
       );
     }
-    const { record: updated } = await this.transition({
+    const { record: updated } = await transition(this.deps, this.state, {
       loopId,
       runId: record.run_id,
       record,
@@ -848,7 +848,7 @@ export class ControlPlane {
       nextAction: "resume_next_turn",
       patch: {},
     });
-    this.notifyResume({
+    notifyResume(this.resumeListeners, {
       runId: record.run_id,
       loopId,
       cause: "resume_signal",
@@ -876,7 +876,7 @@ export class ControlPlane {
         `Loop '${input.loopId}' run is not active (settleMerge requires the post-approve active state)`,
       );
     }
-    const { record: updated } = await this.transition({
+    const { record: updated } = await transition(this.deps, this.state, {
       loopId: input.loopId,
       runId: input.runId,
       record,
@@ -899,9 +899,10 @@ export class ControlPlane {
   /**
    * Supplement a budget_limited run's budget and resume it
    * (budget_limited → active, 状态机.md: 人工补充预算并恢复). `patch` raises
-   * one or more max_* fields; the result is re-validated (max_retries <
-   * max_turns still has to hold). Interface for the budget-resume control
-   * endpoint, which lands with the routes slice.
+   * one or more max_* fields; the result is re-validated against
+   * BudgetSchema (max_retries >= max_turns is legal — 先触者停, 06 #31).
+   * Interface for the budget-resume control endpoint, which lands with the
+   * routes slice.
    */
   async supplementBudget(
     loopId: string,
@@ -941,7 +942,7 @@ export class ControlPlane {
         "budget supplement is invalid (budget schema rejected the merged limits)",
       );
     }
-    const { record: updated } = await this.transition({
+    const { record: updated } = await transition(this.deps, this.state, {
       loopId,
       runId: record.run_id,
       record,
@@ -952,7 +953,7 @@ export class ControlPlane {
       nextAction: "resume_next_turn",
       patch: { budget: supplemented },
     });
-    this.notifyResume({
+    notifyResume(this.resumeListeners, {
       runId: record.run_id,
       loopId,
       cause: "budget_supplemented",
@@ -961,150 +962,54 @@ export class ControlPlane {
   }
 
   /**
-   * The single writer path for every state change: transition-table guard,
-   * idempotent decision-ledger append, run_state save, in-memory indexes,
-   * loop-state-changed broadcast. `record.state` is the from-state.
+   * Force a non-terminal run to failed. Used by the run service when restart
+   * recovery cannot rebuild the execution context or when a resumed run
+   * crashes before it can be judged — preventing the run from staying stuck
+   * in `active`/`retry` forever after a server restart.
+   *
+   * By default only transitions out of `active` or `retry`; terminal runs are
+   * left untouched and other blocking states (needs_human / paused /
+   * budget_limited) are preserved for human decision. Pass `{ force: true }`
+   * to override this guard (used by dead-loop detection to break a recurring
+   * needs_human blocker).
    */
-  private async transition(opts: {
-    loopId: string;
-    runId: string;
-    record: RunStateRecord;
-    to: RunState;
-    decision: DecisionKind;
-    /** Deterministic idempotency key (run_id + turn + target/cause). */
-    decisionId: string;
-    reason: string;
-    nextAction: string;
-    evidenceRefs?: string[];
-    failureTags?: FailureTag[];
-    /** 涉及策略（policy://）；策略投影命中的决策携带，否则为空数组。 */
-    policyRefs?: string[];
-    blockerFingerprint?: string;
-    repeatedBlockerCount?: number;
-    feedback?: string;
-    override?: DecisionEntry["override"];
-    patch?: Partial<RunStateRecord>;
-  }): Promise<{
-    record: RunStateRecord;
-    entry: DecisionEntry;
-    idempotent: boolean;
-  }> {
-    const { record, to, runId, loopId } = opts;
-    assertLegalTransition(record.state, to, { runId, turn: record.turn });
-
-    // Idempotent write: a repeated trigger of the same transition finds its
-    // entry and does not append / re-save / re-emit.
-    const entries = await this.deps.runLedgerStore.readDecisionEntries(runId);
-    const existing = entries.find((e) => e.decision_id === opts.decisionId);
-    if (existing) {
-      return { record, entry: existing, idempotent: true };
+  async failRun(
+    runId: string,
+    reason: string,
+    opts?: { force?: boolean },
+  ): Promise<RunStateRecord | null> {
+    const found = await findRun(this.deps, this.state, runId);
+    if (!found) {
+      return null;
     }
-
-    const now = new Date().toISOString();
-    const budget = opts.patch?.budget ?? record.budget;
-    const entry: DecisionEntry = {
-      decision_id: opts.decisionId,
-      loop_id: loopId,
-      run_id: runId,
-      decision: opts.decision,
-      reason: opts.reason,
-      evidence_refs: opts.evidenceRefs ?? [],
-      policy_refs: opts.policyRefs ?? [],
-      next_action: opts.nextAction,
-      feedback: opts.feedback,
-      override: opts.override,
-      failure_tags: opts.failureTags,
-      // 账本可见逐轮消耗：每条决策携带落账时的预算快照。
-      budget: budget ?? undefined,
-      blocker_fingerprint: opts.blockerFingerprint,
-      repeated_blocker_count: opts.repeatedBlockerCount,
-      created_at: now,
-    };
-    await this.deps.runLedgerStore.appendDecisionEntry(runId, entry);
-
-    const from = record.state;
-    const updated: RunStateRecord = {
-      ...record,
-      ...opts.patch,
-      state: to,
-      updated_at: now,
-    };
-    await this.deps.runStateStore.save(loopId, updated);
-    this.statesByRunId.set(runId, to);
-    this.runIndex.set(runId, loopId);
-
-    this.deps.eventBus?.emit({
-      type: "loop-state-changed",
-      loop_id: loopId,
-      run_id: runId,
-      from_state: from,
-      to_state: to,
-      turn: record.turn,
-      reason: opts.reason,
-      timestamp: now,
-    });
-
-    // 04-存储约定 .loop/STATE.md 人可读投影: 每次状态迁移后整体重写
-    // 原 workspace 的 STATE.md。接线点选在这里 (transition 是所有状态
-    // 迁移的唯一出口 —— applyJudgment 各终态/needs_human/retry、
-    // submitDecision、pauseActive、resumePaused、settleMerge、
-    // supplementBudget、beginTurn 的 budget_limited 全部经此), 而不是
-    // run-service 代笔: control-plane 本就是 run_state 的单写者, 投影
-    // 跟着同一迁移走才能保证"单写者"语义字面上成立。fire-and-forget
-    // (只发不等), 失败只 warn (投影不是事实源)。
-    this.emitStateMdProjection(loopId, updated);
-
-    // 阶段 3 learning_event (02 §8.4): a terminal decision (complete /
-    // failed / budget_limited) or a decision carrying failure_tags emits
-    // one learning signal for the async learning worker. Fire-and-forget
-    // (只发不等): the append is not awaited and any emission failure is
-    // logged by emitLearningEvent, never propagated — 主链路对学习零感知.
+    const { loopId, record } = found;
     if (
-      to === "complete" ||
-      to === "failed" ||
-      to === "budget_limited" ||
-      (entry.failure_tags?.length ?? 0) > 0
+      record.state === "complete" ||
+      record.state === "failed" ||
+      record.state === "budget_limited"
     ) {
-      this.emitLearningEvent({
-        // Deterministic idempotency key derived from the decision entry;
-        // an idempotent replay returns above before reaching this point.
-        event_id: `learn-evt-${opts.decisionId}`,
-        run_id: runId,
-        loop_id: loopId,
-        decision: opts.decision,
-        judgment_ref: updated.last_judgment ?? "not_available",
-        ledger_refs: [`ledger://${runId}`, `ledger://decision-${runId}`],
-        failure_tags: entry.failure_tags ?? [],
-        created_at: now,
-      });
+      return record;
     }
-
-    return { record: updated, entry, idempotent: false };
-  }
-
-  /**
-   * Append a learning_event without awaiting it (02 §8.4: 主链路发出后即
-   * 继续，不等学习结果). Any failure (schema, IO — e.g. EACCES on
-   * events.jsonl) is caught and logged here; run progression is unaffected.
-   */
-  private emitLearningEvent(event: LearningEvent): void {
-    const store = this.deps.learningEventStore;
-    if (!store) {
-      return;
+    if (!opts?.force && record.state !== "active" && record.state !== "retry") {
+      // Preserve human-facing states; do not auto-fail a run waiting for a
+      // person or a resume signal / budget supplement.
+      return record;
     }
-    const pending: Promise<void> = store.appendEvent(event).catch((error) => {
-      console.error(
-        `[ControlPlane] learning_event emit failed for run ${event.run_id} (只发不等, run 推进不受影响):`,
-        error,
-      );
+    const { record: updated } = await transition(this.deps, this.state, {
+      loopId,
+      runId,
+      record,
+      to: "failed",
+      decision: "failed",
+      decisionId: `decision-${runId}-t${record.turn}-restart-recovery-failed`,
+      reason,
+      nextAction: "none",
+      evidenceRefs: [],
+      failureTags: ["runtime_blackbox_error"],
+      patch: { pending_approval: null },
     });
-    this.pendingLearningEvents.push(pending);
-    void pending.finally(() => {
-      const index = this.pendingLearningEvents.indexOf(pending);
-      if (index >= 0) {
-        this.pendingLearningEvents.splice(index, 1);
-      }
-    });
+    notifyResolved(this.resolvedListeners, runId, "failed");
+    return updated;
   }
 
   /**
@@ -1112,51 +1017,7 @@ export class ControlPlane {
    * Production code never awaits emissions (只发不等).
    */
   async settleLearningEvents(): Promise<void> {
-    await Promise.all(this.pendingLearningEvents);
-  }
-
-  /**
-   * Fire-and-forget .loop/STATE.md 投影 (04-存储约定)。从 LoopCard 取
-   * workspace.path (原仓库路径 —— worktree 策略下投影仍写原 workspace,
-   * 口径见 state-md-projection.ts 文件头) 与 persistence.state_file;
-   * card 缺失或未配 workspace.path 时跳过 (投影无目标, 不算错误)。
-   * projectStateMd 自身绝不抛, 这里的 .catch 只是兜底。
-   */
-  private emitStateMdProjection(loopId: string, record: RunStateRecord): void {
-    const store = this.deps.loopCardStore;
-    if (!store) {
-      return;
-    }
-    const card = store.getLoop(loopId)?.card;
-    const workspacePath = card?.loop.workspace.path;
-    if (!card || !workspacePath) {
-      return;
-    }
-    const pending: Promise<void> = projectStateMd({
-      workspacePath,
-      stateFile: card.loop.persistence.state_file,
-      snapshot: {
-        loopId,
-        runId: record.run_id,
-        state: record.state,
-        turn: record.turn,
-        budget: record.budget,
-        sessionRef: record.session_ref,
-        updatedAt: record.updated_at,
-      },
-    }).catch((error) => {
-      console.warn(
-        `[ControlPlane] STATE.md projection failed for loop ${loopId} (只发不等, run 推进不受影响):`,
-        error,
-      );
-    });
-    this.pendingStateMdProjections.push(pending);
-    void pending.finally(() => {
-      const index = this.pendingStateMdProjections.indexOf(pending);
-      if (index >= 0) {
-        this.pendingStateMdProjections.splice(index, 1);
-      }
-    });
+    await settleLearningEvents(this.state);
   }
 
   /**
@@ -1164,206 +1025,6 @@ export class ControlPlane {
    * Production code never awaits projections (只发不等).
    */
   async settleStateMdProjections(): Promise<void> {
-    await Promise.all(this.pendingStateMdProjections);
-  }
-
-  /**
-   * 失败归因挂载 (修复计划 #21): 把本决策的归因信号映射为失败模式账本
-   * 8 值词汇, 去重; 无信号返回 undefined (条目缺省空数组)。只挂有真实
-   * 生产信号的类型, 不伪造 intent/context/memory_packet/eval_regression。
-   */
-  private attributeFailureTags(
-    input: ApplyJudgmentInput,
-  ): FailureTag[] | undefined {
-    const tags = new Set<FailureTag>();
-    if (input.adapterFailure) {
-      tags.add(input.adapterFailure.failureTag);
-    }
-    if (input.policyEscalation) {
-      tags.add("policy_error");
-    }
-    if (
-      input.judgment &&
-      (input.judgment.overall === "failed" ||
-        input.judgment.overall === "inconclusive")
-    ) {
-      tags.add("verification_error");
-    }
-    return tags.size > 0 ? [...tags] : undefined;
-  }
-
-  /**
-   * 03 "loop-budget-warning": budget 消耗越过 80% 阈值时广播, 一次/run/
-   * 字段 (内存去重; 进程重启后同一 run 再次越界会重发一次, 可接受 —
-   * 告警不是事实源, run_state 才是)。
-   */
-  private readonly budgetWarned = new Set<string>();
-
-  private maybeWarnBudget(input: ApplyJudgmentInput, budget: Budget): void {
-    if (!this.deps.eventBus) {
-      return;
-    }
-    const fields: { field: "max_turns" | "max_retries"; ratio: number }[] = [];
-    if (budget.max_turns > 0) {
-      fields.push({
-        field: "max_turns",
-        ratio: budget.used_turns / budget.max_turns,
-      });
-    }
-    if (budget.max_retries > 0) {
-      fields.push({
-        field: "max_retries",
-        ratio: budget.used_retries / budget.max_retries,
-      });
-    }
-    for (const { field, ratio } of fields) {
-      if (ratio < 0.8) {
-        continue;
-      }
-      const key = `${input.runId}:${field}`;
-      if (this.budgetWarned.has(key)) {
-        continue;
-      }
-      this.budgetWarned.add(key);
-      this.deps.eventBus.emit({
-        type: "loop-budget-warning",
-        loop_id: input.loopId,
-        run_id: input.runId,
-        turns_used: budget.used_turns,
-        max_turns: budget.max_turns,
-        retries_used: budget.used_retries,
-        max_retries: budget.max_retries,
-        near_limit: field,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }
-
-  /**
-   * Which budget fields are exhausted. `completedTurns` is the number of
-   * finished turns (max_turns 含首轮: starting another turn requires
-   * completedTurns < max_turns). max_tokens == 0 means untracked.
-   */
-  private exhaustedFields(budget: Budget, completedTurns: number): string[] {
-    const exhausted: string[] = [];
-    if (completedTurns >= budget.max_turns) {
-      exhausted.push(`max_turns (${completedTurns}/${budget.max_turns})`);
-    }
-    if (budget.used_retries >= budget.max_retries) {
-      exhausted.push(
-        `max_retries (${budget.used_retries}/${budget.max_retries})`,
-      );
-    }
-    if (budget.used_time_minutes >= budget.max_time_minutes) {
-      exhausted.push(
-        `max_time_minutes (${budget.used_time_minutes}/${budget.max_time_minutes})`,
-      );
-    }
-    if (budget.max_tokens > 0 && budget.used_tokens >= budget.max_tokens) {
-      exhausted.push(`max_tokens (${budget.used_tokens}/${budget.max_tokens})`);
-    }
-    return exhausted;
-  }
-
-  /**
-   * Pre-turn budget fields (beginTurn): turns / time / tokens only — see
-   * the beginTurn call-site comment for why retries are excluded here.
-   */
-  private exhaustedAtTurnStart(budget: Budget): string[] {
-    const exhausted: string[] = [];
-    if (budget.used_turns >= budget.max_turns) {
-      exhausted.push(`max_turns (${budget.used_turns}/${budget.max_turns})`);
-    }
-    if (budget.used_time_minutes >= budget.max_time_minutes) {
-      exhausted.push(
-        `max_time_minutes (${budget.used_time_minutes}/${budget.max_time_minutes})`,
-      );
-    }
-    if (budget.max_tokens > 0 && budget.used_tokens >= budget.max_tokens) {
-      exhausted.push(`max_tokens (${budget.used_tokens}/${budget.max_tokens})`);
-    }
-    return exhausted;
-  }
-
-  private notifyResume(signal: ResumeSignal): void {
-    for (const listener of this.resumeListeners) {
-      try {
-        listener(signal);
-      } catch (error) {
-        console.error("[ControlPlane] resume listener error:", error);
-      }
-    }
-  }
-
-  private notifyResolved(runId: string, state: RunState): void {
-    for (const listener of this.resolvedListeners) {
-      try {
-        listener(runId, state);
-      } catch (error) {
-        console.error("[ControlPlane] resolved listener error:", error);
-      }
-    }
-  }
-
-  /** Locate a run's state record by run_id (index first, then a file scan). */
-  private async findRun(
-    runId: string,
-  ): Promise<{ loopId: string; record: RunStateRecord } | null> {
-    const loopId = this.runIndex.get(runId);
-    if (loopId) {
-      const record = await this.deps.runStateStore.load(loopId);
-      if (record && (record.run_id === runId || record.run_id === "")) {
-        return { loopId, record };
-      }
-    }
-    const states = await this.deps.runStateStore.list();
-    for (const state of states) {
-      if (state.state.run_id === runId) {
-        this.runIndex.set(runId, state.loopId);
-        return { loopId: state.loopId, record: state.state };
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Locate a needs_human run: in-memory index first, then a scan of the
-   * persisted state files (covers server restarts — a waiting run's
-   * pending_approval survives in state/<loop_id>.json).
-   */
-  private async findWaitingRun(
-    runId: string,
-  ): Promise<{ loopId: string; record: RunStateRecord } | null> {
-    const pendingInfo = this.pending.get(runId);
-    if (pendingInfo) {
-      const record = await this.deps.runStateStore.load(pendingInfo.loopId);
-      if (record?.state === "needs_human") {
-        return { loopId: pendingInfo.loopId, record };
-      }
-    }
-    const states = await this.deps.runStateStore.list();
-    for (const { loopId, state } of states) {
-      if (
-        state.state === "needs_human" &&
-        state.pending_approval?.run_id === runId
-      ) {
-        // Rebuild the in-memory index for subsequent calls.
-        this.pending.set(runId, {
-          loopId,
-          requestId: state.pending_approval.request_id,
-        });
-        this.runIndex.set(runId, loopId);
-        return { loopId, record: state };
-      }
-    }
-    return null;
-  }
-
-  /** A run "exists" if it has a ledger file or a known in-memory state. */
-  private async runExists(runId: string): Promise<boolean> {
-    if (this.statesByRunId.has(runId)) {
-      return true;
-    }
-    return (await this.deps.runLedgerStore.readEntry(runId)) !== null;
+    await settleStateMdProjections(this.state);
   }
 }

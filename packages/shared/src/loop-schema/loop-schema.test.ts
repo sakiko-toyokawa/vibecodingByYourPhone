@@ -73,6 +73,7 @@ const intentContractExample = {
     max_turns: 3,
     max_retries: 2,
   },
+  security_level: "workspace_write",
   stop_rules: {
     repetition: { max_same_failure: 2 },
     safety: { stop_on_policy_block: true },
@@ -137,10 +138,12 @@ test("LoopCard: schedule 触发缺 cron 应失败", () => {
   assert.equal(LoopCardSchema.safeParse(invalid).success, false);
 });
 
-test("LoopCard: max_retries >= max_turns 应失败", () => {
-  const invalid = structuredClone(loopCardExample);
-  invalid.loop.stop_rules.max_retries = 10;
-  assert.equal(LoopCardSchema.safeParse(invalid).success, false);
+test("LoopCard: max_retries >= max_turns 合法 (先触者停语义)", () => {
+  // loop-card.ts: 无严格小于约束 —— 先触者停语义下 max_retries >= max_turns
+  // 合法 (retry 预算与轮次预算各自独立触顶, 谁先耗尽谁生效)。
+  const valid = structuredClone(loopCardExample);
+  valid.loop.stop_rules.max_retries = 10;
+  assert.equal(LoopCardSchema.safeParse(valid).success, true);
 });
 
 test("IntentContract: 非法 source 枚举值应失败", () => {
@@ -149,10 +152,12 @@ test("IntentContract: 非法 source 枚举值应失败", () => {
   assert.equal(IntentContractSchema.safeParse(invalid).success, false);
 });
 
-test("IntentContract: max_retries >= max_turns 应失败", () => {
-  const invalid = structuredClone(intentContractExample);
-  invalid.budget.max_retries = 3;
-  assert.equal(IntentContractSchema.safeParse(invalid).success, false);
+test("IntentContract: max_retries >= max_turns 合法 (06 #31 先触者停)", () => {
+  // budget.ts: max_retries 与 max_turns 同时生效、先触者停, 无严格小于
+  // 约束 (spec 未规定, 06 偏差 #31 移除了实现私加的约束)。
+  const valid = structuredClone(intentContractExample);
+  valid.budget.max_retries = 3;
+  assert.equal(IntentContractSchema.safeParse(valid).success, true);
 });
 
 test("IntentContract: 缺必填字段 budget 应失败", () => {
@@ -271,6 +276,151 @@ test("LoopCard: 阶段 1 扩展 verification.commands parse 通过", () => {
     static: ["pnpm run lint"],
     runtime: ["pnpm run test -- --smoke"],
   });
+});
+
+// --- P0: layered-verifier 掛載點擴展 ---
+
+test("LoopCard: P0 扩展 rule/structural phase parse 通过", () => {
+  const extended = structuredClone(loopCardExample);
+  extended.loop.verification = {
+    required: ["static", "runtime", "rule", "structural", "review"],
+  };
+  const result = LoopCardSchema.safeParse(extended);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+  assert.deepEqual(result.data?.loop.verification.required, [
+    "static",
+    "runtime",
+    "rule",
+    "structural",
+    "review",
+  ]);
+});
+
+test("LoopCard: P2 verification.rules 內嵌規則 parse 通过", () => {
+  const extended = structuredClone(loopCardExample);
+  extended.loop.verification = {
+    required: ["rule"],
+    rules: [
+      {
+        name: "no-hardcoded-secrets",
+        pattern: "secret",
+        severity: "error",
+        message: "檢測到疑似硬編碼密鑰",
+        suggestion: "改用環境變數",
+        scope: "changed",
+        files: [".ts"],
+      },
+    ],
+  } as typeof extended.loop.verification;
+  const result = LoopCardSchema.safeParse(extended);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+  assert.equal(result.data?.loop.verification.rules?.[0]?.scope, "changed");
+});
+
+test("LoopCard: P2 verification.rules 缺省 severity/scope 有預設值", () => {
+  const extended = structuredClone(loopCardExample);
+  extended.loop.verification = {
+    required: ["rule"],
+    rules: [{ name: "r", pattern: "x", message: "m" }],
+  } as typeof extended.loop.verification;
+  const result = LoopCardSchema.safeParse(extended);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+  assert.equal(result.data?.loop.verification.rules?.[0]?.severity, "error");
+  assert.equal(result.data?.loop.verification.rules?.[0]?.scope, "changed");
+});
+
+test("LoopCard: P2 verification.rules 非法 scope 應失敗", () => {
+  const extended = structuredClone(loopCardExample);
+  extended.loop.verification = {
+    required: ["rule"],
+    rules: [{ name: "r", pattern: "x", message: "m", scope: "everywhere" }],
+  } as typeof extended.loop.verification;
+  assert.equal(LoopCardSchema.safeParse(extended).success, false);
+});
+
+test("LoopCard: interaction verifier config parse 通过", () => {
+  const extended = structuredClone(loopCardExample);
+  extended.loop.verification = {
+    required: ["static", "interaction"],
+    interaction: {
+      enabled: true,
+      url: "http://localhost:3400",
+      start_command: "pnpm dev",
+      ready_url: "http://localhost:3400/health",
+      timeout_ms: 180000,
+      install_command: "pnpm add -D @playwright/test playwright",
+    },
+  } as typeof extended.loop.verification;
+  const result = LoopCardSchema.safeParse(extended);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+  assert.equal(result.data?.loop.verification.interaction?.enabled, true);
+  assert.equal(
+    result.data?.loop.verification.interaction?.install_command,
+    "pnpm add -D @playwright/test playwright",
+  );
+});
+
+test("VerifierReport: P0 扩展字段 score/issues/auto_fixable/suggested_fix parse 通过", () => {
+  const extended = {
+    ...verifierReportExample,
+    score: 0.65,
+    issues: [
+      {
+        id: "L2-001",
+        severity: "critical",
+        layer: "rule",
+        location: { file: "src/config.ts", line: 15 },
+        message: "检测到硬编码密钥",
+        suggestion: "使用 process.env.API_KEY",
+        auto_fixable: true,
+        fix: "const API_KEY = process.env.API_KEY;",
+      },
+    ],
+    auto_fixable: true,
+    suggested_fix: "移除硬编码密钥并补 .env.example",
+  };
+  const result = VerifierReportSchema.safeParse(extended);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+  assert.equal(result.data?.issues?.[0]?.severity, "critical");
+});
+
+test("VerifierReport: score 超出 0–1 应失败", () => {
+  const invalid = { ...verifierReportExample, score: 1.5 };
+  assert.equal(VerifierReportSchema.safeParse(invalid).success, false);
+});
+
+test("VerifierReport: issues 内 layer 使用新 phase 枚举", () => {
+  const withIssue = {
+    ...verifierReportExample,
+    issues: [{ id: "X", severity: "minor", layer: "structural", message: "m" }],
+  };
+  const result = VerifierReportSchema.safeParse(withIssue);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+});
+
+test("IntentContract: P0 扩展 intent_understanding parse 通过", () => {
+  const extended = structuredClone(intentContractExample) as Record<
+    string,
+    unknown
+  >;
+  extended.intent_understanding = {
+    original_prompt: "帮我优化订单计算",
+    understanding_summary: "用户希望定位并优化 calculate_total 性能",
+    assumptions: ["不改动公共 API"],
+    clarification_questions: [],
+    generated_by: "agent",
+    agent_model: "claude-opus-4-6",
+    confirmed_by_human: true,
+  };
+  const result = IntentContractSchema.safeParse(extended);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+  assert.equal(result.data?.intent_understanding?.generated_by, "agent");
+});
+
+test("IntentContract: 无 intent_understanding 的旧合约向后兼容", () => {
+  const result = IntentContractSchema.safeParse(intentContractExample);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+  assert.equal(result.data?.intent_understanding, undefined);
 });
 
 // 示例照抄 docs/spec/02-schema契约.md §8.2（created_at 为扩展字段，

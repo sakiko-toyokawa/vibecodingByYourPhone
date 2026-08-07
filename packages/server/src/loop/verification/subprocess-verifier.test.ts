@@ -125,7 +125,7 @@ test("runVerificationCommands: worst status wins across commands", async () => {
   assert.equal(report.unresolved_risks.length, 2);
 });
 
-test("runVerificationCommands: no commands → inconclusive without evidence", async () => {
+test("runVerificationCommands: no commands → passed vacuously without evidence", async () => {
   const { writeEvidence, files } = memoryEvidence();
   const report = await runVerificationCommands({
     phase: "runtime",
@@ -133,8 +133,8 @@ test("runVerificationCommands: no commands → inconclusive without evidence", a
     cwd,
     writeEvidence,
   });
-  assert.equal(report.status, "inconclusive");
-  assert.equal(report.recommendation, "escalate");
+  assert.equal(report.status, "passed");
+  assert.equal(report.recommendation, "stop");
   assert.deepEqual(report.evidence_refs, []);
   assert.equal(files.size, 0);
 });

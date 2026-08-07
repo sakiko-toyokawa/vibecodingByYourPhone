@@ -13,10 +13,17 @@
  * | failed    | (any)                                            | failed         |
  * | ok        | not run (card requires no phases)                | complete       |
  * | ok        | overall == passed && !requires_human             | complete       |
+ * | ok        | passed && 还有后续 subtask (planner run)         | subtask_advance |
  * | ok        | requires_human (any overall)                     | needs_human    |
  * | ok        | overall == failed && retryable && budget 有余量  | retry          |
  * | ok        | overall == failed && retryable && budget 耗尽    | budget_limited |
  * | ok        | failed && !retryable / inconclusive / escalate   | needs_human    |
+ *
+ * subtask_advance 一行不经 decideControl (ControlDecisionKind 是 run state
+ * 词汇, 推進不是状态): run-service 在推进轮短路 (shouldAdvanceSubtask →
+ * 跳过 applyJudgment), 由 control-plane.advanceSubtaskTurn 落诚实决策
+ * 条目。推进守卫: requires_human / policyEscalations 非空时不推进, 回落
+ * 本表 (人工透传最高优先, 02 §6)。
  *
  * Rules behind the table:
  * - requires_human is never overridden by a passing verdict (02 §6 aggregation

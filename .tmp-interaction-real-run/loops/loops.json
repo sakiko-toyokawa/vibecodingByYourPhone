@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "loops": {
+    "interaction-real-1786087077568": {
+      "id": "interaction-real-1786087077568",
+      "card": {
+        "loop": {
+          "id": "interaction-real-1786087077568",
+          "trigger": {
+            "type": "manual"
+          },
+          "handoff": {
+            "default_task_type": "maintenance",
+            "task": "Do not modify files. Verify that the Yep Anywhere web UI at the interaction URL loads and shows the Loops page or app shell."
+          },
+          "workspace": {
+            "strategy": "direct",
+            "path": "E:/projects/vibecodingByYourPhone-main"
+          },
+          "verification": {
+            "required": [
+              "interaction"
+            ],
+            "interaction": {
+              "enabled": true,
+              "url": "http://localhost:3510/loops",
+              "timeout_ms": 180000
+            }
+          },
+          "runtime": {
+            "provider": "codex",
+            "model": "gpt-5.4"
+          },
+          "policy": {
+            "approval_mode": "bypass"
+          },
+          "persistence": {
+            "state_file": ".loop/state/interaction-real-1786087077568/STATE.md"
+          },
+          "stop_rules": {
+            "max_turns": 1,
+            "max_time_minutes": 10,
+            "max_retries": 0
+          }
+        }
+      },
+      "created_at": "2026-08-07T07:17:57.576Z",
+      "updated_at": "2026-08-07T07:17:57.576Z",
+      "archived": false
+    }
+  }
+}

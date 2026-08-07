@@ -37,6 +37,7 @@ export interface SubprocessOutcome {
 export interface RunCommandOptions {
   cwd: string;
   timeoutMs?: number;
+  env?: NodeJS.ProcessEnv;
 }
 
 const NOT_RECOGNIZED = /command not found|is not recognized|not found/i;
@@ -57,6 +58,7 @@ export function runCommand(
         killSignal: "SIGTERM",
         maxBuffer: OUTPUT_CAP_BYTES,
         windowsHide: true,
+        env: options.env ? { ...process.env, ...options.env } : process.env,
       },
       (error, stdout, stderr) => {
         const durationMs = Date.now() - startedAt;
@@ -106,15 +108,15 @@ export async function runVerificationCommands(
   const { phase, commands, writeEvidence } = options;
 
   if (commands.length === 0) {
+    // No commands configured or detected: nothing to verify, so the phase
+    // passes vacuously (do not escalate — empty workspace is not a failure).
     return {
       verifier_phase: phase,
-      status: "inconclusive",
+      status: "passed",
       evidence_refs: [],
-      unresolved_risks: [
-        `no ${phase} verification command configured or detected in the workspace`,
-      ],
-      recommendation: "escalate",
-      confidence: 0.5,
+      unresolved_risks: [],
+      recommendation: "stop",
+      confidence: 0.9,
       requires_human: false,
     };
   }

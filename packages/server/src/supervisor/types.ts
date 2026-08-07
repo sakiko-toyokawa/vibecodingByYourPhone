@@ -25,7 +25,7 @@ export type ToolApprovalHook = (
 ) => Promise<ToolApprovalResult | undefined>;
 
 // Constants
-export const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+export const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 export const DEFAULT_IDLE_PREEMPT_THRESHOLD_MS = 10 * 1000; // 10 seconds - workers idle longer than this can be preempted
 
 // Re-export path utilities for backward compatibility

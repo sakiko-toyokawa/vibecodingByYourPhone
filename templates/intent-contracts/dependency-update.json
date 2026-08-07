@@ -1,0 +1,10 @@
+{
+  "task_type": "dependency_update",
+  "outcome": "升級指定依賴到安全/目標版本，保證構建與測試通過，產出變更報告",
+  "success_criteria": [
+    "依賴版本更新到目標版本",
+    "lint / typecheck / test 全部通過",
+    "產出變更摘要報告"
+  ],
+  "constraints": ["workspace_bounded", "不改公共 API（除非任務明確要求）"]
+}

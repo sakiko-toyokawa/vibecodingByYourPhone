@@ -1,4 +1,5 @@
 export * from "./loop-card.js";
+export * from "./verification-rules.js";
 export * from "./intent-contract.js";
 export * from "./budget.js";
 export * from "./run-ledger.js";
@@ -7,3 +8,4 @@ export * from "./decision.js";
 export * from "./run-state.js";
 export * from "./policy.js";
 export * from "./learning.js";
+export * from "./task-plan.js";

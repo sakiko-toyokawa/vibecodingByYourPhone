@@ -1,4 +1,13 @@
 import { z } from "zod";
+import { TaskPlanSchema } from "./task-plan.js";
+
+/** Security level determined by the intent contract. */
+export const SecurityLevelSchema = z.enum([
+  "read_only",
+  "workspace_write",
+  "full_access",
+]);
+export type SecurityLevel = z.infer<typeof SecurityLevelSchema>;
 
 /**
  * IntentContract v1 — loop/contract 把自然语言请求转成的可验证、可终止、
@@ -54,6 +63,35 @@ export const IntentContractSchema = z.object({
           max_clarification_turns: z.number().optional(),
         })
         .optional(),
+    })
+    .optional(),
+  /**
+   * Planner Agent 生成的多轮任务分解计划。存在时 run-service 按
+   * subtasks 逐轮执行；不存在时保持原有单轮行为。
+   */
+  plan: TaskPlanSchema.optional(),
+  /**
+   * 本次 run 的安全等级，由合约根据 approval_mode / policy 确定。
+   * 决定执行器使用哪种权限模式（read_only / workspace_write / full_access）。
+   * default("read_only")：该字段是后加的，升级前落盘的旧合约快照没有它，
+   * 缺省必须为最保守档，否则旧 run 重启恢复时 parse 失败永久卡死。
+   */
+  security_level: SecurityLevelSchema.default("read_only"),
+  /**
+   * 意圖理解區塊（P0 擴展，可選；對齊 layered-verifier 計畫 Phase 5）。
+   * 承載意圖理解 Agent 的中間產物：原始需求、理解摘要、假設與待澄清問題。
+   * template 路徑（既有 buildIntentContract）不填此塊；agent 路徑落地前
+   * 必須經人工確認（confirmed_by_human=true 方可觸發自動 run）。
+   */
+  intent_understanding: z
+    .object({
+      original_prompt: z.string(),
+      understanding_summary: z.string(),
+      assumptions: z.array(z.string()).default([]),
+      clarification_questions: z.array(z.string()).default([]),
+      generated_by: z.enum(["template", "agent"]),
+      agent_model: z.string().optional(),
+      confirmed_by_human: z.boolean().default(false),
     })
     .optional(),
 });

@@ -1,0 +1,14 @@
+{
+  "overall": "inconclusive",
+  "next_action": "escalate",
+  "retryable": false,
+  "requires_human": false,
+  "evidence": [
+    "artifact://run-20260807T071757Z-ccf13161/interaction-deps.json",
+    "artifact://run-20260807T071757Z-ccf13161/interaction-agent-output.txt",
+    "artifact://run-20260807T071757Z-ccf13161/collector-report.json"
+  ],
+  "unresolved_risks": [
+    "interaction agent 輸出無法解析為合法 Playwright 腳本 JSON"
+  ]
+}

@@ -17,6 +17,9 @@ export interface LoopCreateFormState {
   cron: string;
   verifyStatic: boolean;
   verifyRuntime: boolean;
+  verifyInteraction: boolean;
+  interactionUrl: string;
+  interactionStartCommand: string;
   maxTurns: string;
   maxRetries: string;
   maxTimeMinutes: string;
@@ -35,6 +38,9 @@ export const DEFAULT_LOOP_CREATE_FORM: LoopCreateFormState = {
   cron: "0 9 * * *",
   verifyStatic: true,
   verifyRuntime: true,
+  verifyInteraction: false,
+  interactionUrl: "http://localhost:3400",
+  interactionStartCommand: "",
   maxTurns: "1",
   maxRetries: "0",
   maxTimeMinutes: "30",
@@ -75,13 +81,13 @@ export function buildLoopCard(form: LoopCreateFormState): LoopCard {
   const task = form.task.trim();
   const workspacePath = stripSurroundingQuotes(form.workspacePath);
   const maxTurns = parsePositiveInt(form.maxTurns, 1);
-  const maxRetries = Math.min(
-    parseNonNegativeInt(form.maxRetries, 0),
-    Math.max(0, maxTurns - 1),
-  );
+  // 06 偏差 #31: max_retries >= max_turns 合法 (预算同时生效、先触者停),
+  // 不再强制 maxRetries < maxTurns。
+  const maxRetries = parseNonNegativeInt(form.maxRetries, 0);
   const required: LoopCard["loop"]["verification"]["required"] = [];
   if (form.verifyStatic) required.push("static");
   if (form.verifyRuntime) required.push("runtime");
+  if (form.verifyInteraction) required.push("interaction");
   const runtime =
     form.modelProvider.trim() || form.model.trim()
       ? {
@@ -100,6 +106,19 @@ export function buildLoopCard(form: LoopCreateFormState): LoopCard {
         : { type: "manual" as const },
     verification: {
       required,
+      ...(form.verifyInteraction
+        ? {
+            interaction: {
+              enabled: true,
+              ...(form.interactionUrl.trim()
+                ? { url: form.interactionUrl.trim() }
+                : {}),
+              ...(form.interactionStartCommand.trim()
+                ? { start_command: form.interactionStartCommand.trim() }
+                : {}),
+            },
+          }
+        : {}),
     },
     persistence: {
       state_file: `.loop/state/${id || "new-loop"}/STATE.md`,

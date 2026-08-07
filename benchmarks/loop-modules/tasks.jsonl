@@ -1,0 +1,31 @@
+{"task_id":"trigger-001-cron-matching","module":"trigger","issue_title":"Benchmark: loop/trigger cron matching"}
+{"task_id":"trigger-002-idempotency-and-pending-queue","module":"trigger","issue_title":"Benchmark: loop/trigger idempotency and pending queue"}
+{"task_id":"trigger-003-invalid-cron-fault-tolerance","module":"trigger","issue_title":"Benchmark: loop/trigger invalid cron fault tolerance"}
+{"task_id":"contract-001-budget-projection","module":"contract","issue_title":"Benchmark: loop/contract budget projection"}
+{"task_id":"contract-002-target-files-extraction","module":"contract","issue_title":"Benchmark: loop/contract target.files extraction"}
+{"task_id":"contract-003-readonly-vs-writeable-shape","module":"contract","issue_title":"Benchmark: loop/contract read-only vs write-capable shape"}
+{"task_id":"assembly-001-native-invocation-shape","module":"assembly","issue_title":"Benchmark: loop/assembly native_invocation shape"}
+{"task_id":"assembly-002-policy-projection-resolution","module":"assembly","issue_title":"Benchmark: loop/assembly policy projection resolution"}
+{"task_id":"assembly-003-fail-closed-provider-guard","module":"assembly","issue_title":"Benchmark: loop/assembly fail-closed provider guard"}
+{"task_id":"assembly-004-proposal-effects","module":"assembly","issue_title":"Benchmark: loop/assembly proposal effects"}
+{"task_id":"control-plane-001-state-machine-transitions","module":"control-plane","issue_title":"Benchmark: loop/control-plane state machine transitions"}
+{"task_id":"control-plane-002-budget-enforcement","module":"control-plane","issue_title":"Benchmark: loop/control-plane budget enforcement"}
+{"task_id":"control-plane-003-retry-backoff","module":"control-plane","issue_title":"Benchmark: loop/control-plane retry backoff"}
+{"task_id":"control-plane-004-human-decision-flow","module":"control-plane","issue_title":"Benchmark: loop/control-plane human decision flow"}
+{"task_id":"control-plane-005-learning-event-emission","module":"control-plane","issue_title":"Benchmark: loop/control-plane learning event emission"}
+{"task_id":"verification-001-static-runtime-command-selection","module":"verification","issue_title":"Benchmark: loop/verification static/runtime command selection"}
+{"task_id":"verification-002-subprocess-timeout","module":"verification","issue_title":"Benchmark: loop/verification subprocess timeout"}
+{"task_id":"verification-003-aggregate-rules","module":"verification","issue_title":"Benchmark: loop/verification aggregate rules"}
+{"task_id":"verification-004-per-turn-artifact-naming","module":"verification","issue_title":"Benchmark: loop/verification per-turn artifact naming"}
+{"task_id":"verification-005-required-artifacts","module":"verification","issue_title":"Benchmark: loop/verification required artifacts"}
+{"task_id":"state-001-loop-card-store-migration","module":"state","issue_title":"Benchmark: loop/state loop card store migration"}
+{"task_id":"state-002-run-ledger-serialization","module":"state","issue_title":"Benchmark: loop/state run ledger serialization"}
+{"task_id":"state-003-uri-escape-prevention","module":"state","issue_title":"Benchmark: loop/state URI escape prevention"}
+{"task_id":"state-004-worktree-cleanup-protection","module":"state","issue_title":"Benchmark: loop/state worktree cleanup protection"}
+{"task_id":"state-005-proposal-store-transitions","module":"state","issue_title":"Benchmark: loop/state proposal store transitions"}
+{"task_id":"learning-001-pipeline-advance","module":"learning","issue_title":"Benchmark: loop/learning pipeline advance"}
+{"task_id":"learning-002-meta-rule-protection","module":"learning","issue_title":"Benchmark: loop/learning meta-rule protection"}
+{"task_id":"learning-003-eval-runner-scope","module":"learning","issue_title":"Benchmark: loop/learning eval-runner scope"}
+{"task_id":"routes-001-loop-crud-pause-resume","module":"routes","issue_title":"Benchmark: loop/routes CRUD pause resume"}
+{"task_id":"routes-002-run-trigger-and-decision","module":"routes","issue_title":"Benchmark: loop/routes run trigger and decision"}
+{"task_id":"routes-003-proposal-approve-publish-rollback","module":"routes","issue_title":"Benchmark: loop/routes proposal approve publish rollback"}

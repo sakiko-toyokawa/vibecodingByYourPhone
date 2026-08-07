@@ -233,6 +233,104 @@ test("短路规则: static 硬失败后 runtime 段跳过且注明原因 (四段
   });
 });
 
+test("P0: rule/structural 走策略管线, 未就绪时诚实回 inconclusive", async () => {
+  await withStore(async ({ store, workspace, runId }) => {
+    const card = makeCard(workspace);
+    card.loop.verification = { required: ["rule", "structural"] };
+    const contract = buildIntentContract(card, { runId, source: "manual" });
+
+    const result = await verifyRun(
+      {
+        card,
+        contract,
+        runId,
+        workspacePath: workspace,
+        exitStatus: 0,
+        stdoutRef: null,
+      },
+      { store },
+    );
+
+    // 两段都进入策略管线并产出真实 VerifierReport (不是 not_applicable 占位)
+    assert.equal(result.reports.length, 2);
+    assert.deepEqual(
+      result.reports.map((r) => r.verifier_phase),
+      ["rule", "structural"],
+    );
+    for (const report of result.reports) {
+      assert.equal(report.status, "inconclusive");
+      assert.equal(report.recommendation, "escalate");
+    }
+    // inconclusive 参与聚合: overall 不再是 passed
+    assert.equal(result.judgment.overall, "inconclusive");
+    assert.equal(result.judgment.next_action, "escalate");
+    // per-phase artifact 落盘; P2 起 rule 由 RuleBasedStrategy 承載 ——
+    // 無規則可跑是配置缺口 (inconclusive); P3 起 structural 由
+    // StructuralStrategy 承載, 空 workspace 無適用 checker 同屬 inconclusive。
+    const ruleReport = JSON.parse(
+      (await store.readArtifact(runId, "verifier-report-rule.json")) ?? "",
+    );
+    assert.equal(ruleReport.verifier_phase, "rule");
+    assert.match(ruleReport.unresolved_risks[0] ?? "", /沒有任何規則可執行/);
+    const structuralReport = JSON.parse(
+      (await store.readArtifact(runId, "verifier-report-structural.json")) ??
+        "",
+    );
+    assert.match(structuralReport.unresolved_risks[0] ?? "", /無適用 checker/);
+  });
+});
+
+test("P0: rule 段硬失败时 structural/review 短路 (与 static/runtime 同逻辑)", async () => {
+  await withStore(async ({ store, workspace, runId }) => {
+    const card = makeCard(workspace);
+    card.loop.verification = { required: ["rule", "structural", "review"] };
+    const contract = buildIntentContract(card, { runId, source: "manual" });
+
+    // 注入一个 rule 段必失败的策略选择器, 验证新 phase 复用短路规则
+    const failingSelector = (async () => ({
+      name: "failing-rule",
+      verify: async () => ({
+        verifier_phase: "rule" as const,
+        status: "failed" as const,
+        evidence_refs: [] as string[],
+        unresolved_risks: ["rule check failed"],
+        recommendation: "retry" as const,
+        confidence: 0.9,
+        requires_human: false,
+      }),
+    })) as unknown as NonNullable<
+      Parameters<typeof verifyRun>[1]["selectStrategy"]
+    >;
+
+    const result = await verifyRun(
+      {
+        card,
+        contract,
+        runId,
+        workspacePath: workspace,
+        exitStatus: 0,
+        stdoutRef: null,
+      },
+      { store, selectStrategy: failingSelector },
+    );
+
+    assert.equal(result.reports.length, 1);
+    assert.equal(result.reports[0]?.verifier_phase, "rule");
+    assert.equal(result.judgment.overall, "failed");
+    // structural / review 被短路为 not_applicable 占位
+    const structural = JSON.parse(
+      (await store.readArtifact(runId, "verifier-report-structural.json")) ??
+        "",
+    );
+    assert.equal(structural.status, "not_applicable");
+    assert.match(structural.note, /short-circuited/);
+    const review = JSON.parse(
+      (await store.readArtifact(runId, "verifier-report-review.json")) ?? "",
+    );
+    assert.equal(review.status, "not_applicable");
+  });
+});
+
 test("review 段真实报告参与聚合, requires_human 透传不再被丢弃 (#12)", async () => {
   await withStore(async ({ store, workspace, runId }) => {
     const card = makeCard(workspace);
@@ -273,5 +371,198 @@ test("review 段真实报告参与聚合, requires_human 透传不再被丢弃 (
     );
     assert.equal(review.status, "inconclusive");
     assert.equal(review.requires_human, true);
+  });
+});
+
+test("P4: runReviewAgent 接管 review 段, agent 報告參與聚合", async () => {
+  await withStore(async ({ store, workspace, runId }) => {
+    const card = makeCard(workspace);
+    card.loop.verification = { required: ["static", "review"] };
+    const contract = buildIntentContract(card, { runId, source: "manual" });
+
+    let agentSawPriorReports = 0;
+    const result = await verifyRun(
+      {
+        card,
+        contract,
+        runId,
+        workspacePath: workspace,
+        exitStatus: 0,
+        stdoutRef: null,
+      },
+      {
+        store,
+        runReviewAgent: async (agentCtx) => {
+          agentSawPriorReports = agentCtx.priorReports.length;
+          return {
+            verifier_phase: "review",
+            status: "failed",
+            evidence_refs: [`artifact://${runId}/verifier-agent-output.log`],
+            unresolved_risks: ["L4: 需求對齊不足"],
+            recommendation: "retry",
+            confidence: 0.8,
+            requires_human: false,
+            score: 0.55,
+          };
+        },
+      },
+    );
+
+    // static (vacuous pass, 無命令) + review (agent) 兩份報告
+    assert.equal(result.reports.length, 2);
+    assert.equal(agentSawPriorReports, 1);
+    assert.equal(result.judgment.overall, "failed");
+    assert.equal(result.judgment.next_action, "retry");
+    const review = JSON.parse(
+      (await store.readArtifact(runId, "verifier-report-review.json")) ?? "",
+    );
+    assert.equal(review.status, "failed");
+    assert.equal(review.score, 0.55);
+  });
+});
+
+test("P4: 下層硬失敗短路時不呼叫 runReviewAgent (省 L4 成本)", async () => {
+  await withStore(async ({ store, workspace, runId }) => {
+    const node = `"${process.execPath}"`;
+    const card = makeCard(workspace);
+    card.loop.verification = {
+      required: ["static", "review"],
+      commands: { static: [`${node} -e "process.exit(1)"`] },
+    };
+    const contract = buildIntentContract(card, { runId, source: "manual" });
+
+    let agentCalled = false;
+    const result = await verifyRun(
+      {
+        card,
+        contract,
+        runId,
+        workspacePath: workspace,
+        exitStatus: 0,
+        stdoutRef: null,
+      },
+      {
+        store,
+        runReviewAgent: async () => {
+          agentCalled = true;
+          return {
+            verifier_phase: "review",
+            status: "passed",
+            evidence_refs: [],
+            unresolved_risks: [],
+            recommendation: "stop",
+            confidence: 0.9,
+            requires_human: false,
+          };
+        },
+      },
+    );
+
+    assert.equal(agentCalled, false);
+    assert.equal(result.reports.length, 1);
+    assert.equal(result.judgment.overall, "failed");
+    const review = JSON.parse(
+      (await store.readArtifact(runId, "verifier-report-review.json")) ?? "",
+    );
+    assert.equal(review.status, "not_applicable");
+    assert.match(review.note, /short-circuited/);
+  });
+});
+
+test("interaction 段由 runner 接管並參與聚合", async () => {
+  await withStore(async ({ store, workspace, runId }) => {
+    const card = makeCard(workspace);
+    card.loop.verification = {
+      required: ["static", "interaction"],
+      interaction: { enabled: true, url: "http://localhost:3400" },
+    };
+    const contract = buildIntentContract(card, { runId, source: "manual" });
+
+    let interactionSawPriorReports = 0;
+    const result = await verifyRun(
+      {
+        card,
+        contract,
+        runId,
+        workspacePath: workspace,
+        exitStatus: 0,
+        stdoutRef: null,
+      },
+      {
+        store,
+        runInteractionAgent: async (interactionCtx) => {
+          interactionSawPriorReports = interactionCtx.priorReports.length;
+          return {
+            verifier_phase: "interaction",
+            status: "passed",
+            evidence_refs: [`artifact://${runId}/interaction-output.log`],
+            unresolved_risks: [],
+            recommendation: "stop",
+            confidence: 0.9,
+            requires_human: false,
+          };
+        },
+      },
+    );
+
+    assert.equal(interactionSawPriorReports, 1);
+    assert.equal(result.reports.length, 2);
+    assert.equal(result.reports[1]?.verifier_phase, "interaction");
+    assert.equal(result.judgment.overall, "passed");
+    const interaction = JSON.parse(
+      (await store.readArtifact(runId, "verifier-report-interaction.json")) ??
+        "",
+    );
+    assert.equal(interaction.status, "passed");
+  });
+});
+
+test("下層硬失敗短路時不呼叫 interaction runner", async () => {
+  await withStore(async ({ store, workspace, runId }) => {
+    const node = `"${process.execPath}"`;
+    const card = makeCard(workspace);
+    card.loop.verification = {
+      required: ["static", "interaction", "review"],
+      commands: { static: [`${node} -e "process.exit(1)"`] },
+      interaction: { enabled: true, url: "http://localhost:3400" },
+    };
+    const contract = buildIntentContract(card, { runId, source: "manual" });
+
+    let interactionCalled = false;
+    const result = await verifyRun(
+      {
+        card,
+        contract,
+        runId,
+        workspacePath: workspace,
+        exitStatus: 0,
+        stdoutRef: null,
+      },
+      {
+        store,
+        runInteractionAgent: async () => {
+          interactionCalled = true;
+          return {
+            verifier_phase: "interaction",
+            status: "passed",
+            evidence_refs: [],
+            unresolved_risks: [],
+            recommendation: "stop",
+            confidence: 0.9,
+            requires_human: false,
+          };
+        },
+      },
+    );
+
+    assert.equal(interactionCalled, false);
+    assert.equal(result.reports.length, 1);
+    assert.equal(result.judgment.overall, "failed");
+    const interaction = JSON.parse(
+      (await store.readArtifact(runId, "verifier-report-interaction.json")) ??
+        "",
+    );
+    assert.equal(interaction.status, "not_applicable");
+    assert.match(interaction.note, /short-circuited/);
   });
 });

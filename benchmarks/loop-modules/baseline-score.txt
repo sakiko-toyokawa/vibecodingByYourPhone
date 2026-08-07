@@ -1,0 +1,14 @@
+# Loop Modules Benchmark Score
+
+| Module | Resolved | Total | Rate |
+|---|---|---|---|
+| trigger | 3 | 3 | 100.0% |
+| contract | 3 | 3 | 100.0% |
+| assembly | 4 | 4 | 100.0% |
+| control-plane | 5 | 5 | 100.0% |
+| verification | 5 | 5 | 100.0% |
+| state | 5 | 5 | 100.0% |
+| learning | 3 | 3 | 100.0% |
+| routes | 3 | 3 | 100.0% |
+
+**Overall:** 31/31 = 100.0%

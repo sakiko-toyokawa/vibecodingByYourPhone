@@ -45,6 +45,8 @@ import {
   type PolicyProfile,
   type PolicyProjection,
   type ProviderName,
+  type SubTask,
+  type TaskPlan,
 } from "@yep-anywhere/shared";
 import { resolvePolicyProfile } from "../policy/profiles.js";
 import { describeAdapter } from "./adapter-info.js";
@@ -125,6 +127,10 @@ export interface RuntimeInput {
   /** 02 §3 budget_remaining: 本轮开始时的剩余预算 (run-service 经
    *  RuntimeAssemblyContext 传入; 首轮即合约全量)。 */
   budgetRemaining?: BudgetLimits;
+  /** Planner 分解的当前轮次要完成的子任务（无 plan 时缺省）。 */
+  currentSubtask?: SubTask;
+  /** Planner 生成的完整任务计划（无 plan 时缺省）。 */
+  taskPlan?: TaskPlan;
 }
 
 /** 02 §3 execution_contract (结构化五字段)。 */
@@ -229,6 +235,8 @@ export function assembleRuntimeInput(
    */
   proposals: ImprovementProposal[] = [],
   context: RuntimeAssemblyContext = {},
+  /** Current turn number (1-based); used to select the active subtask from contract.plan. */
+  turn = 1,
 ): RuntimeInput {
   const loop = card.loop;
   const cwd = loop.workspace.path;
@@ -316,6 +324,10 @@ export function assembleRuntimeInput(
 
   // 02 §3 observability: 如实声明采集通道 (stderr / transcript 通道在
   // ProcessEvent 层不存在, 记 false —— 不伪造采集能力)。
+  // P1 评估结论: ProcessEvent (supervisor/types.ts) 只有 message /
+  // state-change 等归一事件, 无原始 stderr / transcript 通道; 打通需在
+  // 各 provider bridge 层截获子进程 stderr, 属 supervisor 改造, 不在
+  // verifier P1 范围 —— 保持 false, 待独立任务排期。
   const observability: ObservabilityDeclaration = {
     capture_stdout: true,
     capture_stderr: false,
@@ -326,6 +338,12 @@ export function assembleRuntimeInput(
     capture_test_output: true,
   };
 
+  const taskPlan = contract.plan;
+  const currentSubtask =
+    taskPlan && taskPlan.subtasks.length > 0
+      ? taskPlan.subtasks[Math.min(turn, taskPlan.subtasks.length) - 1]
+      : undefined;
+
   const bundleExtras = {
     executionContract,
     nativeInvocation,
@@ -333,6 +351,8 @@ export function assembleRuntimeInput(
     ...(context.budgetRemaining
       ? { budgetRemaining: context.budgetRemaining }
       : {}),
+    ...(taskPlan ? { taskPlan } : {}),
+    ...(currentSubtask ? { currentSubtask } : {}),
   };
 
   const prompt = [
@@ -370,6 +390,27 @@ export function assembleRuntimeInput(
     discovery.source ? `- 发现来源：${discovery.source}` : null,
     discovery.query ? `- 发现查询：${discovery.query}` : null,
     maxItems !== undefined ? `- 最多报告 ${maxItems} 项。` : null,
+    ...(taskPlan && currentSubtask
+      ? [
+          "",
+          "任务分解（多轮执行）：",
+          `- 总子任务数：${taskPlan.subtasks.length}`,
+          ...taskPlan.subtasks.map((s) => `  - ${s.id}: ${s.description}`),
+          "",
+          `当前子任务（第 ${turn} 轮）：${currentSubtask.id}`,
+          `- 描述：${currentSubtask.description}`,
+          "- 成功标准：",
+          ...currentSubtask.success_criteria.map((c) => `  - ${c}`),
+          ...(currentSubtask.target_artifacts.length > 0
+            ? [
+                "- 目标产物：",
+                ...currentSubtask.target_artifacts.map((a) => `  - ${a}`),
+              ]
+            : []),
+          "",
+          "重要：本轮只应完成当前子任务，不要开始或完成后续子任务。",
+        ]
+      : []),
     "",
     "成功标准：",
     ...contract.success_criteria.map((c) => `- ${c}`),
@@ -401,6 +442,7 @@ export function assembleRuntimeInput(
     EXECUTOR_SUMMARY_BEGIN,
     "- 已完成：你实际做了什么（不是你计划做什么）",
     "- 未完成：你没做什么，以及原因",
+    ...(taskPlan ? ["- 子任务：当前完成的子任务 ID，以及剩余子任务"] : []),
     "- 风险：校验者应复核的开放问题",
     "- 文件：触及或检查的关键文件",
     EXECUTOR_SUMMARY_END,
@@ -408,11 +450,25 @@ export function assembleRuntimeInput(
     .filter((line): line is string => line !== null)
     .join("\n");
 
+  // Map security_level to executor permission mode.
+  // read_only → plan (Claude read-only) / read-only (Codex sandbox)
+  // workspace_write → default (Claude workspace write) / workspace-write (Codex sandbox)
+  // full_access → bypassPermissions (Claude full access) / danger-full-access (Codex sandbox)
+  const permissionModeBySecurityLevel = {
+    read_only: "plan",
+    workspace_write: "default",
+    full_access: "bypassPermissions",
+  } as const;
+  const permissionMode =
+    permissionModeBySecurityLevel[
+      contract.security_level as keyof typeof permissionModeBySecurityLevel
+    ] ?? "plan";
+
   if (!policyActive || !profile) {
     return {
       prompt,
       cwd,
-      permissionMode: "plan",
+      permissionMode,
       permissions: { deny: [...READ_ONLY_DENY] },
       ...bundleExtras,
       // github_prompt 的 legacy (无 policy) 分支同样注入 GH_TOKEN/gh PATH —
@@ -439,9 +495,7 @@ export function assembleRuntimeInput(
   return {
     prompt,
     cwd,
-    // bypassPermissions → claude.ts 传 SDK 的是 "default"，canUseTool 对
-    // 每个工具调用都触发，策略钩子是唯一规则来源。
-    permissionMode: "bypassPermissions",
+    permissionMode,
     // 显式规则留空：裁决全部走策略钩子（钩子对任何调用都会给出结论）。
     permissions: {},
     ...bundleExtras,

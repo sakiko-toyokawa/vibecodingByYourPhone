@@ -1,0 +1,30 @@
+{
+  "intent_ref": "intent://interaction-real-1786087077568",
+  "task_type": "maintenance",
+  "success_criteria": [
+    "任务目标完成并产出报告文本",
+    "修改不超出工作区边界",
+    "未尝试硬闸门动作"
+  ],
+  "workspace_ref": "workspace://interaction-real-1786087077568/run-20260807T071757Z-ccf13161",
+  "exit_status": 0,
+  "evidence_refs": {
+    "diff": "artifact://run-20260807T071757Z-ccf13161/diff.patch",
+    "test_output": null,
+    "stdout": "artifact://run-20260807T071757Z-ccf13161/stdout.log",
+    "stderr": null,
+    "structured_output": "artifact://run-20260807T071757Z-ccf13161/runtime-events.jsonl",
+    "executor_summary": null
+  },
+  "runtime_event_refs": [
+    "artifact://run-20260807T071757Z-ccf13161/runtime-events.jsonl"
+  ],
+  "permission_event_refs": [],
+  "test_output_refs": [],
+  "artifact_refs": [],
+  "policy_intent_ref": "artifact://run-20260807T071757Z-ccf13161/policy-projection.json",
+  "known_failure_patterns": [],
+  "verifier_chain": [
+    "interaction"
+  ]
+}

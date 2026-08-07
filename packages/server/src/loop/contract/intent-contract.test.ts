@@ -139,3 +139,38 @@ test("buildIntentContract: 纯自然语言 task 不设 target 字段（如实缺
   });
   assert.equal(noTask.target, undefined);
 });
+
+test("buildIntentContract: embeds a multi-subtask plan when provided", () => {
+  const plan = {
+    plan_id: "plan-1",
+    created_at: "2026-07-28T00:00:00.000Z",
+    subtasks: [
+      {
+        id: "subtask-1",
+        description: "Create plan.md",
+        success_criteria: ["plan.md exists"],
+        target_artifacts: ["plan.md"],
+      },
+      {
+        id: "subtask-2",
+        description: "Implement src/main.js",
+        success_criteria: ["src/main.js exists"],
+        target_artifacts: ["src/main.js"],
+      },
+    ],
+  };
+  const contract = buildIntentContract(makeCard(), {
+    runId: "run-10",
+    source: "manual",
+    plan,
+  });
+  assert.deepEqual(contract.plan, plan);
+});
+
+test("buildIntentContract: omits plan when not provided", () => {
+  const contract = buildIntentContract(makeCard(), {
+    runId: "run-11",
+    source: "manual",
+  });
+  assert.equal(contract.plan, undefined);
+});

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ApprovalModeSchema } from "./policy.js";
+import { VerificationRuleSchema } from "./verification-rules.js";
 
 /**
  * LoopCard — trigger 层为每个长期 loop 维护的产品规格。
@@ -9,6 +10,11 @@ import { ApprovalModeSchema } from "./policy.js";
 export const VerificationPhaseSchema = z.enum([
   "static",
   "runtime",
+  // P0 (layered-verifier plan): L2 规则检查与 L3 结构检查的挂载点;
+  // 策略实现见 Phase 2 (rule) / Phase 3 (structural), 此前由
+  // PhaseNotImplementedStrategy 兜底为 inconclusive, 不静默通过。
+  "rule",
+  "structural",
   "interaction",
   "review",
 ]);
@@ -91,6 +97,39 @@ export const LoopCardSchema = z.object({
         .object({
           static: z.array(z.string()).optional(),
           runtime: z.array(z.string()).optional(),
+          /** Files that must exist in the workspace for verification to pass. */
+          file_exists: z.array(z.string()).optional(),
+          /** Files that must contain specific patterns for verification to pass. */
+          file_contains: z
+            .array(
+              z.object({
+                file: z.string(),
+                pattern: z.string(),
+              }),
+            )
+            .optional(),
+        })
+        .optional(),
+      /**
+       * P2: L2 規則檢查的 card 內嵌規則（rule phase 消費）。
+       * 與 workspace 的 .verifier/rules.json 合併執行；兩者皆缺時 rule
+       * phase 回 inconclusive + escalate（宣告了檢查卻無規則 = 配置缺口，
+       * 不静默通過）。
+       */
+      rules: z.array(VerificationRuleSchema).optional(),
+      /**
+       * Interaction verifier configuration. When `interaction` is present in
+       * required phases, the server can ask a read-only agent to generate a
+       * Playwright script and then execute it deterministically.
+       */
+      interaction: z
+        .object({
+          enabled: z.boolean().optional(),
+          url: z.string().optional(),
+          start_command: z.string().optional(),
+          ready_url: z.string().optional(),
+          timeout_ms: z.number().int().positive().optional(),
+          install_command: z.string().optional(),
         })
         .optional(),
     }),
@@ -145,6 +184,18 @@ export const LoopCardSchema = z.object({
       .object({
         provider: z.string().optional(),
         model: z.string().optional(),
+      })
+      .optional(),
+    /**
+     * P5: 意圖理解 Agent 開關。開啟後合約構建順序為：
+     * task_type 範本命中（免 agent、視為已確認）→ 否則意圖理解 Agent
+     * 產生合約草案（confirmed_by_human=false，run 在首輪執行前泊入
+     * needs_human，人工 approve 視為確認）。缺省不開啟，保持既有
+     * 確定性合約裝配行為。
+     */
+    intent_understanding: z
+      .object({
+        use_agent: z.boolean().default(false),
       })
       .optional(),
     // Phase-2 Yep extension (not in 02-schema契约.md §1): policy 开关。

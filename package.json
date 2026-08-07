@@ -18,6 +18,9 @@
     "typecheck": "pnpm --filter shared build && pnpm -r --filter \"!@yep-anywhere/mobile\" exec tsc --noEmit",
     "lint": "biome check .",
     "test": "pnpm --filter @yep-anywhere/server test",
+    "test:loop-modules": "tsx benchmarks/loop-modules/harness/run-all.ts",
+    "test:loop-modules:score": "tsx benchmarks/loop-modules/harness/score.ts",
+    "test:loop-runtime:sample": "tsx benchmarks/loop-runtime-eval/run.ts \"Scan the workspace and report any TODO comments\"",
     "format": "biome format --write .",
     "prepare": "husky",
     "site:dev": "cd site && npm run dev",
@@ -25,7 +28,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
+    "@playwright/test": "^1.62.1",
     "husky": "^9.1.7",
+    "playwright": "^1.62.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   },

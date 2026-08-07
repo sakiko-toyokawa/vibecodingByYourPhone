@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
+  type InteractionDepsStatus,
   type LoopRunSummary,
   type RunDetail,
   type StoredLoop,
@@ -49,6 +50,14 @@ export function LoopDetailPage() {
   const [selectedArtifact, setSelectedArtifact] = useState<string | null>(null);
   const [artifactContent, setArtifactContent] = useState<string | null>(null);
   const [artifactLoading, setArtifactLoading] = useState(false);
+  const [interactionDeps, setInteractionDeps] =
+    useState<InteractionDepsStatus | null>(null);
+  const [interactionDepsLoading, setInteractionDepsLoading] = useState(false);
+  const [interactionDepsInstalling, setInteractionDepsInstalling] =
+    useState(false);
+  const [interactionDepsMessage, setInteractionDepsMessage] = useState<
+    string | null
+  >(null);
   const selectedRunIdRef = useRef<string | null>(null);
   selectedRunIdRef.current = selectedRunId;
 
@@ -98,6 +107,48 @@ export function LoopDetailPage() {
       if (event.loop_id === loopId) void load();
     });
   }, [loopId, load]);
+
+  const loadInteractionDeps = useCallback(async () => {
+    if (!loopId) return;
+    setInteractionDepsLoading(true);
+    setInteractionDepsMessage(null);
+    try {
+      setInteractionDeps(await loopsApi.getInteractionDeps(loopId));
+    } catch (err) {
+      setInteractionDeps(null);
+      setInteractionDepsMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setInteractionDepsLoading(false);
+    }
+  }, [loopId]);
+
+  useEffect(() => {
+    if (!loop?.card.loop.verification.required.includes("interaction")) {
+      setInteractionDeps(null);
+      return;
+    }
+    void loadInteractionDeps();
+  }, [loadInteractionDeps, loop]);
+
+  const handleInstallInteractionDeps = useCallback(async () => {
+    if (!loopId) return;
+    setInteractionDepsInstalling(true);
+    setInteractionDepsMessage(null);
+    try {
+      const result = await loopsApi.installInteractionDeps(
+        loopId,
+        interactionDeps?.installCommand,
+      );
+      setInteractionDepsMessage(result.output || result.command);
+      await loadInteractionDeps();
+    } catch (err) {
+      setInteractionDepsMessage(
+        err instanceof Error ? err.message : String(err),
+      );
+    } finally {
+      setInteractionDepsInstalling(false);
+    }
+  }, [interactionDeps?.installCommand, loadInteractionDeps, loopId]);
 
   const handleSelectRun = useCallback(async (runId: string) => {
     setSelectedRunId(runId);
@@ -289,6 +340,42 @@ export function LoopDetailPage() {
                 {" · "}
                 {t("loopsCreated", { time: formatTime(loop.created_at) })}
               </p>
+            )}
+
+            {loop?.card.loop.verification.required.includes("interaction") && (
+              <section className="mb-6 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-secondary)] p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="m-0 [font-size:var(--font-size-sm)] font-semibold text-[var(--text-primary)]">
+                      {t("loopsInteractionDepsTitle")}
+                    </h2>
+                    <p className="m-0 mt-1 [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
+                      {interactionDepsLoading
+                        ? t("loopsInteractionDepsChecking")
+                        : interactionDeps
+                          ? t(`loopsInteractionDepsStatus_${interactionDeps.status}` as never)
+                          : t("loopsInteractionDepsUnknown")}
+                    </p>
+                    {interactionDepsMessage && (
+                      <p className="m-0 mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-all rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] p-2 font-mono [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
+                        {interactionDepsMessage}
+                      </p>
+                    )}
+                  </div>
+                  {interactionDeps?.status === "missing" && (
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] disabled:opacity-50"
+                      disabled={interactionDepsInstalling}
+                      onClick={() => void handleInstallInteractionDeps()}
+                    >
+                      {interactionDepsInstalling
+                        ? t("loopsInteractionDepsInstalling")
+                        : t("loopsInteractionDepsInstall")}
+                    </button>
+                  )}
+                </div>
+              </section>
             )}
 
             {!loading && !error && (

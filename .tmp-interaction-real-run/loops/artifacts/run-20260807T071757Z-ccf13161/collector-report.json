@@ -1,0 +1,12 @@
+{
+  "collector_phase": "review",
+  "status": "passed",
+  "evidence_refs": [
+    "artifact://run-20260807T071757Z-ccf13161/collector-output.log"
+  ],
+  "unresolved_risks": [],
+  "recommendation": "stop",
+  "confidence": 0.7,
+  "requires_human": false,
+  "summary": "(collector produced no output)"
+}

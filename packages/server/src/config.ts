@@ -124,6 +124,19 @@ export interface Config {
   desktopAuthToken?: string;
   /** Redis URL for Pub/Sub event bus. If unset, uses in-memory EventBus. */
   redisUrl?: string;
+
+  // Loop subsystem watchdog / stagnation settings
+  /** Turn idle timeout (ms). If a turn produces no process events for this long,
+   *  it is killed as an idle timeout. 0 disables idle detection. */
+  loopTurnIdleTimeoutMs: number;
+  /** Interval between idle checks in watchProcess (ms). */
+  loopTurnIdleCheckIntervalMs: number;
+  /** Number of consecutive similar turn outputs before escalating to needs_human. */
+  loopStagnationSimilarTurnsThreshold: number;
+  /** Number of consecutive retry turns with no workspace diff progress before escalating to needs_human. */
+  loopIdleNoProgressTurnsThreshold: number;
+  /** Number of times the same blocker fingerprint may recur in needs_human decisions before forcing failed. */
+  loopRepeatedBlockerThreshold: number;
 }
 
 /**
@@ -276,6 +289,30 @@ export function loadConfig(): Config {
     httpsSelfSigned: process.env.HTTPS_SELF_SIGNED === "true",
     desktopAuthToken: process.env.DESKTOP_AUTH_TOKEN || undefined,
     redisUrl: process.env.REDIS_URL || undefined,
+    // Loop watchdog / stagnation defaults
+    loopTurnIdleTimeoutMs: Math.max(
+      0,
+      parseIntOrDefault(process.env.LOOP_TURN_IDLE_TIMEOUT_MS, 10 * 60 * 1000),
+    ),
+    loopTurnIdleCheckIntervalMs: Math.max(
+      1000,
+      parseIntOrDefault(
+        process.env.LOOP_TURN_IDLE_CHECK_INTERVAL_MS,
+        30 * 1000,
+      ),
+    ),
+    loopStagnationSimilarTurnsThreshold: Math.max(
+      2,
+      parseIntOrDefault(process.env.LOOP_STAGNATION_SIMILAR_TURNS, 3),
+    ),
+    loopIdleNoProgressTurnsThreshold: Math.max(
+      2,
+      parseIntOrDefault(process.env.LOOP_IDLE_NO_PROGRESS_TURNS, 3),
+    ),
+    loopRepeatedBlockerThreshold: Math.max(
+      2,
+      parseIntOrDefault(process.env.LOOP_REPEATED_BLOCKER_THRESHOLD, 3),
+    ),
   };
 }
 

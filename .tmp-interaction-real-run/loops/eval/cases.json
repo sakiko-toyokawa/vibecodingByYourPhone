@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "case_id": "builtin-contract_budget_guard",
+      "category": "intent_error",
+      "kind": "behavior",
+      "behavior": "contract_budget_guard",
+      "args": [],
+      "expect": "pass",
+      "description": "内置行为 case (intent_error): 调用被测子系统真实函数 — contract_budget_guard"
+    },
+    {
+      "case_id": "builtin-assembly_readonly_invariants",
+      "category": "context_error",
+      "kind": "behavior",
+      "behavior": "assembly_readonly_invariants",
+      "args": [],
+      "expect": "pass",
+      "description": "内置行为 case (context_error): 调用被测子系统真实函数 — assembly_readonly_invariants"
+    },
+    {
+      "case_id": "builtin-memory_packet_injection",
+      "category": "memory_packet_error",
+      "kind": "behavior",
+      "behavior": "memory_packet_injection",
+      "args": [],
+      "expect": "pass",
+      "description": "内置行为 case (memory_packet_error): 调用被测子系统真实函数 — memory_packet_injection"
+    },
+    {
+      "case_id": "builtin-adapter_error_attribution",
+      "category": "runtime_blackbox_error",
+      "kind": "behavior",
+      "behavior": "adapter_error_attribution",
+      "args": [],
+      "expect": "pass",
+      "description": "内置行为 case (runtime_blackbox_error): 调用被测子系统真实函数 — adapter_error_attribution"
+    },
+    {
+      "case_id": "builtin-adapter_policy_application",
+      "category": "runtime_blackbox_error",
+      "kind": "behavior",
+      "behavior": "adapter_policy_application",
+      "args": [],
+      "expect": "pass",
+      "description": "内置行为 case (runtime_blackbox_error): 调用被测子系统真实函数 — adapter_policy_application"
+    },
+    {
+      "case_id": "builtin-subprocess_verifier_detects_failure",
+      "category": "tool_error",
+      "kind": "behavior",
+      "behavior": "subprocess_verifier_detects_failure",
+      "args": [],
+      "expect": "pass",
+      "description": "内置行为 case (tool_error): 调用被测子系统真实函数 — subprocess_verifier_detects_failure"
+    },
+    {
+      "case_id": "builtin-hard_gate_enforced",
+      "category": "policy_error",
+      "kind": "behavior",
+      "behavior": "hard_gate_enforced",
+      "args": [],
+      "expect": "pass",
+      "description": "内置行为 case (policy_error): 调用被测子系统真实函数 — hard_gate_enforced"
+    },
+    {
+      "case_id": "builtin-aggregation_requires_human_passthrough",
+      "category": "verification_error",
+      "kind": "behavior",
+      "behavior": "aggregation_requires_human_passthrough",
+      "args": [],
+      "expect": "pass",
+      "description": "内置行为 case (verification_error): 调用被测子系统真实函数 — aggregation_requires_human_passthrough"
+    },
+    {
+      "case_id": "builtin-eval_harness_deterministic",
+      "category": "eval_regression",
+      "kind": "behavior",
+      "behavior": "eval_harness_deterministic",
+      "args": [],
+      "expect": "pass",
+      "description": "内置行为 case (eval_regression): 调用被测子系统真实函数 — eval_harness_deterministic"
+    }
+  ]
+}

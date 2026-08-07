@@ -26,6 +26,15 @@ import { FailureTagSchema } from "./run-ledger.js";
  *   "阻塞态恢复到 active"的词汇（retry→active、needs_human→active、
  *   paused→active、budget_limited→active 都是合法转移且须落账可审计）。
  *   新增一值而非滥用 retry / bypass_used 语义。
+ * - `decision` 枚举补 `subtask_advance`（Planner 多轮子任务）：子任务
+ *   验证通过且还有后续子任务时, run 留在 active 推进下一轮——这不是
+ *   失败重试。此前实现把 judgment 改写成 failed/retry 借道控制面, 造成
+ *   三重失真: 判定报告与 verifier 报告打架 (reports 全 passed 而
+ *   judgment failed)、决策账本记 phantom verification_error 归因 (污染
+ *   失败模式账本 / learning)、白烧 retry 预算 (5 子任务在第 4 轮被
+ *   max_retries 误判 budget_limited)。新增一值而非滥用 retry 语义,
+ *   与 resumed 的口径一致。subtask_advance 不消耗 retry 预算、不带
+ *   failure_tags。
  * - `budget`（阶段 2）：落账时 run 的预算快照，决策账本由此可见逐轮
  *   消耗（05 阶段 2 验收 2 "账本能逐轮看到 budget 消耗"）。
  * - `blocker_fingerprint` / `repeated_blocker_count`（loop handoff
@@ -42,6 +51,7 @@ export const DecisionKindSchema = z.enum([
   "policy_blocked",
   "bypass_used",
   "resumed",
+  "subtask_advance",
 ]);
 export type DecisionKind = z.infer<typeof DecisionKindSchema>;
 

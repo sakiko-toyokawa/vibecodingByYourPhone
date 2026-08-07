@@ -1,6 +1,7 @@
 export * from "./assembly/proposal-effects.js";
 export * from "./assembly/runtime-input.js";
 export * from "./contract/intent-contract.js";
+export * from "./contract/planner.js";
 export * from "./control-plane/control-plane.js";
 export * from "./control-plane/decide.js";
 export * from "./control-plane/retry-backoff.js";

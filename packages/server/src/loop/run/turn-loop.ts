@@ -1,0 +1,1495 @@
+/**
+ * The multi-turn run loop: execute → verify → control-plane judgment, plus
+ * resume/continue/restart recovery.
+ *
+ * Extracted from run-service.ts during Phase-3 refactoring.
+ */
+
+import type {
+  IntentContract,
+  JudgmentReport,
+  LoopCard,
+  ProviderName,
+  RunLedgerEntry,
+  RunState,
+} from "@yep-anywhere/shared";
+import {
+  AdapterError,
+  adapterErrorCodeToFailureTag,
+} from "../../sdk/adapter-error.js";
+import type { Process } from "../../supervisor/Process.js";
+import type { Supervisor } from "../../supervisor/Supervisor.js";
+import { describeAdapter } from "../assembly/adapter-info.js";
+import { resolveAdapterPolicy } from "../assembly/adapter-policy.js";
+import {
+  AssemblyError,
+  assembleRuntimeInput,
+  extractExecutorSummary,
+} from "../assembly/runtime-input.js";
+import { buildIntentContract } from "../contract/intent-contract.js";
+import { buildIntentContractWithUnderstanding } from "../contract/intent-understanding-agent.js";
+import type { PlannerService } from "../contract/planner.js";
+import type {
+  ControlPlane,
+  ResumeSignal,
+} from "../control-plane/control-plane.js";
+import { retryBackoffMs } from "../control-plane/retry-backoff.js";
+import type { FailurePatternStore } from "../state/failure-pattern-store.js";
+import type { LoopCardStore } from "../state/loop-card-store.js";
+import type { ProposalStore } from "../state/proposal-store.js";
+import type { RunLedgerStore } from "../state/run-ledger-store.js";
+import { runInteractionAgent } from "../verification/agent/run-interaction-agent.js";
+import { runVerifierAgent } from "../verification/agent/run-verifier-agent.js";
+import { checkRequiredArtifacts } from "../verification/required-artifacts.js";
+import {
+  type VerificationRefs,
+  verificationArtifactName,
+  verifyRun,
+} from "../verification/verify-run.js";
+import {
+  WORKSPACE_UNSTABLE_ANNOTATION,
+  type WorkspaceSnapshot,
+  captureWorkspaceSnapshot,
+  workspaceSnapshotChanged,
+} from "../verification/workspace-stability.js";
+import { mergeRunWorktree, worktreeHasChanges } from "../worktree/worktree.js";
+import {
+  buildHumanFeedbackRefs,
+  captureGitDiff,
+  captureGitDiffStat,
+  mergeEvidence,
+  runCollector,
+  writeTurnHandoff,
+} from "./artifacts.js";
+import {
+  type RunContextDeps,
+  buildMemoryPacket,
+  rebuildContext,
+} from "./context.js";
+import {
+  buildHumanResumeContext,
+  buildNextSubtaskContext,
+  buildRetryContext,
+  drainPolicyEscalation,
+  executeTurn,
+  hashNormalizedOutput,
+  normalizeTurnOutput,
+  watchProcess,
+} from "./turn-execution.js";
+import type {
+  ActiveRun,
+  ExecutionOutcome,
+  GithubCredentialStore,
+  GithubToolProvisioner,
+  RunExecutionContext,
+} from "./types.js";
+import {
+  loopRuntime,
+  resolveExecutableCard,
+  resolveRuntimeAssemblyContext,
+} from "./workspace.js";
+
+export interface TurnLoopDeps extends RunContextDeps {
+  supervisor: Supervisor;
+  /** Backoff wait between retry turns; injectable for tests. */
+  sleep?: (ms: number) => Promise<void>;
+  /** Verification seam for tests; defaults to the real verifyRun. */
+  verifyRunFn?: typeof verifyRun;
+  /** Planner Agent for multi-turn task decomposition (optional). */
+  planner?: PlannerService;
+  loopWatchdog: {
+    turnIdleTimeoutMs: number;
+    turnIdleCheckIntervalMs: number;
+    /** Consecutive turns with identical normalized output → escalation. */
+    stagnationSimilarTurnsThreshold: number;
+    /** Consecutive retry turns with no effective workspace diff change →
+     *  idle escalation. */
+    idleNoProgressTurnsThreshold: number;
+    /** Consecutive turns with the same blocker fingerprint → dead-loop
+     *  escalation. */
+    repeatedBlockerThreshold: number;
+  };
+}
+
+export interface TurnLoopState {
+  /** loop_id -> active run (same-loop runs are serial) */
+  activeByLoop: Map<string, ActiveRun>;
+  activeByRunId: Map<string, ActiveRun>;
+  /** run_id -> suspended execution context (needs_human / budget_limited / paused) */
+  suspended: Map<string, RunExecutionContext>;
+  /** run_id -> context of a run currently inside the turn loop */
+  executingContexts: Map<string, RunExecutionContext>;
+  /** run_id -> the Process executing the current turn (for PATCH pause kill) */
+  executingProcesses: Map<string, Process>;
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Release a resolved run's active registration + suspended context. */
+export function releaseRun(runId: string, state: TurnLoopState): void {
+  const active = state.activeByRunId.get(runId);
+  if (active) {
+    state.activeByRunId.delete(runId);
+    state.activeByLoop.delete(active.loopId);
+  }
+  state.suspended.delete(runId);
+}
+
+/**
+ * Set up the run (contract + assembly) and drive the turn loop. Setup
+ * failures become a failed first turn so the crash still lands in the
+ * ledger and the control-plane, like phase 1.
+ */
+export async function executeRun(
+  active: ActiveRun,
+  card: LoopCard,
+  deps: TurnLoopDeps,
+  state: TurnLoopState,
+): Promise<void> {
+  const { runId, source } = active;
+  const ctx: RunExecutionContext = {
+    active,
+    card,
+    contract: null,
+    contractJson: null,
+    input: null,
+    turn: 1,
+    sessionRef: null,
+    lastJudgment: null,
+    lastJudgmentRef: null,
+    pendingContext: null,
+    policyEscalations: [],
+    permissionEvents: [],
+    taskPlan: null,
+    currentSubtaskIndex: 0,
+    recentTurnOutputHashes: [],
+    recentTurnDiffStatHashes: [],
+    recentBlockerFingerprints: [],
+  };
+  try {
+    const { card: executableCard, worktree } = await resolveExecutableCard(
+      card,
+      runId,
+      { dataDir: deps.dataDir },
+    );
+    ctx.card = executableCard;
+    ctx.workspaceEvidence = worktree
+      ? {
+          originPath: card.loop.workspace.path ?? "",
+          worktreePath: worktree.path,
+          branch: worktree.branch,
+          baseSha: worktree.baseSha,
+        }
+      : null;
+    // Planner Agent: decompose complex tasks into a multi-turn plan.
+    let taskPlan: IntentContract["plan"];
+    const task = executableCard.loop.handoff?.task;
+    const runtime = executableCard.loop.runtime;
+    if (deps.planner && task) {
+      try {
+        const plan = await deps.planner.planTask(task, {
+          providerName: runtime?.provider as ProviderName | undefined,
+          model: runtime?.model,
+        });
+        if (plan.subtasks.length > 1) {
+          taskPlan = plan;
+        }
+      } catch {
+        // Planner failure is non-fatal; fall back to no plan.
+      }
+    }
+    ctx.contract = buildIntentContract(executableCard, {
+      runId,
+      source,
+      plan: taskPlan,
+    });
+    // P5 意圖理解：card 開啟 intent_understanding.use_agent 時, 範本命中
+    // 直接覆蓋 (已確認), 否則意圖理解 Agent 產生合約草案 (未確認, 走
+    // 下方人工閘門)。agent 失敗回退確定性裝配, 不阻塞 run。
+    if (executableCard.loop.intent_understanding?.use_agent) {
+      try {
+        const understood = await buildIntentContractWithUnderstanding(
+          executableCard,
+          { runId, source, plan: taskPlan },
+          {
+            supervisor: deps.supervisor,
+            watchProcess: async (runId_, proc, opts) => {
+              const result = await watchProcess(runId_, proc, {
+                timeoutMs: opts.timeoutMs,
+                deps,
+                executingProcesses: state.executingProcesses,
+              });
+              return {
+                ok: result.ok,
+                finalText: result.finalText,
+                error: result.error,
+              };
+            },
+          },
+        );
+        if (understood) {
+          ctx.contract = understood;
+        }
+      } catch (error) {
+        console.warn(
+          `[LoopRunService] intent understanding agent failed for run ${runId}, falling back to deterministic contract:`,
+          error,
+        );
+      }
+    }
+    ctx.taskPlan = taskPlan ?? null;
+    ctx.contractJson = JSON.stringify(ctx.contract, null, 2);
+    // 装配即落盘合约快照 (不等首轮结束): 首轮在飞时被暂停、随后进程
+    // 重启的 run, resume 仍能凭此 artifact 重建执行上下文。
+    await deps.runLedgerStore.writeArtifact(
+      runId,
+      "intent-contract.json",
+      ctx.contractJson,
+    );
+    if (ctx.workspaceEvidence) {
+      // worktree 隔离证据: 原目录 / worktree 目录 / 分支 / 基线 SHA,
+      // 供审计"这个 run 在哪里执行、从哪个基线拉取"。
+      await deps.runLedgerStore.writeArtifact(
+        runId,
+        "workspace.json",
+        `${JSON.stringify(
+          {
+            strategy: "worktree",
+            origin_path: ctx.workspaceEvidence.originPath,
+            worktree_path: ctx.workspaceEvidence.worktreePath,
+            branch: ctx.workspaceEvidence.branch,
+            base_sha: ctx.workspaceEvidence.baseSha,
+          },
+          null,
+          2,
+        )}\n`,
+      );
+    }
+    const runtimeContext = await resolveRuntimeAssemblyContext(executableCard, {
+      githubCredentialStore: deps.githubCredentialStore,
+      githubToolProvisioner: deps.githubToolProvisioner,
+    });
+    // 02 §3 memory packet: 失败模式账本 open 模式的摘要进装配
+    // (04 单写者表: assembly 读 failure-patterns)。
+    const memoryPacket = buildMemoryPacket(
+      executableCard,
+      deps.failurePatternStore,
+    );
+    if (memoryPacket) {
+      runtimeContext.memoryPacket = memoryPacket.promptText;
+      ctx.memoryPacketJson = memoryPacket.artifactJson;
+    }
+    // 02 §3 budget_remaining: 首轮即合约全量 (used_* 均为 0)。
+    runtimeContext.budgetRemaining = ctx.contract.budget;
+    // 阶段 3 装配消费：published / canary 的提案在此进入 RuntimeInput
+    // （每次新 run 重新装配 → 发布后新 run 即生效，rollback 后回到旧行为）。
+    ctx.input = assembleRuntimeInput(
+      executableCard,
+      ctx.contract,
+      deps.proposalStore?.listProposals() ?? [],
+      runtimeContext,
+      ctx.turn,
+    );
+  } catch (error) {
+    ctx.setupError = error instanceof Error ? error : new Error(String(error));
+  }
+
+  // P5 意圖閘門：agent 產生的合約未經人工確認 → 首輪執行前泊入
+  // needs_human (turn 0 = 閘門, 尚未執行任何輪次; approve 後 continueRun
+  // 以 turn 1 起步)。control-plane 未接線時 (phase-0) 無閘門可用,
+  // 誠實跳過 —— 該模式本來就沒有 needs_human 語義。
+  const understanding = ctx.contract?.intent_understanding;
+  if (
+    !ctx.setupError &&
+    deps.controlPlane &&
+    understanding?.generated_by === "agent" &&
+    !understanding.confirmed_by_human
+  ) {
+    const applied = await deps.controlPlane.applyJudgment({
+      loopId: ctx.active.loopId,
+      runId,
+      turn: 0,
+      goalId: ctx.contract?.intent_id ?? `intent-${runId}`,
+      workspaceRef: `workspace://${ctx.active.loopId}/${runId}`,
+      executionOk: true,
+      verificationRan: true,
+      judgment: {
+        overall: "passed",
+        next_action: "needs_human",
+        retryable: false,
+        requires_human: true,
+        evidence: [`artifact://${runId}/intent-contract.json`],
+        unresolved_risks: [
+          `意圖合約由意圖理解 Agent 產生, 未經人工確認: ${understanding.understanding_summary}`,
+          ...understanding.clarification_questions.map(
+            (question) => `待澄清: ${question}`,
+          ),
+        ],
+      },
+      judgmentRef: null,
+      createdAt: ctx.active.createdAt,
+      budget: ctx.contract?.budget ?? {
+        max_tokens: 0,
+        max_time_minutes: 1,
+        max_turns: 1,
+        max_retries: 0,
+      },
+      usage: { tokens: null, timeMinutes: 0 },
+    });
+    if (applied.state === "needs_human") {
+      // 保留執行上下文 (turn 0 = 閘門輪, 未執行), approve 後 continueRun
+      // 的 ctx.turn += 1 使首輪以 turn 1 起步續跑。
+      ctx.turn = 0;
+      state.suspended.set(runId, ctx);
+      return;
+    }
+  }
+
+  await runTurns(ctx, deps, state);
+}
+
+interface StagnationDetail {
+  reason: "similar_output" | "no_diff_progress";
+  threshold: number;
+  detail: string;
+  outputHash: string;
+  diffStatHash: string;
+}
+
+/**
+ * Escalate a retrying run to needs_human when loop stagnation is detected.
+ * Writes a loop-stagnation artifact, mutates ctx.lastJudgment, and returns
+ * the updated judgment.
+ */
+async function escalateToNeedsHumanForStagnation(
+  ctx: RunExecutionContext,
+  store: RunLedgerStore,
+  artifactRefs: string[],
+  judgment: JudgmentReport,
+  info: StagnationDetail,
+): Promise<JudgmentReport> {
+  const { runId } = ctx.active;
+  const stagnationReport = {
+    run_id: runId,
+    turn: ctx.turn,
+    detected_at: new Date().toISOString(),
+    reason: info.reason,
+    threshold: info.threshold,
+    output_hash: info.outputHash,
+    diff_stat_hash: info.diffStatHash,
+    note: `Loop is retrying without progress (${info.detail}); escalating to needs_human to avoid infinite loop.`,
+  };
+  const stagnationArtifactName = verificationArtifactName(
+    "loop-stagnation.json",
+    ctx.turn,
+  );
+  await store.writeArtifact(
+    runId,
+    stagnationArtifactName,
+    `${JSON.stringify(stagnationReport, null, 2)}\n`,
+  );
+  artifactRefs.push(`artifact://${runId}/${stagnationArtifactName}`);
+  const updated: JudgmentReport = {
+    ...judgment,
+    overall: "inconclusive",
+    next_action: "needs_human",
+    requires_human: true,
+    retryable: false,
+    evidence: [
+      ...judgment.evidence,
+      `artifact://${runId}/${stagnationArtifactName}`,
+    ],
+    unresolved_risks: [
+      ...judgment.unresolved_risks,
+      `loop stagnation: ${info.detail}`,
+    ],
+  };
+  ctx.lastJudgment = updated;
+  console.warn(
+    `[LoopRunService] run ${runId} turn ${ctx.turn} stagnation detected: ${info.detail}, escalating to needs_human`,
+  );
+  return updated;
+}
+
+/**
+ * The turn loop: execute → verify → control-plane judgment, repeat while
+ * the decision is retry. Blocking states (needs_human / budget_limited)
+ * suspend the context and keep the active registration; terminal states
+ * release it (finally).
+ */
+export async function runTurns(
+  ctx: RunExecutionContext,
+  deps: TurnLoopDeps,
+  state: TurnLoopState,
+): Promise<void> {
+  const { runId, loopId, createdAt } = ctx.active;
+  const store = deps.runLedgerStore;
+  let blocked = false;
+  state.executingContexts.set(runId, ctx);
+  const sleep = deps.sleep ?? defaultSleep;
+  const verify = deps.verifyRunFn ?? verifyRun;
+
+  try {
+    for (;;) {
+      const turnStartedAt = Date.now();
+
+      // 子任务索引不从轮次号推导: 推进由"已完成子任务数"驱动 (推进路径
+      // 显式递增 / 重启重建时按 subtask_advance 决策计数), 与轮次号解耦。
+
+      // learning_refs.human_feedback 在轮首快照 (见 buildHumanFeedbackRefs):
+      const humanFeedbackRefs = await buildHumanFeedbackRefs(
+        { runLedgerStore: deps.runLedgerStore },
+        runId,
+      );
+
+      // --- execution ---
+      let outcome: ExecutionOutcome;
+      if (ctx.setupError) {
+        const error = ctx.setupError;
+        ctx.setupError = undefined;
+        outcome = {
+          ok: false,
+          finalText: "",
+          sessionRef: "none",
+          error:
+            error instanceof AssemblyError
+              ? error.message
+              : `run setup/execution failed: ${error.message}`,
+          usage: null,
+          adapterError: error instanceof AdapterError ? error : undefined,
+        };
+      } else {
+        outcome = await executeTurn(ctx, deps, state.executingProcesses);
+      }
+      if (outcome.sessionRef !== "none") {
+        ctx.sessionRef = outcome.sessionRef;
+      }
+      const timeMinutes = (Date.now() - turnStartedAt) / 60_000;
+
+      // --- PATCH pause interception (主动暂停, 选项 A) ---
+      if (deps.controlPlane?.currentStateOf(runId) === "paused") {
+        blocked = true;
+        if (outcome.runtimeEvents && outcome.runtimeEvents.length > 0) {
+          const eventsName =
+            ctx.turn === 1
+              ? "runtime-events.jsonl"
+              : `runtime-events-turn${ctx.turn}.jsonl`;
+          await store.writeArtifact(
+            runId,
+            eventsName,
+            `${outcome.runtimeEvents
+              .map((event) => JSON.stringify(event))
+              .join("\n")}\n`,
+          );
+        }
+        state.suspended.set(runId, ctx);
+        return;
+      }
+
+      // --- artifacts ---
+      if (ctx.turn === 1 && ctx.contractJson) {
+        await store.writeArtifact(
+          runId,
+          "intent-contract.json",
+          ctx.contractJson,
+        );
+      }
+      if (ctx.turn === 1 && ctx.memoryPacketJson) {
+        await store.writeArtifact(
+          runId,
+          "memory-packet.json",
+          ctx.memoryPacketJson,
+        );
+      }
+      if (ctx.turn === 1 && ctx.input?.policyProjection) {
+        await store.writeArtifact(
+          runId,
+          "policy-projection.json",
+          JSON.stringify(ctx.input.policyProjection, null, 2),
+        );
+      }
+      if (ctx.turn === 1 && ctx.input) {
+        await store.writeArtifact(runId, "prompt.md", ctx.input.prompt);
+        await store.writeArtifact(
+          runId,
+          "runtime-input-bundle.json",
+          `${JSON.stringify(
+            {
+              goal_id: ctx.contract?.intent_id ?? "unknown",
+              run_id: runId,
+              turn: ctx.turn,
+              execution_contract: ctx.input.executionContract,
+              native_invocation: ctx.input.nativeInvocation,
+              context_injection: {
+                prompt_ref: `artifact://${runId}/prompt.md`,
+                instruction_overlay_ref: null,
+                memory_packet_ref: ctx.memoryPacketJson
+                  ? `artifact://${runId}/memory-packet.json`
+                  : null,
+                mcp_config_ref: null,
+              },
+              policy_projection: ctx.input.policyProjection ?? "not_applicable",
+              observability: ctx.input.observability,
+              budget_remaining: ctx.input.budgetRemaining ?? null,
+              permission_bridge_ref: null,
+            },
+            null,
+            2,
+          )}\n`,
+        );
+      }
+      const stdoutName =
+        ctx.turn === 1 ? "stdout.log" : `stdout-turn${ctx.turn}.log`;
+      const stdout = outcome.finalText || outcome.error || "(no output)";
+      await store.writeArtifact(runId, stdoutName, stdout);
+
+      const artifactRefs = [
+        ...(ctx.turn === 1 && ctx.contractJson
+          ? [`artifact://${runId}/intent-contract.json`]
+          : []),
+        ...(ctx.turn === 1 && ctx.workspaceEvidence
+          ? [`artifact://${runId}/workspace.json`]
+          : []),
+        `artifact://${runId}/${stdoutName}`,
+      ];
+
+      let runtimeEventsRef: string | null = null;
+      if (outcome.runtimeEvents && outcome.runtimeEvents.length > 0) {
+        const eventsName =
+          ctx.turn === 1
+            ? "runtime-events.jsonl"
+            : `runtime-events-turn${ctx.turn}.jsonl`;
+        await store.writeArtifact(
+          runId,
+          eventsName,
+          `${outcome.runtimeEvents
+            .map((event) => JSON.stringify(event))
+            .join("\n")}\n`,
+        );
+        runtimeEventsRef = `artifact://${runId}/${eventsName}`;
+        artifactRefs.push(runtimeEventsRef);
+      }
+
+      let executorSummaryRef: string | null = null;
+      const executorSummary = extractExecutorSummary(outcome.finalText);
+      if (executorSummary) {
+        const summaryName =
+          ctx.turn === 1
+            ? "executor-summary.md"
+            : `executor-summary-turn${ctx.turn}.md`;
+        await store.writeArtifact(runId, summaryName, `${executorSummary}\n`);
+        executorSummaryRef = `artifact://${runId}/${summaryName}`;
+        artifactRefs.push(executorSummaryRef);
+      }
+
+      let diffRef: string | null = null;
+      const workspacePath = ctx.card.loop.workspace.path;
+      if (workspacePath) {
+        const diff = await captureGitDiff(workspacePath);
+        if (diff) {
+          const diffName =
+            ctx.turn === 1 ? "diff.patch" : `diff-turn${ctx.turn}.patch`;
+          await store.writeArtifact(runId, diffName, diff);
+          diffRef = `artifact://${runId}/${diffName}`;
+          artifactRefs.push(diffRef);
+        }
+      }
+
+      const permissionEventRefs: string[] = [];
+      if (ctx.permissionEvents.length > 0) {
+        const permissionName =
+          ctx.turn === 1
+            ? "permission-events.json"
+            : `permission-events-turn${ctx.turn}.json`;
+        await store.writeArtifact(
+          runId,
+          permissionName,
+          `${JSON.stringify(ctx.permissionEvents, null, 2)}\n`,
+        );
+        permissionEventRefs.push(`artifact://${runId}/${permissionName}`);
+      }
+
+      const collector = await runCollector(
+        {
+          supervisor: deps.supervisor,
+          runLedgerStore: deps.runLedgerStore,
+          watchProcess: async (runId_, proc, opts) => {
+            const result = await watchProcess(runId_, proc, {
+              timeoutMs: opts.timeoutMs,
+              deps,
+              executingProcesses: state.executingProcesses,
+            });
+            return {
+              ok: result.ok,
+              finalText: result.finalText,
+              error: result.error,
+            };
+          },
+        },
+        ctx,
+        outcome,
+        `artifact://${runId}/${stdoutName}`,
+      );
+      if (collector.inputRef) {
+        artifactRefs.push(collector.inputRef);
+      }
+      if (collector.outputRef) {
+        artifactRefs.push(collector.outputRef);
+      }
+      if (collector.reportRef) {
+        artifactRefs.push(collector.reportRef);
+      }
+
+      // --- verification ---
+      let verificationRefs: VerificationRefs = {
+        verification_input: "not_applicable",
+        verifier_runtime: "not_applicable",
+        verifier_report: "not_applicable",
+        judgment_report: "not_applicable",
+      };
+      let verificationRan = false;
+      let judgment: JudgmentReport | null = null;
+      let judgmentRef: string | null = null;
+      let preVerifySnapshot: WorkspaceSnapshot | null = null;
+
+      const requiredPhases = ctx.card.loop.verification.required;
+      if (requiredPhases.length > 0 && ctx.contract && workspacePath) {
+        const policyIntentRef = ctx.input?.policyProjection
+          ? `artifact://${runId}/policy-projection.json`
+          : null;
+        const knownFailurePatterns = (deps.failurePatternStore?.list() ?? [])
+          .filter((pattern) => pattern.status === "open")
+          .map((pattern) => pattern.pattern_id);
+        preVerifySnapshot =
+          ctx.card.loop.workspace.strategy === "direct" && workspacePath
+            ? await captureWorkspaceSnapshot(workspacePath)
+            : null;
+        try {
+          const reviewInChain = requiredPhases.includes("review");
+          const interactionInChain = requiredPhases.includes("interaction");
+          // P4: review 段由 Verifier Agent (read-only judge) 承載;
+          // collector 報告只做證據合併 (下方 mergeEvidence), 不再充當
+          // review verdict —— 修復計畫 #12 的 collector-as-review 路徑退役。
+          const verification = await verify(
+            {
+              card: ctx.card,
+              contract: ctx.contract,
+              runId,
+              turn: ctx.turn,
+              workspacePath,
+              exitStatus: outcome.ok ? 0 : 1,
+              stdoutRef: `artifact://${runId}/${stdoutName}`,
+              diffRef,
+              runtimeEventsRef,
+              executorSummaryRef,
+              permissionEventRefs,
+              policyIntentRef,
+              knownFailurePatterns,
+            },
+            {
+              store,
+              runInteractionAgent: interactionInChain
+                ? (agentCtx) =>
+                    runInteractionAgent(
+                      {
+                        supervisor: deps.supervisor,
+                        runLedgerStore: store,
+                        watchProcess: async (runId_, proc, opts) => {
+                          const result = await watchProcess(runId_, proc, {
+                            timeoutMs: opts.timeoutMs,
+                            deps,
+                            executingProcesses: state.executingProcesses,
+                          });
+                          return {
+                            ok: result.ok,
+                            finalText: result.finalText,
+                            error: result.error,
+                          };
+                        },
+                      },
+                      ctx,
+                      agentCtx,
+                    )
+                : undefined,
+              runReviewAgent: reviewInChain
+                ? (agentCtx) =>
+                    runVerifierAgent(
+                      {
+                        supervisor: deps.supervisor,
+                        runLedgerStore: store,
+                        watchProcess: async (runId_, proc, opts) => {
+                          const result = await watchProcess(runId_, proc, {
+                            timeoutMs: opts.timeoutMs,
+                            deps,
+                            executingProcesses: state.executingProcesses,
+                          });
+                          return {
+                            ok: result.ok,
+                            finalText: result.finalText,
+                            error: result.error,
+                          };
+                        },
+                      },
+                      ctx,
+                      agentCtx,
+                    )
+                : undefined,
+            },
+          );
+          verificationRefs = verification.refs;
+          verificationRan = true;
+          // collector 報告恆作為證據合併進 judgment (不充當 verdict);
+          // P4 前 review-in-chain 時不合併是怕重複計票 —— 現在 review
+          // verdict 由 Verifier Agent 產出, collector 純證據, 恆合併。
+          judgment = collector.reportRef
+            ? mergeEvidence(verification.judgment, [collector.reportRef])
+            : verification.judgment;
+          judgmentRef = verification.refs.judgment_report;
+          if (collector.reportRef) {
+            await store.writeArtifact(
+              runId,
+              verificationArtifactName("judgment-report.json", ctx.turn),
+              `${JSON.stringify(judgment, null, 2)}\n`,
+            );
+          }
+        } catch (error) {
+          console.error(
+            `[LoopRunService] verification failed for run ${runId}:`,
+            error,
+          );
+          const errorName = verificationArtifactName(
+            "verification-error.json",
+            ctx.turn,
+          );
+          const message =
+            error instanceof Error ? error.message : String(error);
+          await store
+            .writeArtifact(
+              runId,
+              errorName,
+              `${JSON.stringify(
+                {
+                  run_id: runId,
+                  turn: ctx.turn,
+                  error: message,
+                  at: new Date().toISOString(),
+                },
+                null,
+                2,
+              )}\n`,
+            )
+            .catch(() => {});
+          const errorRef = `artifact://${runId}/${errorName}`;
+          artifactRefs.push(errorRef);
+          verificationRan = true;
+          judgment = {
+            overall: "inconclusive",
+            next_action: "escalate",
+            retryable: false,
+            requires_human: true,
+            evidence: [errorRef],
+            unresolved_risks: [
+              `verification layer crashed and produced no judgment: ${message}`,
+            ],
+          };
+          judgmentRef = null;
+        }
+      }
+
+      // --- direct 策略: 验证期间工作区稳定性标注 ---
+      if (
+        verificationRan &&
+        judgment &&
+        judgmentRef &&
+        preVerifySnapshot &&
+        workspacePath
+      ) {
+        const postVerifySnapshot =
+          await captureWorkspaceSnapshot(workspacePath);
+        const verificationPassed =
+          judgment.overall === "passed" && judgment.next_action === "complete";
+        if (
+          postVerifySnapshot &&
+          workspaceSnapshotChanged(preVerifySnapshot, postVerifySnapshot) &&
+          !verificationPassed
+        ) {
+          judgment = {
+            ...judgment,
+            evidence: [...judgment.evidence, WORKSPACE_UNSTABLE_ANNOTATION],
+          };
+          await store.writeArtifact(
+            runId,
+            verificationArtifactName("judgment-report.json", ctx.turn),
+            `${JSON.stringify(judgment, null, 2)}\n`,
+          );
+        }
+      }
+
+      // --- observability.required_artifacts 校验 ---
+      const requiredArtifacts = ctx.card.loop.observability?.required_artifacts;
+      if (
+        verificationRan &&
+        judgment &&
+        judgmentRef &&
+        requiredArtifacts?.length
+      ) {
+        const artifactAnnotations = await checkRequiredArtifacts({
+          artifactsDir: store.artifactsDirFor(runId),
+          required: requiredArtifacts,
+          turn: ctx.turn,
+        });
+        if (artifactAnnotations.length > 0) {
+          judgment = {
+            ...judgment,
+            evidence: [...judgment.evidence, ...artifactAnnotations],
+          };
+          await store.writeArtifact(
+            runId,
+            verificationArtifactName("judgment-report.json", ctx.turn),
+            `${JSON.stringify(judgment, null, 2)}\n`,
+          );
+        }
+      }
+
+      // --- merge gate (worktree 策略 + modify) ---
+      const taskPlan = ctx.taskPlan;
+      const hasMoreSubtasks =
+        taskPlan !== null &&
+        ctx.currentSubtaskIndex + 1 < taskPlan.subtasks.length;
+      if (
+        outcome.ok &&
+        judgment?.next_action === "complete" &&
+        judgment.overall === "passed" &&
+        !hasMoreSubtasks &&
+        ctx.workspaceEvidence &&
+        ctx.card.loop.policy &&
+        (await worktreeHasChanges(
+          ctx.workspaceEvidence.worktreePath,
+          ctx.workspaceEvidence.baseSha,
+        ))
+      ) {
+        judgment = {
+          ...judgment,
+          next_action: "needs_human",
+          requires_human: true,
+          unresolved_risks: [
+            ...judgment.unresolved_risks,
+            `worktree changes pending merge approval: branch ${ctx.workspaceEvidence.branch} → ${ctx.workspaceEvidence.originPath}`,
+          ],
+        };
+        await store.writeArtifact(
+          runId,
+          "merge-gate.json",
+          `${JSON.stringify(
+            {
+              turn: ctx.turn,
+              origin_path: ctx.workspaceEvidence.originPath,
+              worktree_path: ctx.workspaceEvidence.worktreePath,
+              branch: ctx.workspaceEvidence.branch,
+              base_sha: ctx.workspaceEvidence.baseSha,
+              judgment_ref: judgmentRef,
+              created_at: new Date().toISOString(),
+            },
+            null,
+            2,
+          )}\n`,
+        );
+        artifactRefs.push(`artifact://${runId}/merge-gate.json`);
+        await store.writeArtifact(
+          runId,
+          verificationArtifactName("judgment-report.json", ctx.turn),
+          `${JSON.stringify(judgment, null, 2)}\n`,
+        );
+      }
+      ctx.lastJudgment = judgment;
+      ctx.lastJudgmentRef = judgmentRef;
+
+      // --- loop stagnation / idle / dead-loop detection ---
+      const outputHash = hashNormalizedOutput(
+        normalizeTurnOutput(outcome.finalText || outcome.error || ""),
+      );
+      const diffStat = workspacePath
+        ? ((await captureGitDiffStat(
+            workspacePath,
+            ctx.workspaceEvidence?.baseSha,
+          )) ?? "")
+        : "";
+      const diffStatHash = hashNormalizedOutput(diffStat);
+
+      // A) identical output across turns
+      if (
+        outcome.ok &&
+        judgment &&
+        (judgment.next_action === "retry" ||
+          judgment.next_action === "needs_human") &&
+        deps.loopWatchdog.stagnationSimilarTurnsThreshold > 0
+      ) {
+        const threshold = deps.loopWatchdog.stagnationSimilarTurnsThreshold;
+        const recent = ctx.recentTurnOutputHashes;
+        if (
+          recent.length >= threshold - 1 &&
+          recent.slice(-(threshold - 1)).every((h) => h === outputHash)
+        ) {
+          judgment = await escalateToNeedsHumanForStagnation(
+            ctx,
+            store,
+            artifactRefs,
+            judgment,
+            {
+              reason: "similar_output",
+              threshold,
+              detail: `identical output for ${threshold} consecutive turns`,
+              outputHash,
+              diffStatHash,
+            },
+          );
+        }
+      }
+
+      // B) no effective workspace change across retry turns (idle / spinning)
+      if (
+        outcome.ok &&
+        judgment &&
+        judgment.next_action === "retry" &&
+        deps.loopWatchdog.idleNoProgressTurnsThreshold > 0
+      ) {
+        const threshold = deps.loopWatchdog.idleNoProgressTurnsThreshold;
+        const recent = ctx.recentTurnDiffStatHashes;
+        if (
+          recent.length >= threshold - 1 &&
+          recent.slice(-(threshold - 1)).every((h) => h === diffStatHash)
+        ) {
+          judgment = await escalateToNeedsHumanForStagnation(
+            ctx,
+            store,
+            artifactRefs,
+            judgment,
+            {
+              reason: "no_diff_progress",
+              threshold,
+              detail: `workspace diff stat unchanged for ${threshold} consecutive retry turns`,
+              outputHash,
+              diffStatHash,
+            },
+          );
+        }
+      }
+
+      ctx.recentTurnOutputHashes.push(outputHash);
+      if (
+        ctx.recentTurnOutputHashes.length >
+        deps.loopWatchdog.stagnationSimilarTurnsThreshold
+      ) {
+        ctx.recentTurnOutputHashes.shift();
+      }
+      ctx.recentTurnDiffStatHashes.push(diffStatHash);
+      if (
+        ctx.recentTurnDiffStatHashes.length >
+        deps.loopWatchdog.idleNoProgressTurnsThreshold
+      ) {
+        ctx.recentTurnDiffStatHashes.shift();
+      }
+
+      // --- subtask-driven turn control ---
+      const subtaskPassed = outcome.ok && judgment?.overall === "passed";
+      const shouldAdvanceSubtask =
+        taskPlan !== null &&
+        subtaskPassed &&
+        hasMoreSubtasks &&
+        !judgment?.requires_human &&
+        ctx.policyEscalations.length === 0;
+
+      // --- control decision ---
+      let finalStatus: RunState = outcome.ok ? "complete" : "failed";
+      let retriesUsed = 0;
+      let blockerFingerprint: string | undefined;
+      let repeatedBlockerCount: number | undefined;
+      if (deps.controlPlane && ctx.contract && shouldAdvanceSubtask) {
+        finalStatus = "active";
+      } else if (deps.controlPlane && ctx.contract) {
+        const diffSummary = workspacePath
+          ? ((await captureGitDiffStat(
+              workspacePath,
+              ctx.workspaceEvidence?.baseSha,
+            )) ?? undefined)
+          : undefined;
+        const applied = await deps.controlPlane.applyJudgment({
+          loopId,
+          runId,
+          turn: ctx.turn,
+          goalId: ctx.contract.intent_id,
+          workspaceRef: `workspace://${loopId}/${runId}`,
+          executionOk: outcome.ok,
+          verificationRan,
+          judgment,
+          judgmentRef,
+          createdAt,
+          budget: ctx.contract.budget,
+          diffSummary,
+          stopRules: ctx.contract.stop_rules,
+          sessionRef: outcome.sessionRef,
+          policyEscalation: drainPolicyEscalation(ctx),
+          usage: {
+            tokens: outcome.usage?.tokens ?? null,
+            timeMinutes,
+          },
+          adapterFailure: outcome.adapterError
+            ? {
+                code: outcome.adapterError.code,
+                failureTag: adapterErrorCodeToFailureTag(
+                  outcome.adapterError.code,
+                ),
+                message: outcome.adapterError.message,
+              }
+            : undefined,
+        });
+        finalStatus = applied.state;
+        retriesUsed = applied.budget.used_retries;
+        blockerFingerprint = applied.entry.blocker_fingerprint;
+        repeatedBlockerCount = applied.entry.repeated_blocker_count;
+      } else if (deps.controlPlane && !ctx.contract) {
+        const applied = await deps.controlPlane.applyJudgment({
+          loopId,
+          runId,
+          turn: ctx.turn,
+          goalId: "unknown",
+          workspaceRef: `workspace://${loopId}/${runId}`,
+          executionOk: outcome.ok,
+          verificationRan,
+          judgment,
+          judgmentRef,
+          createdAt,
+          budget: {
+            max_tokens: 0,
+            max_time_minutes: 0,
+            max_turns: 1,
+            max_retries: 0,
+          },
+          sessionRef: outcome.sessionRef,
+          usage: { tokens: null, timeMinutes },
+          adapterFailure: outcome.adapterError
+            ? {
+                code: outcome.adapterError.code,
+                failureTag: adapterErrorCodeToFailureTag(
+                  outcome.adapterError.code,
+                ),
+                message: outcome.adapterError.message,
+              }
+            : undefined,
+        });
+        finalStatus = applied.state;
+        blockerFingerprint = applied.entry.blocker_fingerprint;
+        repeatedBlockerCount = applied.entry.repeated_blocker_count;
+      } else if (verificationRan && judgment) {
+        finalStatus =
+          outcome.ok && judgment.overall === "passed" ? "complete" : "failed";
+      }
+
+      // --- dead-loop detection: same blocker recurring in needs_human ---
+      if (
+        finalStatus === "needs_human" &&
+        blockerFingerprint &&
+        repeatedBlockerCount !== undefined &&
+        deps.loopWatchdog.repeatedBlockerThreshold > 0 &&
+        repeatedBlockerCount >= deps.loopWatchdog.repeatedBlockerThreshold
+      ) {
+        console.warn(
+          `[LoopRunService] run ${runId} turn ${ctx.turn} dead-loop detected: blocker ${blockerFingerprint} repeated ${repeatedBlockerCount} times, forcing failed`,
+        );
+        await deps.controlPlane?.failRun(
+          runId,
+          `dead loop: the same blocker (${blockerFingerprint}) recurred ${repeatedBlockerCount} times; forcing failed to avoid waiting forever for human`,
+          { force: true },
+        );
+        finalStatus = "failed";
+      }
+
+      const handoffRef = await writeTurnHandoff(
+        { runLedgerStore: deps.runLedgerStore },
+        ctx,
+        {
+          collectorReportRef: collector.reportRef,
+          judgmentRef,
+          evidenceRefs: judgment?.evidence ?? artifactRefs,
+          blockerFingerprint,
+          repeatedBlockerCount,
+        },
+      );
+      artifactRefs.push(handoffRef);
+
+      // --- per-turn ledger entry ---
+      const adapterInfo = describeAdapter(loopRuntime(ctx.card)?.provider);
+      const permissionMode = ctx.input?.permissionMode ?? "plan";
+      const appliedNote = ctx.input?.appliedProposals?.length
+        ? `;proposals=${ctx.input.appliedProposals.join("|")}`
+        : "";
+      const consumedPolicy = resolveAdapterPolicy(ctx.input?.adapterPolicy);
+      const adapterPolicyNote =
+        consumedPolicy.model !== undefined ||
+        consumedPolicy.timeoutMs !== undefined ||
+        consumedPolicy.ignoredKeys.length > 0
+          ? `;adapterPolicy[${[
+              consumedPolicy.model ? `model=${consumedPolicy.model}` : null,
+              consumedPolicy.timeoutMs
+                ? `timeout_seconds=${consumedPolicy.timeoutMs / 1000}`
+                : null,
+              consumedPolicy.ignoredKeys.length > 0
+                ? `ignored=${consumedPolicy.ignoredKeys.join("|")}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(",")}]`
+          : "";
+      const capabilitySnapshot = ctx.input?.policyProfile
+        ? `realSdk(${adapterInfo.bridge});permissionMode=${permissionMode};policy=${ctx.input.policyProfile.policy_profile};selfApproveAudit;interrupt=${adapterInfo.interrupt}${adapterPolicyNote}${appliedNote}`
+        : `realSdk(${adapterInfo.bridge});permissionMode=${permissionMode};autoDenyApprovals;interrupt=${adapterInfo.interrupt}${adapterPolicyNote}${appliedNote}`;
+      const entry: RunLedgerEntry = {
+        loop_id: loopId,
+        run_id: runId,
+        source: ctx.active.source,
+        runtime: {
+          adapter: adapterInfo.adapter,
+          session_ref: outcome.sessionRef,
+          mode: adapterInfo.mode,
+          adapter_capability_snapshot: capabilitySnapshot,
+        },
+        input_refs: {
+          intent: `intent://${loopId}`,
+          memory_packet: ctx.memoryPacketJson
+            ? `artifact://${runId}/memory-packet.json`
+            : null,
+          workspace: `workspace://${loopId}/${runId}`,
+        },
+        verification_refs: verificationRefs,
+        learning_refs: {
+          control_decision: `ledger://${runId}`,
+          human_feedback: humanFeedbackRefs,
+          external_feedback: [],
+        },
+        artifact_refs: artifactRefs,
+        final_status: finalStatus,
+        created_at: createdAt,
+      };
+      await store.appendEntry(runId, entry);
+      if (!deps.controlPlane && outcome.adapterError) {
+        await store.appendDecisionEntry(runId, {
+          decision_id: `decision-${runId}-adapter-failure`,
+          loop_id: loopId,
+          run_id: runId,
+          decision: "failed",
+          reason: `adapter hard error (${outcome.adapterError.code}): ${outcome.adapterError.message}`,
+          evidence_refs: [],
+          policy_refs: [],
+          next_action: "none",
+          failure_tags: [
+            adapterErrorCodeToFailureTag(outcome.adapterError.code),
+          ],
+          created_at: new Date().toISOString(),
+        });
+      }
+      console.log(
+        `[LoopRunService] run ${runId} (loop '${loopId}') turn ${ctx.turn}: ${finalStatus}${outcome.error ? ` — ${outcome.error}` : ""}`,
+      );
+
+      // --- state machine drive ---
+      if (shouldAdvanceSubtask) {
+        const completedTurn = ctx.turn;
+        const completedSubtaskIndex = ctx.currentSubtaskIndex + 1;
+        ctx.turn += 1;
+        ctx.currentSubtaskIndex += 1;
+        ctx.pendingContext = buildNextSubtaskContext(
+          ctx.currentSubtaskIndex,
+          taskPlan,
+        );
+        if (deps.controlPlane && ctx.contract) {
+          const advanced = await deps.controlPlane.advanceSubtaskTurn(
+            runId,
+            loopId,
+            ctx.turn,
+            ctx.contract.budget,
+            ctx.sessionRef,
+            {
+              completedTurn,
+              subtaskIndex: completedSubtaskIndex,
+              subtaskCount: taskPlan?.subtasks.length ?? 0,
+              judgment,
+              usage: {
+                tokens: outcome.usage?.tokens ?? null,
+                timeMinutes,
+              },
+            },
+          );
+          if (advanced.state === "budget_limited") {
+            ctx.turn = completedTurn;
+            ctx.pendingContext = null;
+            blocked = true;
+            state.suspended.set(runId, ctx);
+            return;
+          }
+        }
+        continue;
+      }
+
+      if (finalStatus === "retry") {
+        const backoff = retryBackoffMs(retriesUsed);
+        console.log(
+          `[LoopRunService] run ${runId} retry #${retriesUsed} in ${backoff}ms`,
+        );
+        await sleep(backoff);
+        ctx.turn += 1;
+        ctx.pendingContext = buildRetryContext(ctx.turn, judgment, judgmentRef);
+        if (taskPlan) {
+          ctx.pendingContext += `\n\n${buildNextSubtaskContext(
+            ctx.currentSubtaskIndex,
+            taskPlan,
+          )}`;
+        }
+        const begin = await deps.controlPlane?.beginTurn(runId, ctx.turn);
+        if (begin && !begin.ok) {
+          blocked = true;
+          state.suspended.set(runId, ctx);
+          return;
+        }
+        continue;
+      }
+
+      const status = finalStatus as RunState;
+      if (
+        status === "needs_human" ||
+        status === "budget_limited" ||
+        status === "paused"
+      ) {
+        blocked = true;
+        state.suspended.set(runId, ctx);
+        return;
+      }
+
+      // complete / failed: terminal.
+      return;
+    }
+  } catch (error) {
+    console.error(`[LoopRunService] run ${runId} failed:`, error);
+  } finally {
+    state.executingContexts.delete(runId);
+    if (!blocked) {
+      state.activeByLoop.delete(loopId);
+      state.activeByRunId.delete(runId);
+      state.suspended.delete(runId);
+    }
+  }
+}
+
+/**
+ * Continue a suspended run after a ResumeSignal (human approve /
+ * request_changes, resume signal, budget supplemented): advance the turn,
+ * inject the human response (and the previous judgment) as context, run
+ * the pre-turn budget check, and re-enter the turn loop on the same
+ * session. After a server restart the context is rebuilt from the stores.
+ */
+export async function continueRun(
+  signal: ResumeSignal,
+  deps: TurnLoopDeps,
+  state: TurnLoopState,
+): Promise<void> {
+  const controlPlane = deps.controlPlane;
+  if (!controlPlane) {
+    return;
+  }
+  let ctx = state.suspended.get(signal.runId) ?? null;
+  if (!ctx) {
+    ctx = await rebuildContext(signal, deps);
+    if (!ctx) {
+      console.error(
+        `[LoopRunService] cannot continue run ${signal.runId}: no suspended context and rebuild failed`,
+      );
+      return;
+    }
+    // Re-register: a rebuilt run was not tracked in this process.
+    if (!state.activeByRunId.has(signal.runId)) {
+      state.activeByLoop.set(signal.loopId, ctx.active);
+      state.activeByRunId.set(signal.runId, ctx.active);
+    }
+  }
+
+  // --- 合并闸门批准 ---
+  if (signal.cause === "human_approve") {
+    const gateJson = await deps.runLedgerStore.readArtifact(
+      signal.runId,
+      "merge-gate.json",
+    );
+    if (gateJson) {
+      const gate = JSON.parse(gateJson) as {
+        turn: number;
+        origin_path: string;
+        worktree_path: string;
+        branch: string;
+      };
+      const runState = await controlPlane.getRunState(signal.loopId);
+      if (runState?.turn === gate.turn) {
+        let mergeResult: {
+          ok: boolean;
+          merge_commit_sha?: string;
+          error?: string;
+        };
+        try {
+          const merged = await mergeRunWorktree({
+            worktreePath: gate.worktree_path,
+            originPath: gate.origin_path,
+            branch: gate.branch,
+            runId: signal.runId,
+          });
+          mergeResult = { ok: true, merge_commit_sha: merged.mergeCommitSha };
+        } catch (error) {
+          mergeResult = {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+        await deps.runLedgerStore.writeArtifact(
+          signal.runId,
+          "merge-result.json",
+          `${JSON.stringify(
+            {
+              run_id: signal.runId,
+              turn: gate.turn,
+              ...mergeResult,
+              at: new Date().toISOString(),
+            },
+            null,
+            2,
+          )}\n`,
+        );
+        await controlPlane.settleMerge({
+          loopId: signal.loopId,
+          runId: signal.runId,
+          turn: gate.turn,
+          ok: mergeResult.ok,
+          mergeCommitSha: mergeResult.merge_commit_sha ?? null,
+          error: mergeResult.error,
+        });
+        releaseRun(signal.runId, state);
+        return;
+      }
+    }
+  }
+
+  // P5 意圖閘門: 人工 approve 視為確認 agent 合約 —— 翻轉
+  // confirmed_by_human 並回寫合約快照, 後續重啟重建不再重複進閘門。
+  if (
+    signal.cause === "human_approve" &&
+    ctx.contract?.intent_understanding?.generated_by === "agent" &&
+    !ctx.contract.intent_understanding.confirmed_by_human
+  ) {
+    ctx.contract = {
+      ...ctx.contract,
+      intent_understanding: {
+        ...ctx.contract.intent_understanding,
+        confirmed_by_human: true,
+      },
+    };
+    ctx.contractJson = JSON.stringify(ctx.contract, null, 2);
+    await deps.runLedgerStore.writeArtifact(
+      signal.runId,
+      "intent-contract.json",
+      ctx.contractJson,
+    );
+  }
+
+  ctx.turn += 1;
+  const resumeContext = buildHumanResumeContext(
+    signal,
+    ctx.lastJudgment,
+    ctx.lastJudgmentRef,
+  );
+  ctx.pendingContext = ctx.taskPlan
+    ? `${resumeContext}\n\n${buildNextSubtaskContext(ctx.currentSubtaskIndex, ctx.taskPlan)}`
+    : resumeContext;
+  const begin = await controlPlane.beginTurn(signal.runId, ctx.turn);
+  if (!begin.ok) {
+    state.suspended.set(signal.runId, ctx);
+    return;
+  }
+  state.suspended.delete(signal.runId);
+  await runTurns(ctx, deps, state);
+}
+
+/**
+ * Resume runs that were active or retrying when the server restarted.
+ * If the execution context cannot be rebuilt or the resumed run crashes
+ * before producing a judgment, the run is forced to `failed` so it does not
+ * stay stuck in `active`/`retry` after the restart.
+ */
+export async function resumeAfterRestart(
+  loopId: string,
+  deps: TurnLoopDeps,
+  state: TurnLoopState,
+): Promise<void> {
+  const controlPlane = deps.controlPlane;
+  if (!controlPlane) {
+    return;
+  }
+  const runState = await controlPlane.getRunState(loopId);
+  if (!runState) {
+    return;
+  }
+  if (runState.state !== "active" && runState.state !== "retry") {
+    return;
+  }
+
+  const signal: ResumeSignal = {
+    runId: runState.run_id,
+    loopId,
+    cause: "resume_signal",
+  };
+  const ctx = await rebuildContext(signal, deps);
+  if (!ctx) {
+    console.warn(
+      `[LoopRunService] cannot resume run ${runState.run_id} for loop '${loopId}' after restart: context rebuild failed`,
+    );
+    await controlPlane.failRun(
+      runState.run_id,
+      `restart recovery failed: execution context could not be rebuilt for ${runState.state} run at turn ${runState.turn}`,
+    );
+    return;
+  }
+
+  state.activeByLoop.set(loopId, ctx.active);
+  state.activeByRunId.set(ctx.active.runId, ctx.active);
+
+  if (runState.state === "retry") {
+    ctx.turn += 1;
+    ctx.pendingContext = buildRetryContext(
+      ctx.turn,
+      ctx.lastJudgment,
+      ctx.lastJudgmentRef,
+    );
+    if (ctx.taskPlan) {
+      ctx.pendingContext += `\n\n${buildNextSubtaskContext(
+        ctx.currentSubtaskIndex,
+        ctx.taskPlan,
+      )}`;
+    }
+    const begin = await controlPlane.beginTurn(ctx.active.runId, ctx.turn);
+    if (!begin.ok) {
+      state.suspended.set(ctx.active.runId, ctx);
+      return;
+    }
+  } else {
+    ctx.turn = runState.turn;
+    ctx.pendingContext = null;
+  }
+
+  void runTurns(ctx, deps, state).catch(async (error) => {
+    console.error(
+      `[LoopRunService] resumed run ${ctx.active.runId} crashed after restart:`,
+      error,
+    );
+    await controlPlane.failRun(
+      ctx.active.runId,
+      `resumed ${runState.state} run crashed after restart: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    releaseRun(ctx.active.runId, state);
+  });
+}

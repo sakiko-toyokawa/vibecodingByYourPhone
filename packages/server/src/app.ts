@@ -7,6 +7,7 @@ import {
   registerValue,
 } from "./container.js";
 import { GitHubIssueLoopService } from "./github/index.js";
+import { PlannerService } from "./loop/contract/planner.js";
 import {
   ControlPlane,
   CronScheduler,
@@ -238,6 +239,7 @@ export function createApp(
       // .loop/STATE.md 人可读投影 (04-存储约定): 迁移时读 card 的
       // workspace.path / persistence.state_file
       loopCardStore,
+      dataDir: options.dataDir,
     });
     // 阶段 3 学习侧: proposalStore 是 server 进程单例 (提案单写者) —
     // run-service 装配消费、learning worker、提案 API 都经同一个实例,
@@ -246,6 +248,7 @@ export function createApp(
       dataDir: options.dataDir,
     });
     const proposalStore = new ProposalStore({ dataDir: options.dataDir });
+    const planner = new PlannerService();
     const loopRunService = new LoopRunService({
       supervisor,
       loopCardStore,
@@ -259,7 +262,36 @@ export function createApp(
       githubCredentialStore: container.cradle.githubCredentialStore,
       githubToolProvisioner: container.cradle.githubToolProvisioner,
       dataDir: options.dataDir,
+      planner,
+      loopWatchdog: {
+        turnIdleTimeoutMs: options.loopTurnIdleTimeoutMs ?? 10 * 60 * 1000,
+        turnIdleCheckIntervalMs:
+          options.loopTurnIdleCheckIntervalMs ?? 30 * 1000,
+        stagnationSimilarTurnsThreshold:
+          options.loopStagnationSimilarTurnsThreshold ?? 3,
+        idleNoProgressTurnsThreshold:
+          options.loopIdleNoProgressTurnsThreshold ?? 3,
+        repeatedBlockerThreshold: options.loopRepeatedBlockerThreshold ?? 3,
+      },
     });
+    // Resume any runs that were active or retrying when the server last
+    // stopped. Fire-and-forget: startup must not block on run recovery.
+    void (async () => {
+      const states = await runStateStore.list();
+      for (const { loopId, state: record } of states) {
+        if (record.state === "active" || record.state === "retry") {
+          console.log(
+            `[LoopRunService] Resuming ${record.state} run ${record.run_id} for loop '${loopId}' after startup`,
+          );
+          await loopRunService.resumeAfterRestart(loopId).catch((error) => {
+            console.error(
+              `[LoopRunService] failed to resume run ${record.run_id} for loop '${loopId}':`,
+              error,
+            );
+          });
+        }
+      }
+    })();
     const cronScheduler = new CronScheduler({
       loopCardStore,
       isRunActive: (loopId) => loopRunService.isRunActive(loopId),

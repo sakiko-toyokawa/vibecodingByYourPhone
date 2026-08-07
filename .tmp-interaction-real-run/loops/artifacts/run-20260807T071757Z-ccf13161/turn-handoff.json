@@ -1,0 +1,21 @@
+{
+  "run_id": "run-20260807T071757Z-ccf13161",
+  "loop_id": "interaction-real-1786087077568",
+  "turn": 1,
+  "workspace_ref": "workspace://interaction-real-1786087077568/run-20260807T071757Z-ccf13161",
+  "session_ref": "019fdb15-f860-7730-8dca-35e55e957f61",
+  "judgment_ref": "artifact://run-20260807T071757Z-ccf13161/judgment-report.json",
+  "collector_report_ref": "artifact://run-20260807T071757Z-ccf13161/collector-report.json",
+  "blocker_fingerprint": "blocker:6755be860a478485",
+  "repeated_blocker_count": 1,
+  "evidence_refs": [
+    "artifact://run-20260807T071757Z-ccf13161/interaction-deps.json",
+    "artifact://run-20260807T071757Z-ccf13161/interaction-agent-output.txt",
+    "artifact://run-20260807T071757Z-ccf13161/collector-report.json"
+  ],
+  "next_required_checks": [
+    "interaction"
+  ],
+  "actions_not_to_repeat": [],
+  "created_at": "2026-08-07T07:20:04.991Z"
+}

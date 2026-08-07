@@ -13,6 +13,7 @@ import {
   createStaticRoutes,
 } from "./frontend/index.js";
 import { ensureSelfSignedCertificate } from "./https/self-signed.js";
+import { RunStateStore } from "./loop/control-plane/run-state-store.js";
 import {
   setDebugContext,
   startMaintenanceServer,
@@ -160,6 +161,12 @@ export async function startServer(): Promise<{
     enabledProviders: config.enabledProviders,
     voiceInputEnabled: config.voiceInputEnabled,
     allowedImagePaths: config.allowedImagePaths,
+    loopTurnIdleTimeoutMs: config.loopTurnIdleTimeoutMs,
+    loopTurnIdleCheckIntervalMs: config.loopTurnIdleCheckIntervalMs,
+    loopStagnationSimilarTurnsThreshold:
+      config.loopStagnationSimilarTurnsThreshold,
+    loopIdleNoProgressTurnsThreshold: config.loopIdleNoProgressTurnsThreshold,
+    loopRepeatedBlockerThreshold: config.loopRepeatedBlockerThreshold,
   });
 
   const extraScanners = new Map<string, ProviderScanner>();
@@ -613,11 +620,18 @@ export async function startServer(): Promise<{
 
   // Start maintenance server on separate port (for out-of-band diagnostics)
   if (config.maintenancePort !== 0) {
+    const runStateStore = new RunStateStore({ dataDir: config.dataDir });
     startMaintenanceServer({
       port: config.maintenancePort < 0 ? 0 : config.maintenancePort,
       portFile: config.maintenancePortFile,
       host: "127.0.0.1",
       mainServerPort: effectivePort,
+      hasActiveRuns: async () => {
+        const states = await runStateStore.list();
+        return states.some(
+          (s) => s.state.state === "active" || s.state.state === "retry",
+        );
+      },
     });
   }
 

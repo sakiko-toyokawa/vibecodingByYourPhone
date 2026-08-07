@@ -79,6 +79,11 @@ export interface MaintenanceServerOptions {
   host?: string;
   /** Optional: main server reference for status reporting */
   mainServerPort?: number;
+  /** Optional: callback to check whether any loop runs are active/retrying.
+   *  When provided and true, POST /reload returns 409 instead of restarting. */
+  hasActiveRuns?: () => Promise<boolean>;
+  /** Optional: action to take after POST /reload responds (default: exit). */
+  onReload?: () => void;
 }
 
 /**
@@ -166,7 +171,7 @@ export function startMaintenanceServer(options: MaintenanceServerOptions): {
       } else if (path === "/inspector/close" && method === "POST") {
         handleCloseInspector(res);
       } else if (path === "/reload" && method === "POST") {
-        handleReload(res);
+        await handleReload(res, options.hasActiveRuns, options.onReload);
       } else {
         sendJson(res, 404, {
           error: "Not found",
@@ -403,7 +408,33 @@ async function handleSetProxyDebug(
 }
 
 /** POST /reload */
-function handleReload(res: http.ServerResponse): void {
+async function handleReload(
+  res: http.ServerResponse,
+  hasActiveRuns?: () => Promise<boolean>,
+  onReload?: () => void,
+): Promise<void> {
+  if (hasActiveRuns) {
+    try {
+      if (await hasActiveRuns()) {
+        sendJson(res, 409, {
+          error: "active_loop_runs",
+          message:
+            "Cannot restart while loop runs are active or retrying. Pause or wait for them to complete.",
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+    } catch (error) {
+      console.error("[Maintenance] hasActiveRuns check failed:", error);
+      sendJson(res, 500, {
+        error: "check_failed",
+        message: "Failed to check active loop runs",
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+  }
+
   console.log("[Maintenance] Reload requested, exiting...");
 
   sendJson(res, 200, {
@@ -412,9 +443,8 @@ function handleReload(res: http.ServerResponse): void {
   });
 
   // Exit after response is sent
-  setTimeout(() => {
-    process.exit(0);
-  }, 100);
+  const doReload = onReload ?? (() => process.exit(0));
+  setTimeout(doReload, 100);
 }
 
 /** Format bytes to human readable */

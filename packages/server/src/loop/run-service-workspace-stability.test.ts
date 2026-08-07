@@ -224,7 +224,9 @@ test("captureWorkspaceSnapshot: 非 git 目录返回 null (机制跳过, 不报�
   try {
     assert.equal(await captureWorkspaceSnapshot(dir), null);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    // Windows: execFile 起的 git 进程可能短暂占用目录, rmdir 撞 EBUSY;
+    // 与文件内其他用例同口径加 maxRetries (verify-run.test.ts 同款)。
+    await rm(dir, { recursive: true, force: true, maxRetries: 5 });
   }
 });
 

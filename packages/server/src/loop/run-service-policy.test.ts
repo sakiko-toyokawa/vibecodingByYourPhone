@@ -354,7 +354,7 @@ test("hard gate smoke: git merge under bypass is denied and the run escalates to
       // 策略钩子拦截了 merge（bypass ≠ 绕过硬闸门）
       const call = await waitForCall(supervisor);
       assert.equal(call?.hadHook, true);
-      assert.equal(call?.mode, "bypassPermissions");
+      assert.equal(call?.mode, "default");
       assert.equal(call?.hookResults[0]?.behavior, "deny");
       assert.match(call?.hookResults[0]?.message ?? "", /hard gate 'merge'/);
 
@@ -395,7 +395,7 @@ test("hard gate smoke: git merge under bypass is denied and the run escalates to
       assert.equal(latest?.runtime.mode, "print");
       assert.match(
         latest?.runtime.adapter_capability_snapshot ?? "",
-        /permissionMode=bypassPermissions/,
+        /permissionMode=default/,
       );
       assert.match(
         latest?.runtime.adapter_capability_snapshot ?? "",

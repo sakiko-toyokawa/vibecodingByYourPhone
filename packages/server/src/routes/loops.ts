@@ -14,6 +14,11 @@ import { RunStateSchema } from "@yep-anywhere/shared";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
+  checkInteractionDependencies,
+  inferPlaywrightInstallCommand,
+} from "../loop/verification/strategies/interaction/dependency-check.js";
+import { runCommand } from "../loop/verification/subprocess-verifier.js";
+import {
   type ControlPlane,
   ControlPlaneError,
   type LoopCardStore,
@@ -37,6 +42,12 @@ const TriggerRunBodySchema = z
   })
   .strict();
 
+const InstallInteractionDepsBodySchema = z
+  .object({
+    install_command: z.string().optional(),
+  })
+  .strict();
+
 export interface LoopsRoutesDeps {
   loopCardStore: LoopCardStore;
   /** Optional so tests mounting the registry alone still work */
@@ -45,6 +56,11 @@ export interface LoopsRoutesDeps {
   controlPlane?: ControlPlane;
   /** Optional: 阶段 3 提案列表端点 (GET /:id/proposals) */
   proposalStore?: ProposalStore;
+  /** Test seam for dependency installation; production uses runCommand. */
+  installInteractionDependencies?: (
+    workspacePath: string,
+    command: string,
+  ) => Promise<{ ok: boolean; output: string }>;
 }
 
 function runErrorStatus(error: LoopRunError): 400 | 404 | 409 {
@@ -73,7 +89,13 @@ function controlErrorStatus(error: ControlPlaneError): 400 | 404 | 409 {
 
 export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
   const app = new Hono();
-  const { loopCardStore, runService, controlPlane, proposalStore } = deps;
+  const {
+    loopCardStore,
+    runService,
+    controlPlane,
+    proposalStore,
+    installInteractionDependencies = defaultInstallInteractionDependencies,
+  } = deps;
 
   /**
    * POST /api/loops
@@ -205,6 +227,82 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
       current_run_state: currentRunState,
       last_run_summary: runs[0] ?? null,
     });
+  });
+
+  app.get("/:id/interaction-deps", async (c) => {
+    const stored = loopCardStore.getLoop(c.req.param("id"));
+    if (!stored || stored.archived) {
+      return c.json(
+        { error: "loop_not_found", message: "Loop not found" },
+        404,
+      );
+    }
+    const workspacePath = stored.card.loop.workspace.path;
+    if (!workspacePath) {
+      return c.json({
+        status: "unsupported",
+        message: "interaction verification requires a local workspace path",
+      });
+    }
+    return c.json(await checkInteractionDependencies(workspacePath));
+  });
+
+  app.post("/:id/interaction-deps/install", async (c) => {
+    const stored = loopCardStore.getLoop(c.req.param("id"));
+    if (!stored || stored.archived) {
+      return c.json(
+        { error: "loop_not_found", message: "Loop not found" },
+        404,
+      );
+    }
+    const workspacePath = stored.card.loop.workspace.path;
+    if (!workspacePath || workspacePath.startsWith("managed://")) {
+      return c.json(
+        {
+          error: "unsupported_workspace",
+          message: "interaction dependency install requires a local workspace",
+        },
+        400,
+      );
+    }
+
+    let body: unknown = {};
+    try {
+      body = await c.req.json();
+    } catch {
+      body = {};
+    }
+    const parsed = InstallInteractionDepsBodySchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      return c.json(
+        { error: "invalid_install_request", message: "Invalid request body" },
+        400,
+      );
+    }
+    const command =
+      parsed.data.install_command ??
+      stored.card.loop.verification.interaction?.install_command ??
+      inferPlaywrightInstallCommand(workspacePath);
+    if (!isAllowedInteractionInstallCommand(command)) {
+      return c.json(
+        {
+          error: "install_command_not_allowed",
+          message:
+            "Install command must add @playwright/test and playwright as dev dependencies with pnpm/npm/yarn/bun",
+        },
+        400,
+      );
+    }
+
+    const result = await installInteractionDependencies(workspacePath, command);
+    return c.json(
+      {
+        ok: result.ok,
+        command,
+        output: result.output.slice(-8000),
+      },
+      result.ok ? 200 : 500,
+    );
   });
 
   /**
@@ -497,4 +595,30 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
   });
 
   return app;
+}
+
+function isAllowedInteractionInstallCommand(command: string): boolean {
+  const normalized = command.trim().replace(/\s+/g, " ");
+  const allowedPrefix =
+    /^(pnpm add -D|npm install -D|yarn add -D|bun add -d) /;
+  return (
+    allowedPrefix.test(normalized) &&
+    normalized.includes("@playwright/test") &&
+    normalized.includes("playwright") &&
+    !/[;&|<>]/.test(normalized)
+  );
+}
+
+async function defaultInstallInteractionDependencies(
+  workspacePath: string,
+  command: string,
+): Promise<{ ok: boolean; output: string }> {
+  const outcome = await runCommand(command, {
+    cwd: workspacePath,
+    timeoutMs: 5 * 60 * 1000,
+  });
+  return {
+    ok: outcome.kind === "exit" && outcome.exitCode === 0,
+    output: outcome.output,
+  };
 }

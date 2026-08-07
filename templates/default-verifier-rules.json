@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "_comment": "預設 L2 規則包（layered-verifier 計畫 Phase 2）。複製到目標 workspace 的 .verifier/rules.json 後按需裁剪；不會被自動套用 —— 啟用方式是把檔案放進 workspace，或在 LoopCard verification.rules 內嵌。scope=workspace 的規則會掃全倉（排除 node_modules 等），存量違規也會被檢出；scope=changed 只查本輪 diff 觸及的檔案。",
+  "rules": [
+    {
+      "name": "no-hardcoded-secrets",
+      "pattern": "(password|passwd|secret|api[_-]?key|access[_-]?token|private[_-]?key)\\s*[:=]\\s*[\"'][^\"']{8,}[\"']",
+      "severity": "error",
+      "message": "檢測到疑似硬編碼密鑰，請改用環境變數或密鑰管理",
+      "suggestion": "改為 process.env.XXX，並在 .env.example 補模板",
+      "scope": "workspace"
+    },
+    {
+      "name": "no-private-key-block",
+      "pattern": "-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----",
+      "severity": "error",
+      "message": "檢測到私鑰內容被提交進工作區",
+      "suggestion": "移除私鑰檔案，改用密鑰管理；若已提交請輪換該金鑰",
+      "scope": "workspace"
+    },
+    {
+      "name": "no-debugger-statement",
+      "pattern": "^\\s*debugger;?\\s*$",
+      "severity": "error",
+      "message": "殘留 debugger 語句",
+      "suggestion": "刪除 debugger 語句",
+      "scope": "changed",
+      "files": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]
+    },
+    {
+      "name": "no-console-log",
+      "pattern": "^\\s*console\\.(log|debug|info)\\(",
+      "severity": "warning",
+      "message": "新增程式碼含 console.log 系列呼叫（建議改用專案 logger）",
+      "suggestion": "改用專案既有 logger，或確認為有意保留",
+      "scope": "changed",
+      "files": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]
+    },
+    {
+      "name": "no-todo-fixme-in-new-code",
+      "pattern": "\\b(TODO|FIXME)\\b",
+      "severity": "warning",
+      "message": "新增程式碼含 TODO/FIXME 標記",
+      "suggestion": "落地為 issue 或直接完成；避免標記長期殘留",
+      "scope": "changed"
+    }
+  ]
+}

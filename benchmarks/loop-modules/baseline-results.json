@@ -1,0 +1,498 @@
+[
+  {
+    "taskId": "trigger-001-cron-matching",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\trigger-001-cron-matching\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: '* * * * *' matches every minute\nok 1 - '* * * * *' matches every minute\n  ---\n  duration_ms: 1.6056\n  type: 'test'\n  ...\n# Subtest: '0 2 * * *' matches exactly 02:00 local time\nok 2 - '0 2 * * *' matches exactly 02:00 local time\n  ---\n  duration_ms: 0.1283\n  type: 'test'\n  ...\n# Subtest: minute step '*/5' hits 0/5/55 and rejects others\nok 3 - minute step '*/5' hits 0/5/55 and rejects others\n  ---\n  duration_ms: 0.1587\n  type: 'test'\n  ...\n# Subtest: invalid expressions are rejected\nok 4 - invalid expressions are rejected\n  ---\n  duration_ms: 0.6828\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 201.5651\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\trigger-001-cron-matching\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: day-of-week 7 is accepted as Sunday\nok 1 - day-of-week 7 is accepted as Sunday\n  ---\n  duration_ms: 1.5959\n  type: 'test'\n  ...\n# Subtest: hour range with step hits only stepped values\nok 2 - hour range with step hits only stepped values\n  ---\n  duration_ms: 0.1319\n  type: 'test'\n  ...\n# Subtest: month list and day-of-week range work together (AND semantics)\nok 3 - month list and day-of-week range work together (AND semantics)\n  ---\n  duration_ms: 0.1631\n  type: 'test'\n  ...\n# Subtest: comma list of plain numbers and ranges can mix\nok 4 - comma list of plain numbers and ranges can mix\n  ---\n  duration_ms: 0.1358\n  type: 'test'\n  ...\n# Subtest: day-of-month list matches only listed days\nok 5 - day-of-month list matches only listed days\n  ---\n  duration_ms: 0.1132\n  type: 'test'\n  ...\n# Subtest: whitespace variants parse correctly\nok 6 - whitespace variants parse correctly\n  ---\n  duration_ms: 0.1026\n  type: 'test'\n  ...\n# Subtest: inverted range and dangling range are rejected\nok 7 - inverted range and dangling range are rejected\n  ---\n  duration_ms: 0.17\n  type: 'test'\n  ...\n1..7\n# tests 7\n# suites 0\n# pass 7\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 197.129\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "trigger-002-idempotency-and-pending-queue",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\trigger-002-idempotency-and-pending-queue\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: matching loop fires exactly once per minute (idempotent tick)\nok 1 - matching loop fires exactly once per minute (idempotent tick)\n  ---\n  duration_ms: 3.0881\n  type: 'test'\n  ...\n# Subtest: firing order follows schedule.queue priority (urgent > normal > background)\nok 2 - firing order follows schedule.queue priority (urgent > normal > background)\n  ---\n  duration_ms: 0.2594\n  type: 'test'\n  ...\n# Subtest: busy loop is queued (not dropped) and fires when free\nok 3 - busy loop is queued (not dropped) and fires when free\n  ---\n  duration_ms: 0.3909\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 205.2935\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\trigger-002-idempotency-and-pending-queue\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: pending queue deduplicates same loop (keeps earliest due trigger)\nok 1 - pending queue deduplicates same loop (keeps earliest due trigger)\n  ---\n  duration_ms: 2.6697\n  type: 'test'\n  ...\n# Subtest: pending queue drains in priority order when multiple loops become free\nok 2 - pending queue drains in priority order when multiple loops become free\n  ---\n  duration_ms: 0.38\n  type: 'test'\n  ...\n# Subtest: same-loop runs stay serial: active loop never receives overlapping trigger\nok 3 - same-loop runs stay serial: active loop never receives overlapping trigger\n  ---\n  duration_ms: 0.4203\n  type: 'test'\n  ...\n# Subtest: fired keys persist across scheduler instances (restart-safe idempotency)\nok 4 - fired keys persist across scheduler instances (restart-safe idempotency)\n  ---\n  duration_ms: 12.9721\n  type: 'test'\n  ...\n# Subtest: drained pending trigger blocks new due trigger in the same tick\nok 5 - drained pending trigger blocks new due trigger in the same tick\n  ---\n  duration_ms: 0.3408\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 213.6942\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "trigger-003-invalid-cron-fault-tolerance",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\trigger-003-invalid-cron-fault-tolerance\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [CronScheduler] Loop 'broken' has an invalid cron expression, skipping: CronParseError: Cron expression must have exactly 5 fields, got 3\n#     at parseCronExpression (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-matcher.ts:129:11)\n#     at CronScheduler.parseCached (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-scheduler.ts:270:38)\n#     at CronScheduler.tick (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-scheduler.ts:201:29)\n#     at async TestContext.<anonymous> (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\tasks\\\\trigger-003-invalid-cron-fault-tolerance\\\\public.test.ts:45:20)\n#     at async Test.run (node:internal/test_runner/test:1054:7)\n#     at async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3) {\n#   expression: 'not a cron'\n# }\n# [CronScheduler] Loop 'broken' has an invalid cron expression, skipping: CronParseError: Cron expression must have exactly 5 fields, got 2\n#     at parseCronExpression (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-matcher.ts:129:11)\n#     at CronScheduler.parseCached (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-scheduler.ts:270:38)\n#     at CronScheduler.tick (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-scheduler.ts:201:29)\n#     at async TestContext.<anonymous> (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\tasks\\\\trigger-003-invalid-cron-fault-tolerance\\\\public.test.ts:74:18)\n#     at async Test.run (node:internal/test_runner/test:1054:7)\n#     at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {\n#   expression: 'invalid cron'\n# }\n# [CronScheduler] Loop 'also-broken' has an invalid cron expression, skipping: CronParseError: Invalid cron field '1-' (minute): expected '*', a number, a range, or an optional '/step'\n#     at fail (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-matcher.ts:57:11)\n#     at parseField (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-matcher.ts:70:7)\n#     at <anonymous> (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-matcher.ts:140:14)\n#     at Array.map (<anonymous>)\n#     at parseCronExpression (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-matcher.ts:134:63)\n#     at CronScheduler.parseCached (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-scheduler.ts:270:38)\n#     at CronScheduler.tick (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-scheduler.ts:201:29)\n#     at async TestContext.<anonymous> (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\tasks\\\\trigger-003-invalid-cron-fault-tolerance\\\\public.test.ts:74:18)\n#     at async Test.run (node:internal/test_runner/test:1054:7)\n#     at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {\n#   expression: '1- * * * *'\n# }\n# Subtest: invalid cron is skipped without throwing\nok 1 - invalid cron is skipped without throwing\n  ---\n  duration_ms: 4.9657\n  type: 'test'\n  ...\n# Subtest: manual-trigger loops are ignored by the cron scheduler\nok 2 - manual-trigger loops are ignored by the cron scheduler\n  ---\n  duration_ms: 0.2\n  type: 'test'\n  ...\n# Subtest: valid loops still fire when mixed with invalid-cron loops\nok 3 - valid loops still fire when mixed with invalid-cron loops\n  ---\n  duration_ms: 1.5275\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 204.1192\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\trigger-003-invalid-cron-fault-tolerance\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: invalid cron is warned only once per loop\nok 1 - invalid cron is warned only once per loop\n  ---\n  duration_ms: 2.0328\n  type: 'test'\n  ...\n# [CronScheduler] cron-fired.json 损坏, 按空集起步: SyntaxError: Unexpected token 'h', \"this is not json\" is not valid JSON\n#     at JSON.parse (<anonymous>)\n#     at CronScheduler.loadFired (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-scheduler.ts:108:27)\n#     at async CronScheduler.tick (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-scheduler.ts:174:5)\n#     at async <anonymous> (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\tasks\\\\trigger-003-invalid-cron-fault-tolerance\\\\hidden.test.ts:92:19)\n#     at async withTempDataDir (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\tasks\\\\trigger-003-invalid-cron-fault-tolerance\\\\hidden.test.ts:46:12)\n#     at async TestContext.<anonymous> (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\tasks\\\\trigger-003-invalid-cron-fault-tolerance\\\\hidden.test.ts:79:3)\n#     at async Test.run (node:internal/test_runner/test:1054:7)\n#     at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n# Subtest: corrupt fired-keys file is treated as empty and does not crash\nok 2 - corrupt fired-keys file is treated as empty and does not crash\n  ---\n  duration_ms: 13.4151\n  type: 'test'\n  ...\n# Subtest: scheduler start and stop are idempotent\nok 3 - scheduler start and stop are idempotent\n  ---\n  duration_ms: 0.4327\n  type: 'test'\n  ...\n# [CronScheduler] cron-fired.json 写回失败: Error: EEXIST: file already exists, mkdir 'C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-cron-fault-Lan1oR\\\\loops\\\\trigger'\n#     at async Module.mkdir (node:internal/fs/promises:860:10)\n#     at async CronScheduler.saveFired (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-scheduler.ts:135:7)\n#     at async CronScheduler.tick (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\trigger\\\\cron-scheduler.ts:225:5)\n#     at async <anonymous> (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\tasks\\\\trigger-003-invalid-cron-fault-tolerance\\\\hidden.test.ts:132:19)\n#     at async withTempDataDir (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\tasks\\\\trigger-003-invalid-cron-fault-tolerance\\\\hidden.test.ts:46:12)\n#     at async TestContext.<anonymous> (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\tasks\\\\trigger-003-invalid-cron-fault-tolerance\\\\hidden.test.ts:117:3)\n#     at async Test.run (node:internal/test_runner/test:1054:7)\n#     at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {\n#   errno: -4075,\n#   code: 'EEXIST',\n#   syscall: 'mkdir',\n#   path: 'C:\\\\\\\\Users\\\\\\\\admin\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\yep-cron-fault-Lan1oR\\\\\\\\loops\\\\\\\\trigger'\n# }\n# Subtest: persistence write failure does not block firing\nok 4 - persistence write failure does not block firing\n  ---\n  duration_ms: 4.0296\n  type: 'test'\n  ...\n# Subtest: loop with missing cron field is ignored\nok 5 - loop with missing cron field is ignored\n  ---\n  duration_ms: 0.3666\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 219.1842\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "contract-001-budget-projection",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\contract-001-budget-projection\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: buildBudgetLimits projects stop_rules into budget with max_tokens=0\nok 1 - buildBudgetLimits projects stop_rules into budget with max_tokens=0\n  ---\n  duration_ms: 1.7801\n  type: 'test'\n  ...\n# Subtest: max_retries >= max_turns is allowed (first-trigger-wins)\nok 2 - max_retries >= max_turns is allowed (first-trigger-wins)\n  ---\n  duration_ms: 0.1564\n  type: 'test'\n  ...\n# Subtest: minimal valid budget: max_turns=1, max_retries=0\nok 3 - minimal valid budget: max_turns=1, max_retries=0\n  ---\n  duration_ms: 0.1417\n  type: 'test'\n  ...\n# Subtest: buildIntentContract includes the projected budget\nok 4 - buildIntentContract includes the projected budget\n  ---\n  duration_ms: 1.6458\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 308.4878\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\contract-001-budget-projection\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: max_turns < 1 throws ContractValidationError\nok 1 - max_turns < 1 throws ContractValidationError\n  ---\n  duration_ms: 0.8001\n  type: 'test'\n  ...\n# Subtest: max_retries < 0 throws ContractValidationError\nok 2 - max_retries < 0 throws ContractValidationError\n  ---\n  duration_ms: 0.1235\n  type: 'test'\n  ...\n# Subtest: max_time_minutes <= 0 throws ContractValidationError\nok 3 - max_time_minutes <= 0 throws ContractValidationError\n  ---\n  duration_ms: 0.0938\n  type: 'test'\n  ...\n# Subtest: negative max_time_minutes also throws\nok 4 - negative max_time_minutes also throws\n  ---\n  duration_ms: 0.0754\n  type: 'test'\n  ...\n# Subtest: buildIntentContract propagates the validation error\nok 5 - buildIntentContract propagates the validation error\n  ---\n  duration_ms: 0.1834\n  type: 'test'\n  ...\n# Subtest: budget object does not include used_* counters\nok 6 - budget object does not include used_* counters\n  ---\n  duration_ms: 0.816\n  type: 'test'\n  ...\n1..6\n# tests 6\n# suites 0\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 310.8718\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "contract-002-target-files-extraction",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\contract-002-target-files-extraction\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: extractTargetFiles strips punctuation, deduplicates, and keeps relative paths\nok 1 - extractTargetFiles strips punctuation, deduplicates, and keeps relative paths\n  ---\n  duration_ms: 1.0855\n  type: 'test'\n  ...\n# Subtest: extractTargetFiles drops absolute, Windows, and parent-escape paths\nok 2 - extractTargetFiles drops absolute, Windows, and parent-escape paths\n  ---\n  duration_ms: 0.1294\n  type: 'test'\n  ...\n# Subtest: extractTargetFiles ignores tokens without extension or without slash\nok 3 - extractTargetFiles ignores tokens without extension or without slash\n  ---\n  duration_ms: 0.1229\n  type: 'test'\n  ...\n# Subtest: extractTargetFiles caps results at 20\nok 4 - extractTargetFiles caps results at 20\n  ---\n  duration_ms: 0.1696\n  type: 'test'\n  ...\n# Subtest: extractTargetFiles keeps distinct tokens in order\nok 5 - extractTargetFiles keeps distinct tokens in order\n  ---\n  duration_ms: 0.0772\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 295.0651\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\contract-002-target-files-extraction\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: buildIntentContract sets target.files when task contains relative paths\nok 1 - buildIntentContract sets target.files when task contains relative paths\n  ---\n  duration_ms: 2.9277\n  type: 'test'\n  ...\n# Subtest: buildIntentContract omits target when task is natural language only\nok 2 - buildIntentContract omits target when task is natural language only\n  ---\n  duration_ms: 0.2321\n  type: 'test'\n  ...\n# Subtest: buildIntentContract omits target when handoff.task is absent\nok 3 - buildIntentContract omits target when handoff.task is absent\n  ---\n  duration_ms: 0.2121\n  type: 'test'\n  ...\n# Subtest: extractTargetFiles drops URLs and paths with colons\nok 4 - extractTargetFiles drops URLs and paths with colons\n  ---\n  duration_ms: 0.1727\n  type: 'test'\n  ...\n# Subtest: extractTargetFiles does not invent symbols\nok 5 - extractTargetFiles does not invent symbols\n  ---\n  duration_ms: 0.155\n  type: 'test'\n  ...\n# Subtest: extractTargetFiles handles empty or whitespace task\nok 6 - extractTargetFiles handles empty or whitespace task\n  ---\n  duration_ms: 0.0983\n  type: 'test'\n  ...\n# Subtest: buildIntentContract deduplicates target.files coming from task\nok 7 - buildIntentContract deduplicates target.files coming from task\n  ---\n  duration_ms: 0.2532\n  type: 'test'\n  ...\n1..7\n# tests 7\n# suites 0\n# pass 7\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 301.6058\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "contract-003-readonly-vs-writeable-shape",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\contract-003-readonly-vs-writeable-shape\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: no policy block produces a read-only contract\nok 1 - no policy block produces a read-only contract\n  ---\n  duration_ms: 4.2023\n  type: 'test'\n  ...\n# Subtest: bypass approval_mode produces a write-capable contract\nok 2 - bypass approval_mode produces a write-capable contract\n  ---\n  duration_ms: 0.2756\n  type: 'test'\n  ...\n# Subtest: manual approval_mode degrades to read-only\nok 3 - manual approval_mode degrades to read-only\n  ---\n  duration_ms: 0.1918\n  type: 'test'\n  ...\n# Subtest: handoff.task overrides the generated raw_goal for write-capable loops\nok 4 - handoff.task overrides the generated raw_goal for write-capable loops\n  ---\n  duration_ms: 0.3498\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 297.9007\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\contract-003-readonly-vs-writeable-shape\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: read-only default task_type is read_only_report\nok 1 - read-only default task_type is read_only_report\n  ---\n  duration_ms: 2.7155\n  type: 'test'\n  ...\n# Subtest: write-capable default task_type is maintenance\nok 2 - write-capable default task_type is maintenance\n  ---\n  duration_ms: 0.2734\n  type: 'test'\n  ...\n# Subtest: handoff.default_task_type overrides the primary task type\nok 3 - handoff.default_task_type overrides the primary task type\n  ---\n  duration_ms: 0.2284\n  type: 'test'\n  ...\n# Subtest: read-only outcome and success_criteria forbid workspace modifications\nok 4 - read-only outcome and success_criteria forbid workspace modifications\n  ---\n  duration_ms: 0.3249\n  type: 'test'\n  ...\n# Subtest: write-capable outcome allows bounded workspace changes and forbids hard gates\nok 5 - write-capable outcome allows bounded workspace changes and forbids hard gates\n  ---\n  duration_ms: 0.2253\n  type: 'test'\n  ...\n# Subtest: max_items_per_run is appended to constraints\nok 6 - max_items_per_run is appended to constraints\n  ---\n  duration_ms: 0.1221\n  type: 'test'\n  ...\n# Subtest: stop_on_repeated_failure projects into stop_rules.repetition\nok 7 - stop_on_repeated_failure projects into stop_rules.repetition\n  ---\n  duration_ms: 0.8228\n  type: 'test'\n  ...\n# Subtest: stop_rules is absent when stop_on_repeated_failure is not declared\nok 8 - stop_rules is absent when stop_on_repeated_failure is not declared\n  ---\n  duration_ms: 0.1257\n  type: 'test'\n  ...\n# Subtest: cron source maps to cron, manual maps to ui\nok 9 - cron source maps to cron, manual maps to ui\n  ---\n  duration_ms: 0.4062\n  type: 'test'\n  ...\n# Subtest: read-only raw_goal includes discovery source and query when task absent\nok 10 - read-only raw_goal includes discovery source and query when task absent\n  ---\n  duration_ms: 0.2936\n  type: 'test'\n  ...\n# Subtest: write-capable raw_goal falls back to Loop task when handoff.task absent\nok 11 - write-capable raw_goal falls back to Loop task when handoff.task absent\n  ---\n  duration_ms: 0.0992\n  type: 'test'\n  ...\n1..11\n# tests 11\n# suites 0\n# pass 11\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 312.5854\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "assembly-001-native-invocation-shape",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\assembly-001-native-invocation-shape\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: claude provider projects agent_sdk/sdk/print\nok 1 - claude provider projects agent_sdk/sdk/print\n  ---\n  duration_ms: 2.782\n  type: 'test'\n  ...\n# Subtest: codex provider projects app_server/json_rpc/exec\nok 2 - codex provider projects app_server/json_rpc/exec\n  ---\n  duration_ms: 0.2412\n  type: 'test'\n  ...\n# Subtest: unknown provider still shapes a native_invocation record for read-only runs\nok 3 - unknown provider still shapes a native_invocation record for read-only runs\n  ---\n  duration_ms: 0.2042\n  type: 'test'\n  ...\n# Subtest: adapter_policy timeout_seconds is projected into native_invocation\nok 4 - adapter_policy timeout_seconds is projected into native_invocation\n  ---\n  duration_ms: 0.2762\n  type: 'test'\n  ...\n# Subtest: mode and bridge are not mixed up\nok 5 - mode and bridge are not mixed up\n  ---\n  duration_ms: 0.2686\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 300.9532\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\assembly-001-native-invocation-shape\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: default provider (no runtime.provider) is claude\nok 1 - default provider (no runtime.provider) is claude\n  ---\n  duration_ms: 2.7086\n  type: 'test'\n  ...\n# Subtest: claude-ollama and codex-oss variants project correctly\nok 2 - claude-ollama and codex-oss variants project correctly\n  ---\n  duration_ms: 0.3749\n  type: 'test'\n  ...\n# Subtest: fractional timeout_seconds is rounded to whole milliseconds and back\nok 3 - fractional timeout_seconds is rounded to whole milliseconds and back\n  ---\n  duration_ms: 0.3256\n  type: 'test'\n  ...\n# Subtest: non-positive or malformed timeout_seconds is ignored\nok 4 - non-positive or malformed timeout_seconds is ignored\n  ---\n  duration_ms: 0.2251\n  type: 'test'\n  ...\n# Subtest: resume_ref is always null for the turn-1 bundle even with adapter_policy\nok 5 - resume_ref is always null for the turn-1 bundle even with adapter_policy\n  ---\n  duration_ms: 0.1683\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 307.6673\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "assembly-002-policy-projection-resolution",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\assembly-002-policy-projection-resolution\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: loop_bypass resolves default risk rules and full bypass scope\nok 1 - loop_bypass resolves default risk rules and full bypass scope\n  ---\n  duration_ms: 1.0456\n  type: 'test'\n  ...\n# Subtest: loop_strict_review resolves real rule differences\nok 2 - loop_strict_review resolves real rule differences\n  ---\n  duration_ms: 0.1113\n  type: 'test'\n  ...\n# Subtest: unknown profile name falls back to defaults\nok 3 - unknown profile name falls back to defaults\n  ---\n  duration_ms: 0.0825\n  type: 'test'\n  ...\n# Subtest: human_gate.required_for is merged into hard_gates\nok 4 - human_gate.required_for is merged into hard_gates\n  ---\n  duration_ms: 0.1182\n  type: 'test'\n  ...\n# Subtest: no policy block resolves to null\nok 5 - no policy block resolves to null\n  ---\n  duration_ms: 0.1155\n  type: 'test'\n  ...\n# Subtest: assembly projects policyProjection for an active policy\nok 6 - assembly projects policyProjection for an active policy\n  ---\n  duration_ms: 2.2613\n  type: 'test'\n  ...\n1..6\n# tests 6\n# suites 0\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 314.9938\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\assembly-002-policy-projection-resolution\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: manual approval_mode still resolves a profile\nok 1 - manual approval_mode still resolves a profile\n  ---\n  duration_ms: 0.6022\n  type: 'test'\n  ...\n# Subtest: named profiles include github_issue_local_fix and workspace_local_fix\nok 2 - named profiles include github_issue_local_fix and workspace_local_fix\n  ---\n  duration_ms: 0.5165\n  type: 'test'\n  ...\n# Subtest: profile override from proposal resolves through the registry\nok 3 - profile override from proposal resolves through the registry\n  ---\n  duration_ms: 0.0865\n  type: 'test'\n  ...\n# Subtest: policyProjection sandbox reflects the actual bridge\nok 4 - policyProjection sandbox reflects the actual bridge\n  ---\n  duration_ms: 2.4581\n  type: 'test'\n  ...\n# Subtest: a custom human_gate word outside the canonical seven is preserved\nok 5 - a custom human_gate word outside the canonical seven is preserved\n  ---\n  duration_ms: 0.2306\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 315.4216\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "assembly-003-fail-closed-provider-guard",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\assembly-003-fail-closed-provider-guard\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: gemini provider with active policy throws AssemblyError\nok 1 - gemini provider with active policy throws AssemblyError\n  ---\n  duration_ms: 3.0049\n  type: 'test'\n  ...\n# Subtest: claude provider with active policy is accepted\nok 2 - claude provider with active policy is accepted\n  ---\n  duration_ms: 0.4556\n  type: 'test'\n  ...\n# Subtest: codex provider with active policy is accepted\nok 3 - codex provider with active policy is accepted\n  ---\n  duration_ms: 0.2336\n  type: 'test'\n  ...\n# Subtest: legacy read-only card never triggers the guard\nok 4 - legacy read-only card never triggers the guard\n  ---\n  duration_ms: 0.1989\n  type: 'test'\n  ...\n# Subtest: manual approval_mode never triggers the guard\nok 5 - manual approval_mode never triggers the guard\n  ---\n  duration_ms: 0.1749\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 303.154\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\assembly-003-fail-closed-provider-guard\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: claude-ollama and codex-oss are accepted\nok 1 - claude-ollama and codex-oss are accepted\n  ---\n  duration_ms: 2.8451\n  type: 'test'\n  ...\n# Subtest: openai provider with active policy throws\nok 2 - openai provider with active policy throws\n  ---\n  duration_ms: 0.9275\n  type: 'test'\n  ...\n# Subtest: error message identifies loop, approval_mode, and provider\nok 3 - error message identifies loop, approval_mode, and provider\n  ---\n  duration_ms: 0.3623\n  type: 'test'\n  ...\n# Subtest: adapter_policy proposal does not bypass the provider guard\nok 4 - adapter_policy proposal does not bypass the provider guard\n  ---\n  duration_ms: 0.2384\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 307.5544\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "assembly-004-proposal-effects",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\assembly-004-proposal-effects\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: published memory_packet_template applies globally\nok 1 - published memory_packet_template applies globally\n  ---\n  duration_ms: 0.6613\n  type: 'test'\n  ...\n# Subtest: canary only applies to marked loops\nok 2 - canary only applies to marked loops\n  ---\n  duration_ms: 0.1222\n  type: 'test'\n  ...\n# Subtest: draft / shadow / approved / rolled_back / rejected are ignored\nok 3 - draft / shadow / approved / rolled_back / rejected are ignored\n  ---\n  duration_ms: 0.1567\n  type: 'test'\n  ...\n# Subtest: rollback reverts to the previous published version\nok 4 - rollback reverts to the previous published version\n  ---\n  duration_ms: 7.2168\n  type: 'test'\n  ...\n# Subtest: memory packet template is injected into the assembled prompt\nok 5 - memory packet template is injected into the assembled prompt\n  ---\n  duration_ms: 2.8332\n  type: 'test'\n  ...\n# Subtest: runtime_adapter_proposal projects timeout_seconds\nok 6 - runtime_adapter_proposal projects timeout_seconds\n  ---\n  duration_ms: 0.2972\n  type: 'test'\n  ...\n# Subtest: policy_profile_proposal overrides the resolved profile only in policy mode\nok 7 - policy_profile_proposal overrides the resolved profile only in policy mode\n  ---\n  duration_ms: 0.5193\n  type: 'test'\n  ...\n1..7\n# tests 7\n# suites 0\n# pass 7\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 317.3268\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\assembly-004-proposal-effects\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: canary applies via target prefix when canary_loops is absent\nok 1 - canary applies via target prefix when canary_loops is absent\n  ---\n  duration_ms: 2.6678\n  type: 'test'\n  ...\n# Subtest: rolled_back newest with no older published leaves slot empty\nok 2 - rolled_back newest with no older published leaves slot empty\n  ---\n  duration_ms: 0.5348\n  type: 'test'\n  ...\n# Subtest: multiple proposal slots can apply in the same assembly\nok 3 - multiple proposal slots can apply in the same assembly\n  ---\n  duration_ms: 9.8725\n  type: 'test'\n  ...\n# Subtest: adapter_policy raw payload is preserved on RuntimeInput, ignored keys are reported\nok 4 - adapter_policy raw payload is preserved on RuntimeInput, ignored keys are reported\n  ---\n  duration_ms: 0.4638\n  type: 'test'\n  ...\n# Subtest: policy_profile override resolves real rule differences from registry\nok 5 - policy_profile override resolves real rule differences from registry\n  ---\n  duration_ms: 0.3263\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 336.2512\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "control-plane-001-state-machine-transitions",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\control-plane-001-state-machine-transitions\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 active -> active\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 complete -> active\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 complete -> complete\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 complete -> retry\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 complete -> paused\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 complete -> needs_human\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 complete -> failed\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 complete -> budget_limited\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 retry -> complete\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 retry -> retry\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 retry -> paused\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 retry -> needs_human\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 retry -> failed\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 retry -> budget_limited\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 paused -> complete\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 paused -> retry\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 paused -> paused\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 paused -> needs_human\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 paused -> failed\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 paused -> budget_limited\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 needs_human -> complete\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 needs_human -> retry\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 needs_human -> needs_human\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 needs_human -> budget_limited\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 failed -> active\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 failed -> complete\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 failed -> retry\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 failed -> paused\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 failed -> needs_human\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 failed -> failed\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 failed -> budget_limited\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 budget_limited -> complete\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 budget_limited -> retry\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 budget_limited -> paused\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 budget_limited -> needs_human\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 budget_limited -> failed\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 budget_limited -> budget_limited\n# Subtest: transition table covers exactly the 7-state enum\nok 1 - transition table covers exactly the 7-state enum\n  ---\n  duration_ms: 0.8758\n  type: 'test'\n  ...\n# Subtest: every legal transition is accepted\nok 2 - every legal transition is accepted\n  ---\n  duration_ms: 0.279\n  type: 'test'\n  ...\n# Subtest: every illegal transition is rejected\nok 3 - every illegal transition is rejected\n  ---\n  duration_ms: 1.4072\n  type: 'test'\n  ...\n# Subtest: terminal states have no outgoing edges\nok 4 - terminal states have no outgoing edges\n  ---\n  duration_ms: 0.0936\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 264.3587\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\control-plane-001-state-machine-transitions\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [ControlPlane] illegal transition rejected: run=run-1 turn=2 complete -> complete\n# Subtest: ControlPlane rejects illegal transitions and does not mutate state or ledger\nok 1 - ControlPlane rejects illegal transitions and does not mutate state or ledger\n  ---\n  duration_ms: 28.7146\n  type: 'test'\n  ...\n# Subtest: ControlPlane enforces retry -> active -> ... sequence; cannot skip active\nok 2 - ControlPlane enforces retry -> active -> ... sequence; cannot skip active\n  ---\n  duration_ms: 17.332\n  type: 'test'\n  ...\n# Subtest: ControlPlane enforces needs_human -> paused -> active sequence legality\nok 3 - ControlPlane enforces needs_human -> paused -> active sequence legality\n  ---\n  duration_ms: 49.0228\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 398.419\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "control-plane-002-budget-enforcement",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\control-plane-002-budget-enforcement\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: max_retries exhausted first: retryable failure becomes budget_limited\nok 1 - max_retries exhausted first: retryable failure becomes budget_limited\n  ---\n  duration_ms: 14.2005\n  type: 'test'\n  ...\n# Subtest: max_turns exhausted at judgment time: retryable failure becomes budget_limited\nok 2 - max_turns exhausted at judgment time: retryable failure becomes budget_limited\n  ---\n  duration_ms: 34.2514\n  type: 'test'\n  ...\n# Subtest: token limit crossed by usage → budget_limited; max_tokens=0 means untracked\nok 3 - token limit crossed by usage → budget_limited; max_tokens=0 means untracked\n  ---\n  duration_ms: 10.5611\n  type: 'test'\n  ...\n# Subtest: time limit crossed at turn end → budget_limited\nok 4 - time limit crossed at turn end → budget_limited\n  ---\n  duration_ms: 4.562\n  type: 'test'\n  ...\n# Subtest: supplementBudget raises limits and resumes budget_limited run\nok 5 - supplementBudget raises limits and resumes budget_limited run\n  ---\n  duration_ms: 25.1311\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 384.6894\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\control-plane-002-budget-enforcement\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: beginTurn stops with budget_limited when turns are exhausted before next turn\nok 1 - beginTurn stops with budget_limited when turns are exhausted before next turn\n  ---\n  duration_ms: 69.4735\n  type: 'test'\n  ...\n# Subtest: loop-budget-warning is emitted once per run per field when crossing 80%\nok 2 - loop-budget-warning is emitted once per run per field when crossing 80%\n  ---\n  duration_ms: 7.8066\n  type: 'test'\n  ...\n# Subtest: supplementBudget is rejected from non-budget_limited states\nok 3 - supplementBudget is rejected from non-budget_limited states\n  ---\n  duration_ms: 16.21\n  type: 'test'\n  ...\n# Subtest: retry consumes retry budget immediately; used_retries persists across turns\nok 4 - retry consumes retry budget immediately; used_retries persists across turns\n  ---\n  duration_ms: 35.0066\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 443.3725\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "control-plane-003-retry-backoff",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\control-plane-003-retry-backoff\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: exponential backoff: 1min, 2min, 4min, then capped at 5min\nok 1 - exponential backoff: 1min, 2min, 4min, then capped at 5min\n  ---\n  duration_ms: 0.5456\n  type: 'test'\n  ...\n# Subtest: constants: base 1min, cap 5min\nok 2 - constants: base 1min, cap 5min\n  ---\n  duration_ms: 0.0823\n  type: 'test'\n  ...\n# Subtest: defensive: retryNumber < 1 falls back to the base backoff\nok 3 - defensive: retryNumber < 1 falls back to the base backoff\n  ---\n  duration_ms: 0.0573\n  type: 'test'\n  ...\n# Subtest: retry decision is recorded and beginTurn advances to next turn\nok 4 - retry decision is recorded and beginTurn advances to next turn\n  ---\n  duration_ms: 48.1797\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 347.6941\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\control-plane-003-retry-backoff\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: backoff never exceeds cap even for very large retry numbers\nok 1 - backoff never exceeds cap even for very large retry numbers\n  ---\n  duration_ms: 0.5946\n  type: 'test'\n  ...\n# Subtest: backoff values exactly match formula below cap\nok 2 - backoff values exactly match formula below cap\n  ---\n  duration_ms: 0.1046\n  type: 'test'\n  ...\n# Subtest: beginTurn is idempotent: same turn replay does not duplicate ledger entries\nok 3 - beginTurn is idempotent: same turn replay does not duplicate ledger entries\n  ---\n  duration_ms: 63.6169\n  type: 'test'\n  ...\n# Subtest: multiple retries accumulate used_retries and transition through retry -> active -> retry\nok 4 - multiple retries accumulate used_retries and transition through retry -> active -> retry\n  ---\n  duration_ms: 67.2857\n  type: 'test'\n  ...\n# Subtest: retry -> active -> budget_limited if no retries remain\nok 5 - retry -> active -> budget_limited if no retries remain\n  ---\n  duration_ms: 42.4511\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 472.5596\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "control-plane-004-human-decision-flow",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\control-plane-004-human-decision-flow\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: approve → active with feedback and resume signal\nok 1 - approve → active with feedback and resume signal\n  ---\n  duration_ms: 51.4951\n  type: 'test'\n  ...\n# Subtest: request_changes requires feedback and resumes with feedback\nok 2 - request_changes requires feedback and resumes with feedback\n  ---\n  duration_ms: 26.6046\n  type: 'test'\n  ...\n# Subtest: reject → failed and fires resolved listener\nok 3 - reject → failed and fires resolved listener\n  ---\n  duration_ms: 23.7855\n  type: 'test'\n  ...\n# Subtest: pause → paused and resumePaused → active with resume signal\nok 4 - pause → paused and resumePaused → active with resume signal\n  ---\n  duration_ms: 40.8964\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 448.2756\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\control-plane-004-human-decision-flow\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: decision on non-needs_human run → invalid_state; unknown run → run_not_found\nok 1 - decision on non-needs_human run → invalid_state; unknown run → run_not_found\n  ---\n  duration_ms: 22.2889\n  type: 'test'\n  ...\n# Subtest: pauseActive seeds a fresh run_state and transitions active → paused\nok 2 - pauseActive seeds a fresh run_state and transitions active → paused\n  ---\n  duration_ms: 24.1722\n  type: 'test'\n  ...\n# Subtest: submitDecision rejects approve when repeated blocker would repeat unchanged\nok 3 - submitDecision rejects approve when repeated blocker would repeat unchanged\n  ---\n  duration_ms: 72.8207\n  type: 'test'\n  ...\n# Subtest: waiting runs survive a control-plane restart via state-file scan\nok 4 - waiting runs survive a control-plane restart via state-file scan\n  ---\n  duration_ms: 15.2681\n  type: 'test'\n  ...\n# Subtest: run-decision-required event options and action match API contract\nok 5 - run-decision-required event options and action match API contract\n  ---\n  duration_ms: 6.42\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 441.3949\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "control-plane-005-learning-event-emission",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\control-plane-005-learning-event-emission\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: complete emits a learning_event\nok 1 - complete emits a learning_event\n  ---\n  duration_ms: 31.4817\n  type: 'test'\n  ...\n# Subtest: retry with verification_error emits a learning_event\nok 2 - retry with verification_error emits a learning_event\n  ---\n  duration_ms: 23.9096\n  type: 'test'\n  ...\n# Subtest: budget_limited emits a learning_event\nok 3 - budget_limited emits a learning_event\n  ---\n  duration_ms: 24.9457\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 374.1147\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\control-plane-005-learning-event-emission\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: idempotent replay does not duplicate learning events\nok 1 - idempotent replay does not duplicate learning events\n  ---\n  duration_ms: 35.9722\n  type: 'test'\n  ...\n# Subtest: adapter hard error emits failed event with runtime failure tag\nok 2 - adapter hard error emits failed event with runtime failure tag\n  ---\n  duration_ms: 21.0701\n  type: 'test'\n  ...\n# Subtest: learning event store failure does not affect run progression\nok 3 - learning event store failure does not affect run progression\n  ---\n  duration_ms: 23.314\n  type: 'test'\n  ...\n# Subtest: needs_human with verification error then human reject emits two events\nok 4 - needs_human with verification error then human reject emits two events\n  ---\n  duration_ms: 31.5662\n  type: 'test'\n  ...\n# Subtest: policy escalation emits policy_error failure tag in learning event\nok 5 - policy escalation emits policy_error failure tag in learning event\n  ---\n  duration_ms: 21.857\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 433.5183\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "verification-001-static-runtime-command-selection",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\verification-001-static-runtime-command-selection\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: 显式 static 命令优先于 package.json 脚本\nok 1 - 显式 static 命令优先于 package.json 脚本\n  ---\n  duration_ms: 4.9437\n  type: 'test'\n  ...\n# Subtest: 显式 runtime 命令优先于 package.json 脚本\nok 2 - 显式 runtime 命令优先于 package.json 脚本\n  ---\n  duration_ms: 2.1045\n  type: 'test'\n  ...\n# Subtest: 无显式命令时 static 探测 lint / typecheck 脚本\nok 3 - 无显式命令时 static 探测 lint / typecheck 脚本\n  ---\n  duration_ms: 2.4472\n  type: 'test'\n  ...\n# Subtest: 无显式命令时 runtime 探测 test 脚本\nok 4 - 无显式命令时 runtime 探测 test 脚本\n  ---\n  duration_ms: 2.1888\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 207.8666\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\verification-001-static-runtime-command-selection\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: 显式空数组 static 不回落到 package.json 探测\nok 1 - 显式空数组 static 不回落到 package.json 探测\n  ---\n  duration_ms: 5.7166\n  type: 'test'\n  ...\n# Subtest: 缺少 package.json 时返回空数组\nok 2 - 缺少 package.json 时返回空数组\n  ---\n  duration_ms: 1.7045\n  type: 'test'\n  ...\n# Subtest: package.json 缺少 scripts 字段时返回空数组\nok 3 - package.json 缺少 scripts 字段时返回空数组\n  ---\n  duration_ms: 3.1874\n  type: 'test'\n  ...\n# Subtest: package.json 损坏时返回空数组且不抛异常\nok 4 - package.json 损坏时返回空数组且不抛异常\n  ---\n  duration_ms: 17.9696\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 225.4135\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "verification-002-subprocess-timeout",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\verification-002-subprocess-timeout\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: runCommand 超时后返回 kind timeout 且 exitCode 为 null\nok 1 - runCommand 超时后返回 kind timeout 且 exitCode 为 null\n  ---\n  duration_ms: 320.5094\n  type: 'test'\n  ...\n# Subtest: runVerificationCommands 超时时产出 inconclusive + escalate\nok 2 - runVerificationCommands 超时时产出 inconclusive + escalate\n  ---\n  duration_ms: 307.6628\n  type: 'test'\n  ...\n# Subtest: 默认超时值为 120 秒\nok 3 - 默认超时值为 120 秒\n  ---\n  duration_ms: 0.147\n  type: 'test'\n  ...\n# Subtest: runVerificationCommands 非零退出码 → failed + retry\nok 4 - runVerificationCommands 非零退出码 → failed + retry\n  ---\n  duration_ms: 92.8545\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 933.2074\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\verification-002-subprocess-timeout\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: 不存在的命令 → spawn_failed，verifier 报 inconclusive\nok 1 - 不存在的命令 → spawn_failed，verifier 报 inconclusive\n  ---\n  duration_ms: 80.0931\n  type: 'test'\n  ...\n# Subtest: 混合结果中 failed 覆盖 inconclusive 与 passed\nok 2 - 混合结果中 failed 覆盖 inconclusive 与 passed\n  ---\n  duration_ms: 172.5707\n  type: 'test'\n  ...\n# Subtest: runCommand 保留非零退出码\nok 3 - runCommand 保留非零退出码\n  ---\n  duration_ms: 73.6419\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 517.2911\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "verification-003-aggregate-rules",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\verification-003-aggregate-rules\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: 单份 passed 报告 → passed / complete / 不可重试\nok 1 - 单份 passed 报告 → passed / complete / 不可重试\n  ---\n  duration_ms: 0.5574\n  type: 'test'\n  ...\n# Subtest: 多份报告 worst status 生效\nok 2 - 多份报告 worst status 生效\n  ---\n  duration_ms: 0.1132\n  type: 'test'\n  ...\n# Subtest: requires_human 透传且不被 passed 覆盖\nok 3 - requires_human 透传且不被 passed 覆盖\n  ---\n  duration_ms: 0.0738\n  type: 'test'\n  ...\n# Subtest: failed + allowRetry + budget ok → retry / retryable true\nok 4 - failed + allowRetry + budget ok → retry / retryable true\n  ---\n  duration_ms: 0.1134\n  type: 'test'\n  ...\n# Subtest: retry 不允许或预算耗尽 → stop / retryable false\nok 5 - retry 不允许或预算耗尽 → stop / retryable false\n  ---\n  duration_ms: 0.091\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 204.2314\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\verification-003-aggregate-rules\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: requires_human + failed + retry 允许时仍为 needs_human\nok 1 - requires_human + failed + retry 允许时仍为 needs_human\n  ---\n  duration_ms: 0.727\n  type: 'test'\n  ...\n# Subtest: escalate recommendation 优先级高于 complete\nok 2 - escalate recommendation 优先级高于 complete\n  ---\n  duration_ms: 0.1072\n  type: 'test'\n  ...\n# Subtest: 空报告链 → passed / complete\nok 3 - 空报告链 → passed / complete\n  ---\n  duration_ms: 0.0697\n  type: 'test'\n  ...\n# Subtest: evidence 与 unresolved_risks 跨报告平铺\nok 4 - evidence 与 unresolved_risks 跨报告平铺\n  ---\n  duration_ms: 0.7183\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 195.8889\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "verification-004-per-turn-artifact-naming",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\verification-004-per-turn-artifact-naming\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: verificationArtifactName: turn 1 保持规范名\nok 1 - verificationArtifactName: turn 1 保持规范名\n  ---\n  duration_ms: 0.5878\n  type: 'test'\n  ...\n# Subtest: verificationArtifactName: turn > 1 带 -turnN 后缀\nok 2 - verificationArtifactName: turn > 1 带 -turnN 后缀\n  ---\n  duration_ms: 0.1667\n  type: 'test'\n  ...\n# Subtest: verifyRun turn 1 产物使用规范名\nok 3 - verifyRun turn 1 产物使用规范名\n  ---\n  duration_ms: 34.2924\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 341.8021\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\verification-004-per-turn-artifact-naming\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: verifyRun turn 2 写入 -turn2 产物且规范名不存在\nok 1 - verifyRun turn 2 写入 -turn2 产物且规范名不存在\n  ---\n  duration_ms: 36.4641\n  type: 'test'\n  ...\n# Subtest: verifyRun turn 1 不写入 turn 后缀产物\nok 2 - verifyRun turn 1 不写入 turn 后缀产物\n  ---\n  duration_ms: 9.147\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 339.0105\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "verification-005-required-artifacts",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\verification-005-required-artifacts\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: turnSuffixedArtifactName: turn 1 保持规范名, turn > 1 插后缀\nok 1 - turnSuffixedArtifactName: turn 1 保持规范名, turn > 1 插后缀\n  ---\n  duration_ms: 0.5315\n  type: 'test'\n  ...\n# Subtest: 产物存在 (规范名) → 无标注\nok 2 - 产物存在 (规范名) → 无标注\n  ---\n  duration_ms: 5.1369\n  type: 'test'\n  ...\n# Subtest: 产物缺失 → 标注 missing_required_artifact\nok 3 - 产物缺失 → 标注 missing_required_artifact\n  ---\n  duration_ms: 2.1893\n  type: 'test'\n  ...\n# Subtest: turn > 1 时 -turnN 后缀变体命中\nok 4 - turn > 1 时 -turnN 后缀变体命中\n  ---\n  duration_ms: 1.6673\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 202.206\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\verification-005-required-artifacts\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: turn > 1 时后缀变体不存在但规范名存在仍可命中\nok 1 - turn > 1 时后缀变体不存在但规范名存在仍可命中\n  ---\n  duration_ms: 5.0162\n  type: 'test'\n  ...\n# Subtest: turn > 1 时后缀变体与规范名都不存在 → 标注缺失\nok 2 - turn > 1 时后缀变体与规范名都不存在 → 标注缺失\n  ---\n  duration_ms: 1.9815\n  type: 'test'\n  ...\n# Subtest: 目录读不到时不全部缺失误报\nok 3 - 目录读不到时不全部缺失误报\n  ---\n  duration_ms: 0.4601\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 198.0059\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "state-001-loop-card-store-migration",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\state-001-loop-card-store-migration\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-ozknrQ\\\\loops\\\\loops.json\n# Subtest: missing loops.json initializes an empty registry\nok 1 - missing loops.json initializes an empty registry\n  ---\n  duration_ms: 4.7774\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-zzXMk7\\\\loops\\\\loops.json\n# Subtest: createLoop persists the registry with the current version\nok 2 - createLoop persists the registry with the current version\n  ---\n  duration_ms: 14.5005\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-qmlYg1\\\\loops\\\\loops.json\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-qmlYg1\\\\loops\\\\loops.json\n# [LoopCardStore] Loaded 1 loops from disk\n# Subtest: registry survives a reload from disk\nok 3 - registry survives a reload from disk\n  ---\n  duration_ms: 23.4784\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-yxFe6f\\\\loops\\\\loops.json\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-yxFe6f\\\\loops\\\\loops.json\n# [LoopCardStore] Loaded 1 loops from disk\n# Subtest: legacy version 0 registry is migrated to current version and saved\nok 4 - legacy version 0 registry is migrated to current version and saved\n  ---\n  duration_ms: 41.7051\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-IxH7jr\\\\loops\\\\loops.json\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-IxH7jr\\\\loops\\\\loops.json\n# [LoopCardStore] Failed to load state, backing up corrupt file and starting fresh: SyntaxError: Expected property name or '}' in JSON at position 2 (line 1 column 3)\n#     at JSON.parse (<anonymous>)\n#     at LoopCardStore.initialize (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\state\\\\loop-card-store.ts:81:27)\n#     at async <anonymous> (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\tasks\\\\state-001-loop-card-store-migration\\\\public.test.ts:95:5)\n#     at async withTempDataDir (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\fixtures\\\\temp-data-dir.ts:25:12)\n#     at async TestContext.<anonymous> (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\tasks\\\\state-001-loop-card-store-migration\\\\public.test.ts:88:3)\n#     at async Test.run (node:internal/test_runner/test:1054:7)\n#     at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n# Subtest: corrupt loops.json is backed up and registry starts fresh\nok 5 - corrupt loops.json is backed up and registry starts fresh\n  ---\n  duration_ms: 22.1963\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 416.7644\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\state-001-loop-card-store-migration\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-98w1cY\\\\loops\\\\loops.json\n# Subtest: rapid sequential saves are debounced into coherent on-disk state\nok 1 - rapid sequential saves are debounced into coherent on-disk state\n  ---\n  duration_ms: 15.8484\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-Vi6hWK\\\\loops\\\\loops.json\n# Subtest: archiveLoop and setPaused update timestamps and persist\nok 2 - archiveLoop and setPaused update timestamps and persist\n  ---\n  duration_ms: 39.9268\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-ehLVrA\\\\loops\\\\loops.json\n# Subtest: loops.json is never a partial write after a crash\nok 3 - loops.json is never a partial write after a crash\n  ---\n  duration_ms: 19.0209\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 368.6614\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "state-002-run-ledger-serialization",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\state-002-run-ledger-serialization\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: appendEntry writes a typed JSONL line that validates\nok 1 - appendEntry writes a typed JSONL line that validates\n  ---\n  duration_ms: 37.5633\n  type: 'test'\n  ...\n# Subtest: multiple appends land as separate ordered lines\nok 2 - multiple appends land as separate ordered lines\n  ---\n  duration_ms: 30.44\n  type: 'test'\n  ...\n# Subtest: readEntry returns the latest run_ledger_entry for multi-turn runs\nok 3 - readEntry returns the latest run_ledger_entry for multi-turn runs\n  ---\n  duration_ms: 35.5806\n  type: 'test'\n  ...\n# Subtest: decision entries are stored in the same file and read separately\nok 4 - decision entries are stored in the same file and read separately\n  ---\n  duration_ms: 35.91\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 488.3913\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\state-002-run-ledger-serialization\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [RunLedgerStore] skipping unparseable line in runs/run-1.jsonl\n# Subtest: corrupt and invalid lines are skipped without crashing\nok 1 - corrupt and invalid lines are skipped without crashing\n  ---\n  duration_ms: 52.7295\n  type: 'test'\n  ...\n# [RunLedgerStore] skipping unparseable line in runs/run-bad.jsonl\n# Subtest: fully corrupt ledger file does not crash the reader\nok 2 - fully corrupt ledger file does not crash the reader\n  ---\n  duration_ms: 17.6561\n  type: 'test'\n  ...\n# Subtest: concurrent appends to the same run do not interleave lines\nok 3 - concurrent appends to the same run do not interleave lines\n  ---\n  duration_ms: 65.2582\n  type: 'test'\n  ...\n# Subtest: unsafe run_id or artifact names are rejected\nok 4 - unsafe run_id or artifact names are rejected\n  ---\n  duration_ms: 1.6173\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 431.967\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "state-003-uri-escape-prevention",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\state-003-uri-escape-prevention\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: resolveUri maps artifact and ledger URIs to loops/ subtree\nok 1 - resolveUri maps artifact and ledger URIs to loops/ subtree\n  ---\n  duration_ms: 1.0692\n  type: 'test'\n  ...\n# Subtest: resolveUri maps non-file schemes to structured results\nok 2 - resolveUri maps non-file schemes to structured results\n  ---\n  duration_ms: 0.7607\n  type: 'test'\n  ...\n# Subtest: resolveUri rejects path traversal attempts\nok 3 - resolveUri rejects path traversal attempts\n  ---\n  duration_ms: 0.4215\n  type: 'test'\n  ...\n# Subtest: resolveUri rejects unknown schemes\nok 4 - resolveUri rejects unknown schemes\n  ---\n  duration_ms: 0.124\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 208.6411\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\state-003-uri-escape-prevention\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: readUri uses the resolver and remains inside loops/ subtree\nok 1 - readUri uses the resolver and remains inside loops/ subtree\n  ---\n  duration_ms: 36.8034\n  type: 'test'\n  ...\n# Subtest: path traversal in any URI segment is rejected\nok 2 - path traversal in any URI segment is rejected\n  ---\n  duration_ms: 0.5676\n  type: 'test'\n  ...\n# Subtest: safe names with dots, dashes, and underscores are allowed\nok 3 - safe names with dots, dashes, and underscores are allowed\n  ---\n  duration_ms: 0.2181\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 334.7966\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "state-004-worktree-cleanup-protection",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\state-004-worktree-cleanup-protection\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: pruneStaleWorktrees removes stale worktrees and their branches\nok 1 - pruneStaleWorktrees removes stale worktrees and their branches\n  ---\n  duration_ms: 694.7869\n  type: 'test'\n  ...\n# Subtest: protected runIds are never pruned even when stale\nok 2 - protected runIds are never pruned even when stale\n  ---\n  duration_ms: 617.8519\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1612.2885\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\state-004-worktree-cleanup-protection\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: custom maxAgeDays shortens the cleanup threshold\nok 1 - custom maxAgeDays shortens the cleanup threshold\n  ---\n  duration_ms: 482.346\n  type: 'test'\n  ...\n# Subtest: budget_limited run is not protected and can be pruned while active runs are kept\nok 2 - budget_limited run is not protected and can be pruned while active runs are kept\n  ---\n  duration_ms: 581.03\n  type: 'test'\n  ...\n# Subtest: pruning tolerates missing worktrees root\nok 3 - pruning tolerates missing worktrees root\n  ---\n  duration_ms: 22.6162\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1389.8795\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "state-005-proposal-store-transitions",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\state-005-proposal-store-transitions\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: create starts a proposal in draft and persists file + index\nok 1 - create starts a proposal in draft and persists file + index\n  ---\n  duration_ms: 31.3505\n  type: 'test'\n  ...\n# Subtest: pipeline advances draft → shadow → canary → approved → published\nok 2 - pipeline advances draft → shadow → canary → approved → published\n  ---\n  duration_ms: 15.2967\n  type: 'test'\n  ...\n# Subtest: illegal transitions are rejected and do not mutate state\nok 3 - illegal transitions are rejected and do not mutate state\n  ---\n  duration_ms: 16.295\n  type: 'test'\n  ...\n# Subtest: rollback records reason and reaches terminal rolled_back\nok 4 - rollback records reason and reaches terminal rolled_back\n  ---\n  duration_ms: 18.2099\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 377.5118\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\state-005-proposal-store-transitions\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: status and history survive a store reload\nok 1 - status and history survive a store reload\n  ---\n  duration_ms: 23.8996\n  type: 'test'\n  ...\n# Subtest: create rejects non-draft starting status and unsafe ids\nok 2 - create rejects non-draft starting status and unsafe ids\n  ---\n  duration_ms: 3.9826\n  type: 'test'\n  ...\n# [ProposalStore] skipping corrupt proposal file prop_20260720_001.json: SyntaxError: Expected property name or '}' in JSON at position 2 (line 1 column 3)\n#     at JSON.parse (<anonymous>)\n#     at ProposalStore.initialize (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\packages\\\\server\\\\src\\\\loop\\\\state\\\\proposal-store.ts:167:29)\n#     at async <anonymous> (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\tasks\\\\state-005-proposal-store-transitions\\\\hidden.test.ts:67:5)\n#     at async withTempDataDir (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\fixtures\\\\temp-data-dir.ts:25:12)\n#     at async TestContext.<anonymous> (E:\\\\projects\\\\vibecodingByYourPhone-main\\\\benchmarks\\\\loop-modules\\\\tasks\\\\state-005-proposal-store-transitions\\\\hidden.test.ts:58:3)\n#     at async Test.run (node:internal/test_runner/test:1054:7)\n#     at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n# Subtest: corrupt proposal file is backed up and skipped during initialize\nok 3 - corrupt proposal file is backed up and skipped during initialize\n  ---\n  duration_ms: 9.5141\n  type: 'test'\n  ...\n# Subtest: transition rejects unknown proposal with proposal_not_found\nok 4 - transition rejects unknown proposal with proposal_not_found\n  ---\n  duration_ms: 2.8125\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 335.0913\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "learning-001-pipeline-advance",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\learning-001-pipeline-advance\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-pipeline-advance-NH3zm3\\\\loops\\\\loops.json\n# Subtest: happy path: draft → shadow → canary, 自动推进到此为止\nok 1 - happy path: draft → shadow → canary, 自动推进到此为止\n  ---\n  duration_ms: 208.4139\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-pipeline-advance-gUSFRP\\\\loops\\\\loops.json\n# Subtest: regression 失败 → rolled_back, history 记录失败明细\nok 2 - regression 失败 → rolled_back, history 记录失败明细\n  ---\n  duration_ms: 156.2571\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 676.6295\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\learning-001-pipeline-advance\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-pipeline-hidden-pDPpRM\\\\loops\\\\loops.json\n# Subtest: shadow 档 scorecard 落盘且能被 history 引用\nok 1 - shadow 档 scorecard 落盘且能被 history 引用\n  ---\n  duration_ms: 138.7646\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-pipeline-hidden-Rok2zE\\\\loops\\\\loops.json\n# Subtest: payload 真实应用时 history 记录 applied 槽位\nok 2 - payload 真实应用时 history 记录 applied 槽位\n  ---\n  duration_ms: 166.0184\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-pipeline-hidden-BrqlLP\\\\loops\\\\loops.json\n# Subtest: eval 集损坏时 regression fail-closed 回滚\nok 3 - eval 集损坏时 regression fail-closed 回滚\n  ---\n  duration_ms: 98.7596\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 712.0441\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "learning-002-meta-rule-protection",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\learning-002-meta-rule-protection\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-meta-rule-7iHhqO\\\\loops\\\\loops.json\n# [ProposalPipeline] 元规则保护: 提案 'prop-meta-worker' (type=eval_task_proposal, target=loop-1.eval_regression_suite) 涉及发布管线自身且 created_by=worker, 拒绝进入管线 (仅人工发起的元规则变更可推进)\n# Subtest: worker 发起的元规则提案被阻止在 draft\nok 1 - worker 发起的元规则提案被阻止在 draft\n  ---\n  duration_ms: 10.166\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-meta-rule-b10nfi\\\\loops\\\\loops.json\n# Subtest: 人工发起的元规则提案可以正常推进\nok 2 - 人工发起的元规则提案可以正常推进\n  ---\n  duration_ms: 121.5857\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 438.1975\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\learning-002-meta-rule-protection\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: isMetaRuleProposal 识别元规则类型与 target\nok 1 - isMetaRuleProposal 识别元规则类型与 target\n  ---\n  duration_ms: 0.8027\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-meta-stable-WS3Qk8\\\\loops\\\\loops.json\n# [ProposalPipeline] 元规则保护: 提案 'prop-stable' (type=eval_task_proposal, target=loop-1.eval_regression_suite) 涉及发布管线自身且 created_by=worker, 拒绝进入管线 (仅人工发起的元规则变更可推进)\n# Subtest: worker 元规则提案被稳定阻挡，不会意外进入管线\nok 2 - worker 元规则提案被稳定阻挡，不会意外进入管线\n  ---\n  duration_ms: 13.5974\n  type: 'test'\n  ...\n# [LearningWorker] golden tasks: 1 case(s) added to eval suite\n# Subtest: golden tasks: open failure pattern 同步为 eval 集 command case\nok 3 - golden tasks: open failure pattern 同步为 eval 集 command case\n  ---\n  duration_ms: 34.8772\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 368.071\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "learning-003-eval-runner-scope",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\learning-003-eval-runner-scope\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: scope 白名单只跑白名单内 case\nok 1 - scope 白名单只跑白名单内 case\n  ---\n  duration_ms: 14.6504\n  type: 'test'\n  ...\n# Subtest: scope 过滤后 0 命中 → fail-closed\nok 2 - scope 过滤后 0 命中 → fail-closed\n  ---\n  duration_ms: 5.4555\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 344.8177\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\learning-003-eval-runner-scope\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# Subtest: cases.json 缺失时 EvalRunner 写入内置 behavior case 集\nok 1 - cases.json 缺失时 EvalRunner 写入内置 behavior case 集\n  ---\n  duration_ms: 12.3682\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-scope-pipeline-9jDFNM\\\\loops\\\\loops.json\n# Subtest: LoopCard regression_scope 被 pipeline regression 档消费\nok 2 - LoopCard regression_scope 被 pipeline regression 档消费\n  ---\n  duration_ms: 194.3686\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 516.4913\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "routes-001-loop-crud-pause-resume",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\routes-001-loop-crud-pause-resume\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-LYWmZ0\\\\loops\\\\loops.json\n# Subtest: POST /api/loops creates a loop and GET /api/loops lists it\nok 1 - POST /api/loops creates a loop and GET /api/loops lists it\n  ---\n  duration_ms: 30.8119\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-iofYAe\\\\loops\\\\loops.json\n# Subtest: POST /api/loops with duplicate id returns 409 loop_exists\nok 2 - POST /api/loops with duplicate id returns 409 loop_exists\n  ---\n  duration_ms: 4.8787\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-3uhsaV\\\\loops\\\\loops.json\n# Subtest: POST /api/loops with invalid body returns 400 invalid_loop_card\nok 3 - POST /api/loops with invalid body returns 400 invalid_loop_card\n  ---\n  duration_ms: 4.502\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-CLQRN4\\\\loops\\\\loops.json\n# Subtest: GET /api/loops/:id returns loop and run state; 404 for archived\nok 4 - GET /api/loops/:id returns loop and run state; 404 for archived\n  ---\n  duration_ms: 6.9093\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-Fp2xXI\\\\loops\\\\loops.json\n# Subtest: GET /api/loops/:id returns 404 loop_not_found for unknown loop\nok 5 - GET /api/loops/:id returns 404 loop_not_found for unknown loop\n  ---\n  duration_ms: 4.575\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-dRmU3s\\\\loops\\\\loops.json\n# [LoopRunService] run run-20260728T091125Z-79588dab (loop 'loop-it') turn 2: complete\n# Subtest: PATCH pause / resume round-trip: active run paused, then resumes to complete\nok 6 - PATCH pause / resume round-trip: active run paused, then resumes to complete\n  ---\n  duration_ms: 130.8376\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-hjgblE\\\\loops\\\\loops.json\n# Subtest: PATCH invalid action / non-JSON body / unknown loop error codes\nok 7 - PATCH invalid action / non-JSON body / unknown loop error codes\n  ---\n  duration_ms: 4.8499\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-31yOsS\\\\loops\\\\loops.json\n# Subtest: PATCH archive: active run blocks with 409, after pause archive succeeds and hides loop\nok 8 - PATCH archive: active run blocks with 409, after pause archive succeeds and hides loop\n  ---\n  duration_ms: 24.4892\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-cxJua4\\\\loops\\\\loops.json\n# Subtest: POST /api/loops/:id/runs on archived loop returns 409 loop_archived\nok 9 - POST /api/loops/:id/runs on archived loop returns 409 loop_archived\n  ---\n  duration_ms: 5.787\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-E60iGt\\\\loops\\\\loops.json\n# Subtest: GET /api/loops status filter and pagination query params are honored\nok 10 - GET /api/loops status filter and pagination query params are honored\n  ---\n  duration_ms: 5.9732\n  type: 'test'\n  ...\n1..10\n# tests 10\n# suites 0\n# pass 10\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 587.17\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\routes-001-loop-crud-pause-resume\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-6ESbsr\\\\loops\\\\loops.json\n# Subtest: GET /api/loops hides archived loops by default\nok 1 - GET /api/loops hides archived loops by default\n  ---\n  duration_ms: 26.5469\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-9PiJN9\\\\loops\\\\loops.json\n# [LoopRunService] run run-20260728T091127Z-828ced46 (loop 'loop-it') turn 1: complete\n# Subtest: PATCH pause with no active run only blocks future triggers\nok 2 - PATCH pause with no active run only blocks future triggers\n  ---\n  duration_ms: 117.2133\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-tWotOC\\\\loops\\\\loops.json\n# Subtest: PATCH resume on non-paused loop with no run returns 409 invalid_state\nok 3 - PATCH resume on non-paused loop with no run returns 409 invalid_state\n  ---\n  duration_ms: 4.223\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-TdUVhp\\\\loops\\\\loops.json\n# Subtest: PATCH pause on needs_human run returns 409 invalid_state\nok 4 - PATCH pause on needs_human run returns 409 invalid_state\n  ---\n  duration_ms: 40.3591\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-aXRT9L\\\\loops\\\\loops.json\n# Subtest: POST /api/loops/:id/runs rejected when loop already has active run\nok 5 - POST /api/loops/:id/runs rejected when loop already has active run\n  ---\n  duration_ms: 7.473\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 555.4702\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "routes-002-run-trigger-and-decision",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\routes-002-run-trigger-and-decision\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-p9VLXC\\\\loops\\\\loops.json\n# [LoopRunService] run run-20260728T091128Z-9d133c1d (loop 'loop-it') turn 1: complete\n# Subtest: POST /api/loops/:id/runs creates a run and GET /api/runs/:id returns details\nok 1 - POST /api/loops/:id/runs creates a run and GET /api/runs/:id returns details\n  ---\n  duration_ms: 164.1883\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-yCpM16\\\\loops\\\\loops.json\n# Subtest: POST /api/loops/:id/runs returns 404 for unknown loop\nok 2 - POST /api/loops/:id/runs returns 404 for unknown loop\n  ---\n  duration_ms: 4.4218\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-dx0yDk\\\\loops\\\\loops.json\n# [LoopRunService] run run-20260728T091128Z-ab4a7e21 (loop 'loop-it') turn 1: complete\n# Subtest: POST /api/loops/:id/runs returns 409 run_active when loop already has active run\nok 3 - POST /api/loops/:id/runs returns 409 run_active when loop already has active run\n  ---\n  duration_ms: 97.742\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-dmTzr4\\\\loops\\\\loops.json\n# Subtest: GET /api/runs/:id returns 404 for unknown run\nok 4 - GET /api/runs/:id returns 404 for unknown run\n  ---\n  duration_ms: 3.7735\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-IvTrPL\\\\loops\\\\loops.json\n# [LoopRunService] run run-20260728T091128Z-4f002854 (loop 'loop-it') turn 1: needs_human\n# [LoopRunService] run run-20260728T091128Z-4f002854 (loop 'loop-it') turn 2: complete\n# Subtest: POST /api/runs/:id/decision approve resumes needs_human run to complete\nok 5 - POST /api/runs/:id/decision approve resumes needs_human run to complete\n  ---\n  duration_ms: 226.1928\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-yaB4BG\\\\loops\\\\loops.json\n# [LoopRunService] run run-20260728T091129Z-80ef071d (loop 'loop-it') turn 1: needs_human\n# Subtest: POST /api/runs/:id/decision request_changes without feedback returns 400\nok 6 - POST /api/runs/:id/decision request_changes without feedback returns 400\n  ---\n  duration_ms: 94.4042\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-XwqMUP\\\\loops\\\\loops.json\n# [LoopRunService] run run-20260728T091129Z-ca084e81 (loop 'loop-it') turn 1: complete\n# Subtest: POST /api/runs/:id/decision on non-needs_human run returns 409 invalid_state\nok 7 - POST /api/runs/:id/decision on non-needs_human run returns 409 invalid_state\n  ---\n  duration_ms: 94.1275\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-MyGQF1\\\\loops\\\\loops.json\n# [LoopRunService] run run-20260728T091129Z-66fbfffa (loop 'loop-it') turn 1: budget_limited\n# [LoopRunService] run run-20260728T091129Z-66fbfffa (loop 'loop-it') turn 2: complete\n# Subtest: POST /api/runs/:id/budget supplements budget_limited run and resumes to complete\nok 8 - POST /api/runs/:id/budget supplements budget_limited run and resumes to complete\n  ---\n  duration_ms: 220.3264\n  type: 'test'\n  ...\n1..8\n# tests 8\n# suites 0\n# pass 8\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1284.3359\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\routes-002-run-trigger-and-decision\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-TKP9wE\\\\loops\\\\loops.json\n# [LoopRunService] run run-20260728T091130Z-05901de9 (loop 'loop-it') turn 1: needs_human\n# Subtest: POST /api/runs/:id/decision reject fails the run\nok 1 - POST /api/runs/:id/decision reject fails the run\n  ---\n  duration_ms: 170.2594\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-0OTtc3\\\\loops\\\\loops.json\n# [LoopRunService] run run-20260728T091130Z-94f1949b (loop 'loop-it') turn 1: needs_human\n# Subtest: POST /api/runs/:id/decision pause pauses the run\nok 2 - POST /api/runs/:id/decision pause pauses the run\n  ---\n  duration_ms: 130.313\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-fbyhTq\\\\loops\\\\loops.json\n# [LoopRunService] run run-20260728T091130Z-d95cfe65 (loop 'loop-it') turn 1: complete\n# Subtest: POST /api/runs/:id/budget on non-budget_limited run returns 409 invalid_state\nok 3 - POST /api/runs/:id/budget on non-budget_limited run returns 409 invalid_state\n  ---\n  duration_ms: 128.4401\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-knFV8E\\\\loops\\\\loops.json\n# [LoopRunService] run run-20260728T091131Z-4f5664f6 (loop 'loop-it') turn 1: budget_limited\n# Subtest: POST /api/runs/:id/budget with no budget fields returns 400 invalid_decision\nok 4 - POST /api/runs/:id/budget with no budget fields returns 400 invalid_decision\n  ---\n  duration_ms: 110.1766\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-yvuK6T\\\\loops\\\\loops.json\n# [LoopRunService] run run-20260728T091131Z-67363e9c (loop 'loop-it') turn 1: complete\n# Subtest: GET /api/runs/:id returns run_state and ledger_summary after completion\nok 5 - GET /api/runs/:id returns run_state and ledger_summary after completion\n  ---\n  duration_ms: 114.6117\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1036.3968\n",
+      "stderr": ""
+    },
+    "resolved": true
+  },
+  {
+    "taskId": "routes-003-proposal-approve-publish-rollback",
+    "public": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\routes-003-proposal-approve-publish-rollback\\public.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-sXwRpa\\\\loops\\\\loops.json\n# Subtest: POST /api/proposals creates a human proposal in draft status\nok 1 - POST /api/proposals creates a human proposal in draft status\n  ---\n  duration_ms: 31.0482\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-kq2Wnu\\\\loops\\\\loops.json\n# Subtest: POST /api/proposals with invalid body returns 400 invalid_proposal\nok 2 - POST /api/proposals with invalid body returns 400 invalid_proposal\n  ---\n  duration_ms: 6.578\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-BU0ltr\\\\loops\\\\loops.json\n# Subtest: POST /api/proposals/:id/approve moves canary proposal to approved\nok 3 - POST /api/proposals/:id/approve moves canary proposal to approved\n  ---\n  duration_ms: 14.7237\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-P15U0j\\\\loops\\\\loops.json\n# Subtest: POST /api/proposals/:id/publish requires explicit human marker\nok 4 - POST /api/proposals/:id/publish requires explicit human marker\n  ---\n  duration_ms: 18.856\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-cYKoFD\\\\loops\\\\loops.json\n# Subtest: POST /api/proposals/:id/rollback moves non-terminal proposal to rolled_back\nok 5 - POST /api/proposals/:id/rollback moves non-terminal proposal to rolled_back\n  ---\n  duration_ms: 13.0342\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-Yf2CXD\\\\loops\\\\loops.json\n# Subtest: GET /api/loops/:id/proposals lists proposals scoped to that loop\nok 6 - GET /api/loops/:id/proposals lists proposals scoped to that loop\n  ---\n  duration_ms: 21.6496\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-qpfkW0\\\\loops\\\\loops.json\n# Subtest: GET /api/loops/:id/proposals returns 404 for unknown loop\nok 7 - GET /api/loops/:id/proposals returns 404 for unknown loop\n  ---\n  duration_ms: 6.1624\n  type: 'test'\n  ...\n1..7\n# tests 7\n# suites 0\n# pass 7\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 482.6278\n",
+      "stderr": ""
+    },
+    "hidden": {
+      "file": "E:\\projects\\vibecodingByYourPhone-main\\benchmarks\\loop-modules\\tasks\\routes-003-proposal-approve-publish-rollback\\hidden.test.ts",
+      "passed": true,
+      "stdout": "TAP version 13\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-8U1Ytt\\\\loops\\\\loops.json\n# Subtest: GET /api/proposals/:id returns proposal and history; 404 for unknown\nok 1 - GET /api/proposals/:id returns proposal and history; 404 for unknown\n  ---\n  duration_ms: 29.0211\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-0qYbxz\\\\loops\\\\loops.json\n# Subtest: POST approve returns 404 for unknown proposal\nok 2 - POST approve returns 404 for unknown proposal\n  ---\n  duration_ms: 5.9745\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-qWNSi0\\\\loops\\\\loops.json\n# Subtest: POST approve returns 409 invalid_transition from draft\nok 3 - POST approve returns 409 invalid_transition from draft\n  ---\n  duration_ms: 12.7224\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-wndTLK\\\\loops\\\\loops.json\n# Subtest: POST publish returns 409 invalid_transition from canary\nok 4 - POST publish returns 409 invalid_transition from canary\n  ---\n  duration_ms: 13.8056\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-vVGHyx\\\\loops\\\\loops.json\n# Subtest: POST rollback returns 409 invalid_transition for terminal rejected status\nok 5 - POST rollback returns 409 invalid_transition for terminal rejected status\n  ---\n  duration_ms: 11.2625\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-0HRi1B\\\\loops\\\\loops.json\n# Subtest: Worker-created meta-rule proposal cannot be approved or published\nok 6 - Worker-created meta-rule proposal cannot be approved or published\n  ---\n  duration_ms: 12.0171\n  type: 'test'\n  ...\n# [LoopCardStore] Initializing from: C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\yep-loop-bench-xNwz7m\\\\loops\\\\loops.json\n# Subtest: GET /api/loops/:id/proposals status filter is honored\nok 7 - GET /api/loops/:id/proposals status filter is honored\n  ---\n  duration_ms: 12.0836\n  type: 'test'\n  ...\n1..7\n# tests 7\n# suites 0\n# pass 7\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 466.9469\n",
+      "stderr": ""
+    },
+    "resolved": true
+  }
+]

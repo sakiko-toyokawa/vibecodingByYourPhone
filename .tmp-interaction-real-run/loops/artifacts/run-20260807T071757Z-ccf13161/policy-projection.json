@@ -1,0 +1,16 @@
+{
+  "policy_intent_ref": "policy://loop_bypass",
+  "sandbox": "read-only",
+  "approval_or_permission_mode": "bypass_self_approve_with_audit",
+  "allowed_tools": [],
+  "disallowed_tools": [],
+  "hard_gates": [
+    "merge",
+    "deploy",
+    "delete",
+    "publish",
+    "bill",
+    "notify",
+    "close"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "task_type": "maintenance",
+  "outcome": "完成維護任務並產出結果報告：允許在工作區內做有邊界的修改",
+  "success_criteria": [
+    "任務目標完成並產出報告文本",
+    "修改不超出工作區邊界",
+    "未嘗試硬閘門動作"
+  ],
+  "constraints": ["workspace_bounded"]
+}

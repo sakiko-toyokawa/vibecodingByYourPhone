@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "loops": {
+    "interaction-smoke-1786086590648": {
+      "id": "interaction-smoke-1786086590648",
+      "card": {
+        "loop": {
+          "id": "interaction-smoke-1786086590648",
+          "trigger": {
+            "type": "manual"
+          },
+          "handoff": {
+            "default_task_type": "maintenance",
+            "task": "Smoke test interaction verifier UI wiring only. Do not modify files."
+          },
+          "workspace": {
+            "strategy": "direct",
+            "path": "E:/projects/vibecodingByYourPhone-main"
+          },
+          "verification": {
+            "required": [
+              "interaction"
+            ],
+            "interaction": {
+              "enabled": true,
+              "url": "http://localhost:3510",
+              "start_command": "pnpm dev"
+            }
+          },
+          "persistence": {
+            "state_file": ".loop/state/interaction-smoke-1786086590648/STATE.md"
+          },
+          "stop_rules": {
+            "max_turns": 1,
+            "max_time_minutes": 5,
+            "max_retries": 0
+          }
+        }
+      },
+      "created_at": "2026-08-07T07:09:50.654Z",
+      "updated_at": "2026-08-07T07:09:50.654Z",
+      "archived": false
+    }
+  }
+}

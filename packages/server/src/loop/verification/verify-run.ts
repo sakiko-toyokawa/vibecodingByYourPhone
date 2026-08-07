@@ -6,8 +6,8 @@
  * verifier chain:
  *   - static / runtime → deterministic subprocess commands (card-pinned
  *     commands first, workspace package.json probing otherwise)
- *   - interaction → marked not_applicable (phase 1 does not implement it;
- *     a placeholder artifact is written and it is excluded from aggregation)
+ *   - interaction → browser interaction verification (agent-authored
+ *     Playwright script + deterministic subprocess execution)
  *   - review → not implemented in phase 1, same placeholder treatment
  *
  * Artifacts written under artifacts/<run_id>/ (refs returned for the ledger
@@ -34,8 +34,7 @@ import {
 } from "@yep-anywhere/shared";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
 import { aggregateVerifierReports } from "./aggregate.js";
-import { selectRuntimeCommands } from "./runtime-verifier.js";
-import { selectStaticCommands } from "./static-verifier.js";
+import { selectVerificationStrategy } from "./strategy-selector.js";
 import { runVerificationCommands } from "./subprocess-verifier.js";
 
 export interface VerifyRunInput {
@@ -80,6 +79,40 @@ export interface VerifyRunInput {
   timeoutMs?: number;
 }
 
+/**
+ * P4: 傳給 Verifier Agent 回調的上下文（review phase 專用）。
+ * priorReports 是本輪已執行的 L1-L3 報告；下層硬失敗短路時 review
+ * 不會被呼叫（省 L4 成本）。previous_judgment 由呼叫方（turn-loop）
+ * 在回調閉包內注入 —— verify-run 不知道上一輪裁決。
+ */
+export interface ReviewAgentContext {
+  contract: IntentContract;
+  runId: string;
+  turn: number;
+  workspacePath: string;
+  priorReports: VerifierReport[];
+  evidenceRefs: {
+    diff: string | null;
+    stdout: string | null;
+    runtime_events: string | null;
+    executor_summary: string | null;
+  };
+}
+
+export interface InteractionAgentContext {
+  contract: IntentContract;
+  runId: string;
+  turn: number;
+  workspacePath: string;
+  priorReports: VerifierReport[];
+  evidenceRefs: {
+    diff: string | null;
+    stdout: string | null;
+    runtime_events: string | null;
+    executor_summary: string | null;
+  };
+}
+
 export interface VerificationRefs {
   verification_input: string;
   verifier_runtime: string;
@@ -93,8 +126,8 @@ export interface VerifyRunResult {
   refs: VerificationRefs;
 }
 
-/** Phases without a phase-1 implementation get a not_applicable placeholder. */
-const PLACEHOLDER_PHASES = new Set(["interaction", "review"]);
+/** Phases without a direct implementation get a not_applicable placeholder. */
+const PLACEHOLDER_PHASES = new Set(["review"]);
 
 /**
  * Per-turn verification artifact naming: turn 1 keeps the canonical base
@@ -111,10 +144,25 @@ export function verificationArtifactName(base: string, turn: number): string {
 
 export async function verifyRun(
   input: VerifyRunInput,
-  deps: { store: RunLedgerStore },
+  deps: {
+    store: RunLedgerStore;
+    /** 測試注入點 (P0): 缺省用真實策略選擇器。 */
+    selectStrategy?: typeof selectVerificationStrategy;
+    /**
+     * P4: review phase 的 Verifier Agent 回調（read-only judge）。
+     * 提供時取代 input.reviewReport / placeholder 路徑；缺省維持
+     * P3 以前行為（collector 報告或 not_applicable 占位）。
+     */
+    runReviewAgent?: (context: ReviewAgentContext) => Promise<VerifierReport>;
+    /** Interaction phase runner (agent-authored Playwright script). */
+    runInteractionAgent?: (
+      context: InteractionAgentContext,
+    ) => Promise<VerifierReport>;
+  },
 ): Promise<VerifyRunResult> {
   const { card, contract, runId, workspacePath } = input;
   const { store } = deps;
+  const selectStrategy = deps.selectStrategy ?? selectVerificationStrategy;
   const required = card.loop.verification.required;
   const turn = input.turn ?? 1;
 
@@ -149,26 +197,116 @@ export async function verifyRun(
       continue;
     }
 
-    if (phase === "static" || phase === "runtime") {
-      const commands =
-        phase === "static"
-          ? await selectStaticCommands(card, workspacePath)
-          : await selectRuntimeCommands(card, workspacePath);
-      const report = await runVerificationCommands({
+    // 可執行 phase 走 strategy 管線; review 仍走 agent / collector 特殊路徑。
+    if (
+      phase === "static" ||
+      phase === "runtime" ||
+      phase === "rule" ||
+      phase === "structural" ||
+      (phase === "interaction" && !deps.runInteractionAgent)
+    ) {
+      // Use strategy selector to choose the most appropriate verification strategy
+      // based on the loop card, intent contract, and workspace contents.
+      const strategy = await selectStrategy(
+        card,
+        contract,
+        workspacePath,
         phase,
-        commands,
-        cwd: workspacePath,
+      );
+      // Read artifacts for file-based verification strategies
+      const artifacts: Record<string, string> = {};
+      const artifactNames = await store.listArtifacts(runId);
+      for (const name of artifactNames) {
+        const content = await store.readArtifact(runId, name);
+        if (content !== undefined) {
+          artifacts[name] = content;
+        }
+      }
+      const report = await strategy.verify({
+        contract,
+        workspacePath,
+        exitStatus: input.exitStatus,
+        artifacts,
+        turn,
+        phase,
         timeoutMs: input.timeoutMs,
         writeEvidence,
       });
-      reports.push(VerifierReportSchema.parse(report));
+      // verifier_phase 以编排层当前段为准 (防御性覆盖) —— 策略硬编码
+      // "static" 曾让 verifier-report-runtime.json 内容与文件名自相矛盾,
+      // test_output_refs (按 runtime 过滤) 恒空。
+      const phasedReport = { ...report, verifier_phase: phase };
+      reports.push(VerifierReportSchema.parse(phasedReport));
       executedPhases.push(phase);
       await store.writeArtifact(
         runId,
         verificationArtifactName(`verifier-report-${phase}.json`, turn),
-        `${JSON.stringify(report, null, 2)}\n`,
+        `${JSON.stringify(phasedReport, null, 2)}\n`,
       );
-      if (report.status === "failed") {
+      if (phasedReport.status === "failed") {
+        shortCircuitedBy = phase;
+      }
+      continue;
+    }
+
+    if (phase === "interaction" && deps.runInteractionAgent) {
+      const interactionReport = VerifierReportSchema.parse({
+        ...(await deps.runInteractionAgent({
+          contract,
+          runId,
+          turn,
+          workspacePath,
+          priorReports: reports,
+          evidenceRefs: {
+            diff: input.diffRef ?? null,
+            stdout: input.stdoutRef,
+            runtime_events: input.runtimeEventsRef ?? null,
+            executor_summary: input.executorSummaryRef ?? null,
+          },
+        })),
+        verifier_phase: "interaction",
+      });
+      reports.push(interactionReport);
+      executedPhases.push(phase);
+      await store.writeArtifact(
+        runId,
+        verificationArtifactName(`verifier-report-${phase}.json`, turn),
+        `${JSON.stringify(interactionReport, null, 2)}\n`,
+      );
+      if (interactionReport.status === "failed") {
+        shortCircuitedBy = phase;
+      }
+      continue;
+    }
+
+    // P4: review 段有 Verifier Agent 回調時走 agent 管線（read-only
+    // judge；下層硬失敗短路時不會到這裡）。agent 報告與其他 phase 同權
+    // 參與聚合, failed 同樣觸發短路。
+    if (phase === "review" && deps.runReviewAgent) {
+      const agentReport = VerifierReportSchema.parse({
+        ...(await deps.runReviewAgent({
+          contract,
+          runId,
+          turn,
+          workspacePath,
+          priorReports: reports,
+          evidenceRefs: {
+            diff: input.diffRef ?? null,
+            stdout: input.stdoutRef,
+            runtime_events: input.runtimeEventsRef ?? null,
+            executor_summary: input.executorSummaryRef ?? null,
+          },
+        })),
+        verifier_phase: "review",
+      });
+      reports.push(agentReport);
+      executedPhases.push(phase);
+      await store.writeArtifact(
+        runId,
+        verificationArtifactName(`verifier-report-${phase}.json`, turn),
+        `${JSON.stringify(agentReport, null, 2)}\n`,
+      );
+      if (agentReport.status === "failed") {
         shortCircuitedBy = phase;
       }
       continue;

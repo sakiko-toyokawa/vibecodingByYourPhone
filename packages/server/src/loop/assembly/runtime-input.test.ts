@@ -359,3 +359,77 @@ test("contract.target.files 装配为「重点范围」注意力提示小节（0
   );
   assert.ok(!plainInput.prompt.includes("重点范围"));
 });
+
+test("assembleRuntimeInput injects current subtask into prompt when plan exists", () => {
+  const card: LoopCard = {
+    loop: {
+      id: "planner-test",
+      trigger: { type: "manual" },
+      workspace: { strategy: "direct", path: "/tmp/target" },
+      verification: { required: [] },
+      persistence: { state_file: ".loop/STATE.md" },
+      stop_rules: { max_turns: 3, max_time_minutes: 10, max_retries: 2 },
+    },
+  } as LoopCard;
+  const plan = {
+    plan_id: "plan-1",
+    created_at: "2026-07-28T00:00:00.000Z",
+    subtasks: [
+      {
+        id: "subtask-1",
+        description: "Create plan.md",
+        success_criteria: ["plan.md exists"],
+        target_artifacts: ["plan.md"],
+      },
+      {
+        id: "subtask-2",
+        description: "Implement src/main.js",
+        success_criteria: ["src/main.js exists"],
+        target_artifacts: ["src/main.js"],
+      },
+    ],
+  };
+  const contract = buildIntentContract(card, {
+    runId: "run-1",
+    source: "manual",
+    plan,
+  });
+  const input = assembleRuntimeInput(card, contract, [], {}, 2);
+  assert.equal(input.currentSubtask?.id, "subtask-2");
+  assert.deepEqual(input.taskPlan, plan);
+  assert.match(input.prompt, /当前子任务（第 2 轮）：subtask-2/);
+  assert.match(input.prompt, /本轮只应完成当前子任务/);
+  assert.match(input.prompt, /子任务：当前完成的子任务 ID/);
+});
+
+test("assembleRuntimeInput falls back to first subtask for turn 1", () => {
+  const card: LoopCard = {
+    loop: {
+      id: "planner-test",
+      trigger: { type: "manual" },
+      workspace: { strategy: "direct", path: "/tmp/target" },
+      verification: { required: [] },
+      persistence: { state_file: ".loop/STATE.md" },
+      stop_rules: { max_turns: 3, max_time_minutes: 10, max_retries: 2 },
+    },
+  } as LoopCard;
+  const plan = {
+    plan_id: "plan-1",
+    created_at: "2026-07-28T00:00:00.000Z",
+    subtasks: [
+      {
+        id: "subtask-1",
+        description: "Create plan.md",
+        success_criteria: ["plan.md exists"],
+        target_artifacts: ["plan.md"],
+      },
+    ],
+  };
+  const contract = buildIntentContract(card, {
+    runId: "run-1",
+    source: "manual",
+    plan,
+  });
+  const input = assembleRuntimeInput(card, contract);
+  assert.equal(input.currentSubtask?.id, "subtask-1");
+});
