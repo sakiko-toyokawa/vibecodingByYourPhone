@@ -447,6 +447,7 @@ export async function executeTurn(
         escalations: ctx.policyEscalations,
         permissionEvents: ctx.permissionEvents,
         directWriteAllowlist,
+        relation: ctx.relation,
         contract: ctx.contract,
         policyReviewer: (request) =>
           runPolicyReviewAgent(

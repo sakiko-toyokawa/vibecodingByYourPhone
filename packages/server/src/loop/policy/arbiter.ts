@@ -15,6 +15,7 @@
 
 import path from "node:path";
 import type { PolicyProfile } from "@yep-anywhere/shared";
+import type { RelationRecord } from "../relation/relation-store.js";
 import {
   type ClassifyContext,
   type ToolCallClassification,
@@ -55,6 +56,45 @@ function isAllowedDirectWriteTarget(
   });
 }
 
+function commandText(input: unknown): string {
+  if (!input || typeof input !== "object") return "";
+  const command = (input as Record<string, unknown>).command;
+  return typeof command === "string" ? command : "";
+}
+
+function isRelationScopedAction(
+  toolName: string,
+  input: unknown,
+  relation: RelationRecord,
+): boolean {
+  if (relation.subject.type !== "github_pr") {
+    return false;
+  }
+  const command = commandText(input);
+  const branch = relation.subject.branch;
+  const prNumber = relation.subject.pr_number;
+  const repository = relation.subject.repository;
+  if (
+    toolName === "Bash" &&
+    /\bgit\s+push\b/.test(command) &&
+    !/--force(?:-with-lease)?\b/.test(command) &&
+    branch &&
+    command.includes(branch)
+  ) {
+    return true;
+  }
+  if (
+    toolName === "Bash" &&
+    /\bgh\s+pr\s+comment\b/.test(command) &&
+    prNumber &&
+    (command.includes(String(prNumber)) ||
+      (repository && command.includes(repository)))
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * 裁决一次工具调用。纯函数，不做 IO（审计落账在 approval-hook 层）。
  */
@@ -65,6 +105,14 @@ export function arbitrate(
   ctx: ClassifyContext = {},
 ): PolicyVerdict {
   const classification = classifyToolCall(toolName, input, ctx);
+
+  if (ctx.relation && isRelationScopedAction(toolName, input, ctx.relation)) {
+    return {
+      decision: "allow",
+      reason: `relation-scoped action allowed: relation=${ctx.relation.relation_id} (${classification.summary})`,
+      classification,
+    };
+  }
 
   // Direct-mode task boundary: a configured allowlist is the only set of
   // files/directories that may be written. Missing targets fail closed.

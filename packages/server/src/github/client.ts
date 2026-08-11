@@ -24,6 +24,27 @@ export interface CloneAndCheckoutBranchInput {
   branch: string;
 }
 
+export interface GitHubComment {
+  id: number;
+  body: string;
+  user: string | null;
+  created_at: string;
+}
+
+export interface GitHubReview {
+  id: number;
+  body: string;
+  state: string;
+  user: string | null;
+  submitted_at: string;
+}
+
+export interface GitHubPullRequestState {
+  state: string;
+  merged: boolean;
+  head_sha: string;
+}
+
 export interface CommandResult {
   exitCode: number;
   stdout: string;
@@ -142,6 +163,71 @@ export class GitHubClient {
     }
     const stdout = await this.runChecked(prArgs, input.cwd);
     return stdout.trim();
+  }
+
+  async listPullRequestComments(
+    repository: string,
+    prNumber: number,
+  ): Promise<GitHubComment[]> {
+    const stdout = await this.runChecked([
+      "api",
+      `repos/${repository}/pulls/${prNumber}/comments`,
+      "--jq",
+      ".",
+    ]);
+    return (JSON.parse(stdout || "[]") as Array<Record<string, unknown>>).map(
+      (item) => ({
+        id: Number(item.id),
+        body: String(item.body ?? ""),
+        user:
+          typeof item.user === "object" && item.user !== null
+            ? String((item.user as Record<string, unknown>).login ?? "")
+            : null,
+        created_at: String(item.created_at ?? ""),
+      }),
+    );
+  }
+
+  async listPullRequestReviews(
+    repository: string,
+    prNumber: number,
+  ): Promise<GitHubReview[]> {
+    const stdout = await this.runChecked([
+      "api",
+      `repos/${repository}/pulls/${prNumber}/reviews`,
+      "--jq",
+      ".",
+    ]);
+    return (JSON.parse(stdout || "[]") as Array<Record<string, unknown>>).map(
+      (item) => ({
+        id: Number(item.id),
+        body: String(item.body ?? ""),
+        state: String(item.state ?? ""),
+        user:
+          typeof item.user === "object" && item.user !== null
+            ? String((item.user as Record<string, unknown>).login ?? "")
+            : null,
+        submitted_at: String(item.submitted_at ?? ""),
+      }),
+    );
+  }
+
+  async getPullRequest(
+    repository: string,
+    prNumber: number,
+  ): Promise<GitHubPullRequestState> {
+    const stdout = await this.runChecked([
+      "api",
+      `repos/${repository}/pulls/${prNumber}`,
+      "--jq",
+      "{state, merged, head_sha: .head.sha}",
+    ]);
+    const parsed = JSON.parse(stdout) as Record<string, unknown>;
+    return {
+      state: String(parsed.state ?? ""),
+      merged: Boolean(parsed.merged),
+      head_sha: String(parsed.head_sha ?? ""),
+    };
   }
 
   async cloneAndCheckoutBranch(

@@ -76,6 +76,52 @@ test("bypass: local rollbackable work self-approves", () => {
   assert.equal(commit.decision, "allow");
 });
 
+test("relation scope allows push/comment only for the active relation", () => {
+  const relation = {
+    relation_id: "rel-1",
+    loop_id: "loop-x",
+    subject: {
+      type: "github_pr" as const,
+      repository: "owner/repo",
+      pr_number: 12,
+      branch: "fix/12",
+    },
+    state: "awaiting_feedback" as const,
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 0,
+    created_at: "2026-08-11T00:00:00.000Z",
+    updated_at: "2026-08-11T00:00:00.000Z",
+  };
+  const push = arbitrate(
+    BYPASS,
+    "Bash",
+    { command: "git push fork fix/12" },
+    { workspacePath: WS, relation },
+  );
+  assert.equal(push.decision, "allow");
+  assert.match(push.reason, /relation-scoped action allowed/);
+
+  const comment = arbitrate(
+    BYPASS,
+    "Bash",
+    {
+      command:
+        "gh pr comment 12 --repo owner/repo --body 'fixed, please re-check'",
+    },
+    { workspacePath: WS, relation },
+  );
+  assert.equal(comment.decision, "allow");
+
+  const otherBranch = arbitrate(
+    BYPASS,
+    "Bash",
+    { command: "git push fork fix/13" },
+    { workspacePath: WS, relation },
+  );
+  assert.equal(otherBranch.decision, "hard_gate");
+});
+
 test("direct allowlist: writes inside IntentContract.target.files are allowed; outside escalate", () => {
   const inside = arbitrate(
     BYPASS,

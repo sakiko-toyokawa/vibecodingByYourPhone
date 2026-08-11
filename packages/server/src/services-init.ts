@@ -18,7 +18,11 @@ import {
   initLogger,
   interceptConsole,
 } from "./logging/index.js";
-import { LoopCardStore, RelationStore } from "./loop/index.js";
+import {
+  LoopCardStore,
+  type RelationPoller,
+  RelationStore,
+} from "./loop/index.js";
 import type {
   ControlPlane,
   CronScheduler,
@@ -87,6 +91,7 @@ export interface ServicesContainer {
   // 阶段 3 第三刀: 发布管线 (worker 自动推进 draft→shadow→canary)
   proposalPipeline?: ProposalPipeline;
   relationStore?: RelationStore;
+  relationPoller?: RelationPoller;
   triggerQueueStore?: TriggerQueueStore;
   drainPendingTriggers?: (loopId?: string) => Promise<void>;
   sessionIndexService: SessionIndexService;

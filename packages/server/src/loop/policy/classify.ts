@@ -39,6 +39,7 @@
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { HardGateAction, RiskLevel } from "@yep-anywhere/shared";
+import type { RelationRecord } from "../relation/relation-store.js";
 
 /** 非硬闸门的动作类别；硬闸门命中时 action 就是硬闸门动作本身。 */
 export type ToolActionKind = "read" | "write" | "execute" | HardGateAction;
@@ -65,6 +66,8 @@ export interface ClassifyContext {
   directWriteAllowlist?: string[];
   /** Codex commandAction structural hints; used after deterministic checks. */
   commandActions?: CommandActionHint[];
+  /** Durable external relationship context for relation-scoped actions. */
+  relation?: RelationRecord;
 }
 
 /** Minimal projection of Codex CommandAction used by the classifier. */

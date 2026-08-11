@@ -1369,6 +1369,20 @@ export async function runTurns(
       }
 
       // complete / failed: terminal.
+      if (ctx.relation && deps.relationStore) {
+        const current = deps.relationStore.findById(ctx.relation.relation_id);
+        if (current) {
+          await deps.relationStore.updateState(
+            current.relation_id,
+            status === "complete" ? "awaiting_feedback" : "needs_human",
+            {
+              ...(status !== "complete"
+                ? { needs_human_reason: `relation run ended as ${status}` }
+                : {}),
+            },
+          );
+        }
+      }
       return;
     }
   } catch (error) {

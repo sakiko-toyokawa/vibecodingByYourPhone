@@ -24,6 +24,7 @@ import type {
   PolicyProfile,
 } from "@yep-anywhere/shared";
 import type { ToolApprovalResult } from "../../sdk/types.js";
+import type { RelationRecord } from "../relation/relation-store.js";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
 import { type PolicyVerdict, arbitrate } from "./arbiter.js";
 import type { PolicyReviewRequest, PolicyReviewResult } from "./reviewer.js";
@@ -75,6 +76,8 @@ export interface LoopToolApprovalHookDeps {
   permissionEvents: PermissionEvent[];
   /** Direct-mode task-scoped write allowlist from IntentContract.target.files. */
   directWriteAllowlist?: string[];
+  /** Durable external relationship context for relation-scoped actions. */
+  relation?: RelationRecord | null;
   /** Intent contract used by the independent reviewer to judge intent. */
   contract?: IntentContract | null;
   /**
@@ -145,6 +148,7 @@ export function createLoopToolApprovalHook(
     const verdict = arbitrate(deps.profile, toolName, input, {
       workspacePath: deps.workspacePath,
       directWriteAllowlist: deps.directWriteAllowlist,
+      relation: deps.relation ?? undefined,
     });
 
     switch (verdict.decision) {

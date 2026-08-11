@@ -17,6 +17,7 @@ import {
   LoopRunService,
   ProposalPipeline,
   ProposalStore,
+  RelationPoller,
   RunLedgerStore,
   RunStateStore,
   TriggerQueueStore,
@@ -251,6 +252,10 @@ export function createApp(
     });
     const proposalStore = new ProposalStore({ dataDir: options.dataDir });
     const planner = new PlannerService();
+    const relationStore = container.cradle.relationStore;
+    if (!relationStore) {
+      throw new Error("RelationStore not initialized");
+    }
     const loopRunService = new LoopRunService({
       supervisor,
       loopCardStore,
@@ -265,7 +270,7 @@ export function createApp(
       githubCredentialStore: container.cradle.githubCredentialStore,
       githubToolProvisioner: container.cradle.githubToolProvisioner,
       dataDir: options.dataDir,
-      relationStore: container.cradle.relationStore,
+      relationStore,
       planner,
       loopWatchdog: {
         turnIdleTimeoutMs: options.loopTurnIdleTimeoutMs ?? 10 * 60 * 1000,
@@ -378,6 +383,19 @@ export function createApp(
       );
     registerValue("triggerQueueStore", triggerQueueStore);
     registerValue("drainPendingTriggers", drainPending);
+    const relationPoller = new RelationPoller({
+      relationStore,
+      githubClient: container.cradle.githubClient,
+      triggerQueueStore,
+      drainPendingTriggers: drainPending,
+    });
+    relationPoller.start(
+      Number(process.env.RELATION_POLL_INTERVAL_MS) || 5 * 60 * 1000,
+    );
+    void relationPoller.pollOnce().catch((error) => {
+      console.warn("[RelationPoller] startup poll failed:", error);
+    });
+    registerValue("relationPoller", relationPoller);
     const triggerDrainTimer = setInterval(() => {
       void drainPending().catch((error) =>
         console.warn("[LoopTrigger] queue drain failed:", error),
