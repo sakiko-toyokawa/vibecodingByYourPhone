@@ -5,6 +5,7 @@
  */
 
 import { execFile } from "node:child_process";
+import path from "node:path";
 import { promisify } from "node:util";
 import type { JudgmentReport, LoopCard } from "@yep-anywhere/shared";
 import { CollectorReportSchema, TurnHandoffSchema } from "@yep-anywhere/shared";
@@ -23,11 +24,22 @@ export function buildCollectorPrompt(
   inputRef: string,
   bundle: unknown,
 ): string {
+  const artifactDir =
+    typeof bundle === "object" && bundle !== null
+      ? (bundle as { artifact_dir?: unknown }).artifact_dir
+      : null;
   return [
     "Collector input bundle:",
     JSON.stringify(bundle, null, 2),
     "",
     `Read ${inputRef} as the durable input reference. Independently inspect only the evidence needed to review this turn. Stay read-only and finish with a concise evidence report.`,
+    ...(typeof artifactDir === "string"
+      ? [
+          "",
+          `Artifacts for this run live in: ${artifactDir}`,
+          "Use Read/Glob/Grep for artifact inspection. Do not use Bash to enumerate server-managed directories.",
+        ]
+      : []),
   ].join("\n");
 }
 
@@ -111,6 +123,7 @@ export interface RunCollectorDeps {
     ok: boolean;
     finalText: string;
     error?: string;
+    usage?: { tokens: number } | null;
   }>;
 }
 
@@ -136,6 +149,21 @@ export async function runCollector(
     ctx.turn === 1
       ? "collector-report.json"
       : `collector-report-turn${ctx.turn}.json`;
+  const artifactDir = deps.runLedgerStore.artifactsDirFor(runId);
+  const artifactGlobs = [artifactDir, artifactDir.replace(/\\/g, "/")].filter(
+    (dir, index, dirs) => dirs.indexOf(dir) === index,
+  );
+  const collectorPermissions = {
+    ...ctx.input.permissions,
+    allow: [
+      ...(ctx.input.permissions.allow ?? []),
+      ...artifactGlobs.flatMap((dir) => [
+        `Read(*${dir}*)`,
+        `Glob(*${dir}*)`,
+        `Grep(*${dir}*)`,
+      ]),
+    ],
+  };
   const inputBundle = {
     run_id: runId,
     loop_id: loopId,
@@ -143,6 +171,7 @@ export async function runCollector(
     task_type: ctx.contract.task_type.primary,
     workspace_ref: `workspace://${loopId}/${runId}`,
     workspace_path: ctx.input.cwd,
+    artifact_dir: artifactDir,
     stdout_ref: stdoutRef,
     execution_ok: outcome.ok,
     max_items_per_run: ctx.card.loop.handoff?.max_items_per_run ?? null,
@@ -168,7 +197,7 @@ export async function runCollector(
       message,
       "plan",
       {
-        permissions: ctx.input.permissions,
+        permissions: collectorPermissions,
         env: ctx.input.env,
         providerName: loopRuntime(ctx.card)?.provider as
           | import("@yep-anywhere/shared").ProviderName
@@ -192,6 +221,17 @@ export async function runCollector(
         collected.finalText ||
         collected.error ||
         "(collector produced no output)";
+      if (collected.usage) {
+        const usageName =
+          ctx.turn === 1
+            ? "collector-usage.json"
+            : `collector-usage-turn${ctx.turn}.json`;
+        await deps.runLedgerStore.writeArtifact(
+          runId,
+          usageName,
+          `${JSON.stringify({ tokens: collected.usage.tokens })}\n`,
+        );
+      }
     }
   } catch (error) {
     collectorOutput =

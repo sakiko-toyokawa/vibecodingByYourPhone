@@ -50,6 +50,7 @@ export interface ProfileDefinition {
   risk_rules?: Partial<PolicyProfile["risk_rules"]>;
   hard_gates?: HardGateAction[];
   bypass_scope?: PolicyProfile["bypass_scope"];
+  allow_direct_mutations?: boolean;
 }
 
 /**
@@ -64,8 +65,13 @@ export interface ProfileDefinition {
  */
 export const NAMED_PROFILES: Record<string, ProfileDefinition> = {
   loop_bypass: {},
-  github_issue_local_fix: {},
-  workspace_local_fix: {},
+  github_issue_local_fix: {
+    // Managed GitHub prompt workspaces are dedicated loop directories.
+    allow_direct_mutations: true,
+  },
+  workspace_local_fix: {
+    allow_direct_mutations: true,
+  },
   loop_strict_review: {
     risk_rules: {
       medium: "review_or_policy",
@@ -111,6 +117,7 @@ export function resolvePolicyProfile(
     policy_profile: name,
     approval_mode: policy.approval_mode,
     risk_rules: { ...DEFAULT_RISK_RULES, ...definition.risk_rules },
+    allow_direct_mutations: definition.allow_direct_mutations ?? false,
     hard_gates: hardGates,
     // 人工闸门与Bypass.md "Bypass 下允许的东西"：本地、可回滚、可审计。
     bypass_scope: definition.bypass_scope ?? {

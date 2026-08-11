@@ -3,7 +3,7 @@
  * 03-API契约.md "POST /api/runs/:id/decision" 阶段 2 完整迁移表,
  * loop-engineering/control-plane/状态机.md + 预算与停止规则.md).
  *
- * Replaces the phase-1 minimal form with the full 7-state machine:
+ * Replaces the phase-1 minimal form with the full run state machine:
  *
  *  - Deterministic transitions: every state change goes through the
  *    transition table in state-machine.ts (authoritative: 状态机.md /
@@ -30,7 +30,8 @@
  *      reject          → failed  (人工拒绝即终止)
  *      pause           → paused  (恢复只需信号, 不再要求人工响应)
  *    Transitions back to active fire a ResumeSignal; the run service
- *    listens and continues the run on the same session (resumeSession).
+ *    listens and starts a fresh session for the next turn, carrying the
+ *    previous state through the AU2 handoff.
  *
  *  - paused / budget_limited resume interfaces: resumePaused (恢复信号)
  *    and supplementBudget (人工补充预算) are implemented here; the HTTP
@@ -176,7 +177,7 @@ export class ControlPlane {
   /**
    * Called when a blocked run comes back to active (human approve /
    * request_changes, resume signal, budget supplemented). The run service
-   * listens and continues the run with a new turn on the same session.
+   * listens and continues the run with a new turn in a fresh session.
    */
   onResumeRequested(listener: (signal: ResumeSignal) => void): void {
     this.resumeListeners.push(listener);
@@ -432,7 +433,7 @@ export class ControlPlane {
         to: "active",
         decision: "resumed",
         decisionId: `decision-${runId}-t${record.turn}-resumed-retry`,
-        reason: `retry backoff elapsed; starting turn ${nextTurn} on the same session (retry #${record.budget?.used_retries ?? "?"})`,
+        reason: `retry backoff elapsed; starting turn ${nextTurn} in a fresh session (retry #${record.budget?.used_retries ?? "?"})`,
         nextAction: "none",
         patch: {},
       });
@@ -479,6 +480,68 @@ export class ControlPlane {
     };
     await this.deps.runStateStore.save(loopId, advanced);
     return { ok: true, state: "active", record: advanced };
+  }
+
+  /**
+   * Restart recovery gate: a run without a complete checkpoint, or whose
+   * external files changed, is parked in needs_human instead of being
+   * auto-resumed. The existing decision endpoint is the resume channel.
+   */
+  async requestRestartRecovery(
+    loopId: string,
+    reason: string,
+  ): Promise<RunStateRecord> {
+    const record = await this.deps.runStateStore.load(loopId);
+    if (!record) {
+      throw new ControlPlaneError(
+        "run_not_found",
+        `Loop '${loopId}' has no run state to recover`,
+      );
+    }
+    if (record.state !== "active" && record.state !== "retry") {
+      throw new ControlPlaneError(
+        "invalid_state",
+        `Run '${record.run_id}' is '${record.state}', not active/retry; restart recovery gate is not applicable`,
+      );
+    }
+    const now = new Date().toISOString();
+    const requestId = `decision-${record.run_id}-t${record.turn}-restart-recovery`;
+    const recoveryReason = `restart recovery requested for ${record.state} run: ${reason}`;
+    const { record: updated } = await transition(this.deps, this.state, {
+      loopId,
+      runId: record.run_id,
+      record,
+      to: "needs_human",
+      decision: "needs_human",
+      decisionId: requestId,
+      reason: recoveryReason,
+      nextAction: "wait_for_approval",
+      evidenceRefs: [],
+      patch: {
+        pending_approval: {
+          request_id: requestId,
+          run_id: record.run_id,
+          reason: recoveryReason,
+          entered_at: now,
+        },
+        session_ref: record.session_ref,
+      },
+    });
+    this.state.pending.set(record.run_id, { loopId, requestId });
+    this.deps.eventBus?.emit({
+      type: "run-decision-required",
+      loop_id: loopId,
+      run_id: record.run_id,
+      request_id: requestId,
+      action: "manual_review",
+      risk: "unrated",
+      reason: recoveryReason,
+      evidence_refs: [],
+      options: DECISION_OPTIONS,
+      recommended: "manual_review",
+      timestamp: now,
+    });
+    return updated;
   }
 
   /**
@@ -706,6 +769,15 @@ export class ControlPlane {
         "human requested changes; feedback is injected into the next turn's context (03: needs_human → active)",
       pause: "human paused the run from needs_human",
     };
+    const restartFrom = record.pending_approval?.reason.startsWith(
+      "restart recovery requested for active",
+    )
+      ? "active"
+      : record.pending_approval?.reason.startsWith(
+            "restart recovery requested for retry",
+          )
+        ? "retry"
+        : undefined;
     const { record: updated } = await transition(this.deps, this.state, {
       loopId,
       runId,
@@ -741,7 +813,13 @@ export class ControlPlane {
       notifyResume(this.resumeListeners, {
         runId,
         loopId,
-        cause: action === "approve" ? "human_approve" : "human_request_changes",
+        cause:
+          action === "approve" && restartFrom
+            ? "restart_recovery_approve"
+            : action === "approve"
+              ? "human_approve"
+              : "human_request_changes",
+        restartRecoveryFromState: restartFrom,
         feedback,
       });
     } else if (target === "failed") {
@@ -765,7 +843,7 @@ export class ControlPlane {
    * record is materialized from the run service's execution context, then
    * transitioned. Killing the executing process is the caller's job (the
    * run service terminates it right after this resolves — 阶段 2 选项 A:
-   * 杀执行进程，partial result 丢弃，session_ref 保留供 resume)。
+   * 杀执行进程，partial result 丢弃，session_ref 保留供 audit/recovery。
    */
   async pauseActive(loopId: string, seed?: PauseSeed): Promise<RunStateRecord> {
     let record = await this.deps.runStateStore.load(loopId);
@@ -788,8 +866,8 @@ export class ControlPlane {
         workspace_ref: seed.workspaceRef,
         last_judgment: null,
         pending_approval: null,
-        // 首轮在飞被暂停: 被杀 turn 的 session 一并记录, 重启后 resume
-        // 仍能续上同一 session (06 #32); 无 session (setup 失败) 为 null
+        // 首轮在飞被暂停: 被杀 turn 的 session 一并记录, 供 audit / 恢复
+        // 参考; resume 时开 fresh session (06 #32)。
         session_ref: seed.sessionRef ?? null,
         budget: seed.budget ? BudgetSchema.parse({ ...seed.budget }) : null,
         created_at: seed.createdAt,
@@ -810,7 +888,7 @@ export class ControlPlane {
       decision: "paused",
       decisionId: controlDecisionId(record.run_id, record.turn, "paused"),
       reason:
-        "human paused the run via PATCH /api/loops/:id (主动暂停, 不走审批管线; the executing process is killed and the partial turn result dropped — session_ref 保留供 resume)",
+        "human paused the run via PATCH /api/loops/:id (主动暂停, 不走审批管线; the executing process is killed and the partial turn result dropped — session_ref 保留供 audit/recovery)",
       nextAction: "wait_for_resume_signal",
       patch: {},
     });
@@ -986,6 +1064,7 @@ export class ControlPlane {
     if (
       record.state === "complete" ||
       record.state === "failed" ||
+      record.state === "discarded" ||
       record.state === "budget_limited"
     ) {
       return record;
@@ -1009,6 +1088,83 @@ export class ControlPlane {
       patch: { pending_approval: null },
     });
     notifyResolved(this.resolvedListeners, runId, "failed");
+    return updated;
+  }
+
+  /**
+   * Mark a run as discarded. This is a human-initiated terminal state used
+   * after rollback / worktree cleanup; the audit ledger and artifacts stay
+   * intact. When the run is active/retry, `force: true` is required so the
+   * caller has already terminated the executing process.
+   */
+  async discardRun(
+    runId: string,
+    reason: string,
+    opts: {
+      force?: boolean;
+      loopId?: string;
+      seed?: PauseSeed;
+      evidenceRefs?: string[];
+    } = {},
+  ): Promise<RunStateRecord> {
+    const found = await findRun(this.deps, this.state, runId);
+    const loopId = found?.loopId ?? opts.loopId;
+    let record = found?.record ?? null;
+    if (!record && opts.seed) {
+      if (!loopId) {
+        throw new ControlPlaneError(
+          "run_not_found",
+          `Run '${runId}' has no persisted state and no loop context for discard`,
+        );
+      }
+      record = {
+        version: 2,
+        goal_id: opts.seed.goalId,
+        run_id: runId,
+        state: "active",
+        turn: opts.seed.turn,
+        intent_version: 1,
+        workspace_ref: opts.seed.workspaceRef,
+        last_judgment: null,
+        pending_approval: null,
+        session_ref: opts.seed.sessionRef ?? null,
+        budget: opts.seed.budget
+          ? BudgetSchema.parse({ ...opts.seed.budget })
+          : null,
+        created_at: opts.seed.createdAt,
+        updated_at: new Date().toISOString(),
+      };
+    }
+    if (!record || !loopId) {
+      throw new ControlPlaneError("run_not_found", `Run '${runId}' not found`);
+    }
+    if (record.state === "discarded") {
+      return record;
+    }
+    if (
+      (record.state === "active" || record.state === "retry") &&
+      !opts.force
+    ) {
+      throw new ControlPlaneError(
+        "invalid_state",
+        `Run '${runId}' is '${record.state}'; discard requires force=true so the executing process can be terminated first`,
+      );
+    }
+    const now = new Date().toISOString();
+    const { record: updated } = await transition(this.deps, this.state, {
+      loopId,
+      runId,
+      record,
+      to: "discarded",
+      decision: "discarded",
+      decisionId: `decision-${runId}-t${record.turn}-discarded`,
+      reason,
+      nextAction: "none",
+      evidenceRefs: opts.evidenceRefs ?? [],
+      patch: { pending_approval: null },
+    });
+    this.state.pending.delete(runId);
+    notifyResolved(this.resolvedListeners, runId, "discarded");
     return updated;
   }
 

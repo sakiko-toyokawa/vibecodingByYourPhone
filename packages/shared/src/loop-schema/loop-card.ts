@@ -132,6 +132,16 @@ export const LoopCardSchema = z.object({
           install_command: z.string().optional(),
         })
         .optional(),
+      /**
+       * P7: judge-only review mode. When true, the Verifier Agent performs
+       * evidence collection and verdict in one call instead of running the
+       * separate collector first.
+       */
+      review: z
+        .object({
+          judge_only: z.boolean().default(false),
+        })
+        .optional(),
     }),
     // eval 配置块:
     // - regression_scope 消费者: server loop/learning/pipeline.ts regression

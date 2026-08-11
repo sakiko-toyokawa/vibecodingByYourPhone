@@ -30,7 +30,10 @@ function makeContract(criteria: string[] = []): IntentContract {
 }
 
 async function withWorkspace(
-  fn: (workspacePath: string, evidence: Record<string, string>) => Promise<void>,
+  fn: (
+    workspacePath: string,
+    evidence: Record<string, string>,
+  ) => Promise<void>,
 ) {
   const workspacePath = await mkdtemp(join(tmpdir(), "interaction-strategy-"));
   const evidence: Record<string, string> = {};

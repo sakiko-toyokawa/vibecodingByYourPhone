@@ -6,7 +6,6 @@ import { container } from "../container.js";
 import type {
   GitHubClient,
   GitHubCredentialStore,
-  GitHubIssueLoopService,
   GitHubToolProvisioner,
 } from "../github/index.js";
 import type {
@@ -14,6 +13,8 @@ import type {
   LoopCardStore,
   LoopRunService,
   ProposalStore,
+  RelationStore,
+  TriggerQueueStore,
 } from "../loop/index.js";
 import { updateAllowedHosts } from "../middleware/allowed-hosts.js";
 import type { CodexSessionScanner } from "../projects/codex-scanner.js";
@@ -76,10 +77,12 @@ export interface RouteDependencies {
   loopRunService?: LoopRunService;
   loopControlPlane?: ControlPlane;
   proposalStore?: ProposalStore;
+  relationStore?: RelationStore;
   githubCredentialStore: GitHubCredentialStore;
   githubToolProvisioner: GitHubToolProvisioner;
   githubClient: GitHubClient;
-  githubIssueLoopService?: GitHubIssueLoopService;
+  triggerQueueStore?: TriggerQueueStore;
+  drainPendingTriggers?: (loopId?: string) => Promise<void>;
 }
 
 export function registerRoutes(
@@ -99,10 +102,12 @@ export function registerRoutes(
     loopRunService,
     loopControlPlane,
     proposalStore,
+    relationStore,
     githubCredentialStore,
     githubToolProvisioner,
     githubClient,
-    githubIssueLoopService,
+    triggerQueueStore,
+    drainPendingTriggers,
   } = container.cradle as unknown as RouteDependencies;
 
   // Auth routes (always mounted if authService is provided)
@@ -183,6 +188,31 @@ export function registerRoutes(
     createServerAdminRoutes({
       supervisor,
       notificationService: options.notificationService,
+      activeLoopRuns: async () => {
+        if (!loopRunService || !loopControlPlane) {
+          return [];
+        }
+        const active: Array<{
+          loop_id: string;
+          run_id: string;
+          state: string;
+        }> = [];
+        for (const stored of loopCardStore.listLoops()) {
+          const runs = await loopRunService.listRuns(stored.id);
+          const latest = runs[0];
+          if (
+            latest &&
+            (latest.state === "active" || latest.state === "retry")
+          ) {
+            active.push({
+              loop_id: stored.id,
+              run_id: latest.run_id,
+              state: latest.state,
+            });
+          }
+        }
+        return active;
+      },
     }),
   );
 
@@ -354,6 +384,8 @@ export function registerRoutes(
       runService: loopRunService,
       controlPlane: loopControlPlane,
       proposalStore,
+      triggerQueueStore,
+      drainPendingTriggers,
     }),
   );
   if (loopRunService) {
@@ -395,7 +427,9 @@ export function registerRoutes(
       credentialStore: githubCredentialStore,
       toolProvisioner: githubToolProvisioner,
       githubClient,
-      issueLoopService: githubIssueLoopService,
+      relationStore,
+      triggerQueueStore,
+      drainPendingTriggers,
     }),
   );
 

@@ -137,6 +137,8 @@ export interface Config {
   loopIdleNoProgressTurnsThreshold: number;
   /** Number of times the same blocker fingerprint may recur in needs_human decisions before forcing failed. */
   loopRepeatedBlockerThreshold: number;
+  /** Ratio of max_tokens at which a loop-budget-warning is emitted. */
+  loopTokenAlertRatio: number;
 }
 
 /**
@@ -312,6 +314,10 @@ export function loadConfig(): Config {
     loopRepeatedBlockerThreshold: Math.max(
       2,
       parseIntOrDefault(process.env.LOOP_REPEATED_BLOCKER_THRESHOLD, 3),
+    ),
+    loopTokenAlertRatio: Math.min(
+      1,
+      Math.max(0.01, Number(process.env.LOOP_TOKEN_ALERT_RATIO ?? 0.9)),
     ),
   };
 }

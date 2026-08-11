@@ -52,6 +52,7 @@ export const DecisionKindSchema = z.enum([
   "bypass_used",
   "resumed",
   "subtask_advance",
+  "discarded",
 ]);
 export type DecisionKind = z.infer<typeof DecisionKindSchema>;
 
@@ -71,6 +72,10 @@ export const DecisionEntrySchema = z.object({
   decision_id: z.string(),
   loop_id: z.string(),
   run_id: z.string(),
+  /** Phase 6: 新写入固定为 2；旧文件缺省时视为 v1。 */
+  schema_version: z.number().int().positive().optional(),
+  /** Phase 6: 对 entry 本体（不含 schema_version / checksum）的 sha256。 */
+  checksum: z.string().optional(),
   decision: DecisionKindSchema,
   // 决策理由（机器决策写判定依据，人工决策写人工结论）
   reason: z.string(),

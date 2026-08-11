@@ -260,6 +260,24 @@ test("失败归因: adapter/策略拦截/验证失败信号同时挂载且去重
   });
 });
 
+test("失败归因: review_or_policy 高風險升級不自動掛 policy_error", async () => {
+  await withFixture(async ({ controlPlane }) => {
+    const result = await controlPlane.applyJudgment(
+      applyInput({
+        judgment: passingJudgment(),
+        policyEscalation: {
+          action: "execute",
+          reason: "high risk review_or_policy",
+          policyRef: "policy://github_issue_local_fix",
+          reviewable: true,
+        },
+      }),
+    );
+    assert.equal(result.state, "needs_human");
+    assert.equal(result.entry.failure_tags, undefined);
+  });
+});
+
 test("失败归因: passed judgment 且无其他信号 → 无 failure_tags (#21)", async () => {
   await withFixture(async ({ controlPlane }) => {
     const result = await controlPlane.applyJudgment(applyInput());

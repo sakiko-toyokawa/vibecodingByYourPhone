@@ -18,15 +18,55 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {
+  type ArtifactManifestEntry,
+  ArtifactManifestEntrySchema,
   type DecisionEntry,
   DecisionEntrySchema,
   type RunLedgerEntry,
   RunLedgerEntrySchema,
 } from "@yep-anywhere/shared";
+import { checksumOfJson, sha256Hex } from "../../utils/checksum.js";
 import { UriResolutionError, resolveUri } from "./uri.js";
 
 /** run_id / artifact file names must stay inside their directory. */
 const SAFE_NAME = /^[A-Za-z0-9._-]+$/;
+
+function addLedgerChecksum<T extends Record<string, unknown>>(
+  entry: T,
+): T & { schema_version: number; checksum: string } {
+  const {
+    schema_version: _schemaVersion,
+    checksum: _checksum,
+    ...payload
+  } = entry;
+  return {
+    ...payload,
+    schema_version: 2,
+    checksum: checksumOfJson(payload),
+  } as T & { schema_version: number; checksum: string };
+}
+
+function ledgerChecksumValid(entry: Record<string, unknown>): boolean {
+  const checksum = entry.checksum;
+  if (typeof checksum !== "string") {
+    return true; // legacy line without Phase 6 checksum
+  }
+  const {
+    schema_version: _schemaVersion,
+    checksum: _checksum,
+    ...payload
+  } = entry;
+  return checksum === checksumOfJson(payload);
+}
+
+function stripLedgerMeta<T extends Record<string, unknown>>(entry: T): T {
+  const {
+    schema_version: _schemaVersion,
+    checksum: _checksum,
+    ...payload
+  } = entry;
+  return payload as T;
+}
 
 export interface RunLedgerStoreOptions {
   /** Yep data directory (defaults to ~/.yep-anywhere); loops/ lives under it */
@@ -46,6 +86,8 @@ export class RunLedgerStore {
   private readonly artifactsDir: string;
   /** Per-file append serialization (04: appends go through one writer) */
   private appendChains = new Map<string, Promise<void>>();
+  /** Artifact manifest appends are serialized per run. */
+  private manifestChains = new Map<string, Promise<void>>();
 
   constructor(options: RunLedgerStoreOptions = {}) {
     this.loopsDir = path.join(options.dataDir ?? defaultDataDir(), "loops");
@@ -62,7 +104,10 @@ export class RunLedgerStore {
     const validated = RunLedgerEntrySchema.parse(entry);
     await this.enqueueAppend(
       runId,
-      `${JSON.stringify({ type: "run_ledger_entry", ...validated })}\n`,
+      `${JSON.stringify({
+        type: "run_ledger_entry",
+        ...addLedgerChecksum(validated as unknown as Record<string, unknown>),
+      })}\n`,
     );
   }
 
@@ -79,7 +124,10 @@ export class RunLedgerStore {
     const validated = DecisionEntrySchema.parse(entry);
     await this.enqueueAppend(
       runId,
-      `${JSON.stringify({ type: "decision_entry", ...validated })}\n`,
+      `${JSON.stringify({
+        type: "decision_entry",
+        ...addLedgerChecksum(validated as unknown as Record<string, unknown>),
+      })}\n`,
     );
   }
 
@@ -101,6 +149,139 @@ export class RunLedgerStore {
     return next;
   }
 
+  /** Append one artifact manifest line if the same idempotency key is new. */
+  private enqueueArtifactManifest(
+    runId: string,
+    entry: ArtifactManifestEntry,
+  ): Promise<void> {
+    const manifestPath = path.join(this.artifactsDir, runId, "manifest.jsonl");
+    const previous = this.manifestChains.get(runId) ?? Promise.resolve();
+    const next = previous.then(async () => {
+      await fs.mkdir(path.join(this.artifactsDir, runId), { recursive: true });
+      await fs.writeFile(manifestPath, "", { flag: "a" });
+      let existing = "";
+      try {
+        existing = await fs.readFile(manifestPath, "utf-8");
+      } catch {
+        // File was just created above.
+      }
+      if (
+        existing.split("\n").some((line) => {
+          const trimmed = line.trim();
+          if (!trimmed) {
+            return false;
+          }
+          try {
+            return (
+              (JSON.parse(trimmed) as { idempotency_key?: unknown })
+                .idempotency_key === entry.idempotency_key
+            );
+          } catch {
+            return false;
+          }
+        })
+      ) {
+        return;
+      }
+      await fs.appendFile(manifestPath, `${JSON.stringify(entry)}\n`, "utf-8");
+    });
+    this.manifestChains.set(
+      runId,
+      next.catch((error) => {
+        console.error(
+          `[RunLedgerStore] artifact manifest append failed for ${runId}:`,
+          error,
+        );
+      }),
+    );
+    return next;
+  }
+
+  /** Read artifact manifest entries for a run (empty when absent). */
+  async readArtifactManifest(runId: string): Promise<ArtifactManifestEntry[]> {
+    this.assertSafeName(runId, "run_id");
+    const manifestPath = path.join(this.artifactsDir, runId, "manifest.jsonl");
+    let content: string;
+    try {
+      content = await fs.readFile(manifestPath, "utf-8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+    const entries: ArtifactManifestEntry[] = [];
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+      try {
+        entries.push(
+          ArtifactManifestEntrySchema.parse(JSON.parse(trimmed) as unknown),
+        );
+      } catch {
+        console.warn(
+          `[RunLedgerStore] skipping invalid artifact manifest line in artifacts/${runId}/manifest.jsonl`,
+        );
+      }
+    }
+    return entries;
+  }
+
+  /** Deterministic hash of the artifact manifest for checkpointing. */
+  async artifactManifestHash(runId: string): Promise<string> {
+    const entries = await this.readArtifactManifest(runId);
+    if (entries.length === 0) {
+      return sha256Hex("");
+    }
+    return checksumOfJson(
+      entries.map((entry) => ({
+        run_id: entry.run_id,
+        name: entry.name,
+        idempotency_key: entry.idempotency_key,
+        expected_hash: entry.expected_hash,
+      })),
+    );
+  }
+
+  /** Verify every tracked artifact still matches its expected hash. */
+  async verifyArtifactIntegrity(runId: string): Promise<{
+    ok: boolean;
+    mismatches: {
+      name: string;
+      expectedHash: string;
+      actualHash: string | null;
+    }[];
+  }> {
+    const entries = await this.readArtifactManifest(runId);
+    const mismatches: {
+      name: string;
+      expectedHash: string;
+      actualHash: string | null;
+    }[] = [];
+    for (const entry of entries) {
+      let actualHash: string | null = null;
+      try {
+        const content = await fs.readFile(
+          path.join(this.artifactsDir, runId, entry.name),
+          "utf-8",
+        );
+        actualHash = sha256Hex(content);
+      } catch {
+        actualHash = null;
+      }
+      if (actualHash !== entry.expected_hash) {
+        mismatches.push({
+          name: entry.name,
+          expectedHash: entry.expected_hash,
+          actualHash,
+        });
+      }
+    }
+    return { ok: mismatches.length === 0, mismatches };
+  }
+
   /** Write a run-level artifact (intent contract snapshot, stdout log, …). */
   async writeArtifact(
     runId: string,
@@ -109,12 +290,27 @@ export class RunLedgerStore {
   ): Promise<void> {
     this.assertSafeName(runId, "run_id");
     this.assertSafeName(name, "artifact name");
+    if (name === "manifest.jsonl") {
+      throw new Error(
+        `[RunLedgerStore] 'manifest.jsonl' is reserved for artifact sync metadata`,
+      );
+    }
     const dir = path.join(this.artifactsDir, runId);
     await fs.mkdir(dir, { recursive: true });
     const filePath = path.join(dir, name);
     const tmpPath = `${filePath}.tmp`;
     await fs.writeFile(tmpPath, content, "utf-8");
     await fs.rename(tmpPath, filePath);
+    const expectedHash = sha256Hex(content);
+    const idempotencyKey = sha256Hex(`${runId}:${name}:${expectedHash}`);
+    await this.enqueueArtifactManifest(runId, {
+      schema_version: 2,
+      run_id: runId,
+      name,
+      idempotency_key: idempotencyKey,
+      expected_hash: expectedHash,
+      created_at: new Date().toISOString(),
+    });
   }
 
   /** Read an artifact back (undefined when missing — readers tolerate ENOENT). */
@@ -185,7 +381,19 @@ export class RunLedgerStore {
           );
           continue;
         }
-        latest = result.data;
+        if (
+          !ledgerChecksumValid(
+            result.data as unknown as Record<string, unknown>,
+          )
+        ) {
+          console.warn(
+            `[RunLedgerStore] run_ledger_entry checksum mismatch in runs/${runId}.jsonl; skipping`,
+          );
+          continue;
+        }
+        latest = stripLedgerMeta(
+          result.data as unknown as Record<string, unknown>,
+        ) as RunLedgerEntry;
       }
     }
     return latest;
@@ -239,7 +447,21 @@ export class RunLedgerStore {
           );
           continue;
         }
-        entries.push(result.data);
+        if (
+          !ledgerChecksumValid(
+            result.data as unknown as Record<string, unknown>,
+          )
+        ) {
+          console.warn(
+            `[RunLedgerStore] decision_entry checksum mismatch in runs/${runId}.jsonl; skipping`,
+          );
+          continue;
+        }
+        entries.push(
+          stripLedgerMeta(
+            result.data as unknown as Record<string, unknown>,
+          ) as DecisionEntry,
+        );
       }
     }
     return entries;
@@ -265,7 +487,9 @@ export class RunLedgerStore {
     this.assertSafeName(runId, "run_id");
     try {
       const files = await fs.readdir(path.join(this.artifactsDir, runId));
-      return files.filter((file) => !file.endsWith(".tmp"));
+      return files.filter(
+        (file) => !file.endsWith(".tmp") && file !== "manifest.jsonl",
+      );
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return [];

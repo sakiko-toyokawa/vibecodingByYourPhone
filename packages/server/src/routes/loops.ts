@@ -14,19 +14,20 @@ import { RunStateSchema } from "@yep-anywhere/shared";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
-  checkInteractionDependencies,
-  inferPlaywrightInstallCommand,
-} from "../loop/verification/strategies/interaction/dependency-check.js";
-import { runCommand } from "../loop/verification/subprocess-verifier.js";
-import {
   type ControlPlane,
   ControlPlaneError,
   type LoopCardStore,
   LoopRunError,
   type LoopRunService,
   type ProposalStore,
+  type TriggerQueueStore,
   isGitWorkTree,
 } from "../loop/index.js";
+import {
+  checkInteractionDependencies,
+  inferPlaywrightInstallCommand,
+} from "../loop/verification/strategies/interaction/dependency-check.js";
+import { runCommand } from "../loop/verification/subprocess-verifier.js";
 
 /** POST /:id/runs 请求体 (03): intent_overrides 对 handoff 的本轮覆盖。 */
 const TriggerRunBodySchema = z
@@ -39,12 +40,23 @@ const TriggerRunBodySchema = z
       })
       .strict()
       .optional(),
+    relation_id: z.string().optional(),
   })
   .strict();
 
 const InstallInteractionDepsBodySchema = z
   .object({
     install_command: z.string().optional(),
+  })
+  .strict();
+
+const TriggerEventBodySchema = z
+  .object({
+    source: z.enum(["webhook", "issue", "resume"]),
+    event_id: z.string().min(1),
+    relation_id: z.string().optional(),
+    payload: z.record(z.string(), z.unknown()).optional(),
+    priority: z.enum(["urgent", "normal", "background"]).optional(),
   })
   .strict();
 
@@ -61,6 +73,8 @@ export interface LoopsRoutesDeps {
     workspacePath: string,
     command: string,
   ) => Promise<{ ok: boolean; output: string }>;
+  triggerQueueStore?: TriggerQueueStore;
+  drainPendingTriggers?: (loopId?: string) => Promise<void>;
 }
 
 function runErrorStatus(error: LoopRunError): 400 | 404 | 409 {
@@ -95,6 +109,8 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
     controlPlane,
     proposalStore,
     installInteractionDependencies = defaultInstallInteractionDependencies,
+    triggerQueueStore,
+    drainPendingTriggers,
   } = deps;
 
   /**
@@ -501,6 +517,7 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
         c.req.param("id"),
         "manual",
         parsed.data.intent_overrides,
+        { relationId: parsed.data.relation_id },
       );
       return c.json({ run: { ...run, turn: 1 } }, 201);
     } catch (error) {
@@ -594,13 +611,121 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
     return c.json({ proposals: proposals.slice(offset, offset + limit) });
   });
 
+  /**
+   * POST /api/loops/:id/triggers — external webhook / issue / resume events.
+   *
+   * Events are persisted in the trigger queue so a restart does not lose an
+   * accepted event. Same-loop runs remain serial; busy loops leave the event
+   * pending for the next drain.
+   */
+  app.post("/:id/triggers", async (c) => {
+    if (!triggerQueueStore || !drainPendingTriggers) {
+      return c.json(
+        {
+          error: "trigger_queue_unavailable",
+          message: "External trigger queue is not wired",
+        },
+        503,
+      );
+    }
+    const loopId = c.req.param("id");
+    const stored = loopCardStore.getLoop(loopId);
+    if (!stored || stored.archived) {
+      return c.json(
+        { error: "loop_not_found", message: "Loop not found" },
+        404,
+      );
+    }
+    if (stored.paused) {
+      return c.json(
+        { error: "loop_paused", message: `Loop '${loopId}' is paused` },
+        409,
+      );
+    }
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json(
+        {
+          error: "invalid_trigger",
+          message: "Request body must be valid JSON",
+        },
+        400,
+      );
+    }
+    const parsed = TriggerEventBodySchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "invalid_trigger",
+          message: parsed.error.issues
+            .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+            .join("; "),
+        },
+        400,
+      );
+    }
+    const data = parsed.data;
+    if (
+      stored.card.loop.trigger.type !== "webhook" &&
+      data.source !== "resume"
+    ) {
+      return c.json(
+        {
+          error: "invalid_trigger",
+          message:
+            "Loop trigger is not webhook; webhook/issue events are not accepted",
+        },
+        400,
+      );
+    }
+    if (data.source === "resume" && typeof data.payload?.run_id !== "string") {
+      return c.json(
+        {
+          error: "invalid_trigger",
+          message: "resume trigger payload must include run_id",
+        },
+        400,
+      );
+    }
+    const serialized = JSON.stringify(data);
+    if (serialized.length > 256 * 1024) {
+      return c.json(
+        {
+          error: "invalid_trigger",
+          message: "trigger event payload exceeds 256KB",
+        },
+        400,
+      );
+    }
+    const payload = data.relation_id
+      ? { ...(data.payload ?? {}), relation_id: data.relation_id }
+      : data.payload;
+    const entry = await triggerQueueStore.enqueue({
+      event_id: data.event_id,
+      loop_id: loopId,
+      source: data.source,
+      priority: data.priority,
+      payload: payload ?? {},
+    });
+    await drainPendingTriggers(loopId);
+    return c.json(
+      {
+        accepted: true,
+        event_id: entry.event_id,
+        state: entry.state,
+      },
+      202,
+    );
+  });
+
   return app;
 }
 
 function isAllowedInteractionInstallCommand(command: string): boolean {
   const normalized = command.trim().replace(/\s+/g, " ");
-  const allowedPrefix =
-    /^(pnpm add -D|npm install -D|yarn add -D|bun add -d) /;
+  const allowedPrefix = /^(pnpm add -D|npm install -D|yarn add -D|bun add -d) /;
   return (
     allowedPrefix.test(normalized) &&
     normalized.includes("@playwright/test") &&

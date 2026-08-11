@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { extractJson, parseVerifierAgentOutput } from "./parse.js";
+import {
+  extractJson,
+  parseVerifierAgentOutput,
+  parseVerifierAgentVerdict,
+} from "./parse.js";
 
 const VALID_VERDICT = {
   status: "failed",
@@ -29,6 +33,32 @@ test("extractJson: 優先取最後一個 fenced json block", () => {
 test("extractJson: 無 fenced block 時回落第一對大括號", () => {
   assert.deepEqual(extractJson('result is {"ok":true} done'), { ok: true });
   assert.equal(extractJson("no json at all"), null);
+});
+
+test("extractJson: 修復常見 trailing comma", () => {
+  assert.deepEqual(
+    extractJson(`{"status":"passed","recommendation":"stop",}`),
+    { status: "passed", recommendation: "stop" },
+  );
+  assert.deepEqual(extractJson('```json\n{"issues":[],}\n```'), { issues: [] });
+});
+
+test("parseVerifierAgentVerdict: 回傳可給 retry prompt 用的錯誤訊息", () => {
+  const invalid = parseVerifierAgentVerdict(
+    "No further work is pending. The verdict is passed.",
+  );
+  assert.equal(invalid.ok, false);
+  if (!invalid.ok) {
+    assert.match(invalid.error, /no JSON object found/);
+  }
+
+  const schemaInvalid = parseVerifierAgentVerdict(
+    JSON.stringify({ status: "bogus", recommendation: "stop" }),
+  );
+  assert.equal(schemaInvalid.ok, false);
+  if (!schemaInvalid.ok) {
+    assert.match(schemaInvalid.error, /status/);
+  }
 });
 
 test("parseVerifierAgentOutput: 合法裁決映射為 VerifierReport", () => {
@@ -87,4 +117,29 @@ test("parseVerifierAgentOutput: 缺省欄位有預設值", () => {
   assert.equal(report.requires_human, false);
   assert.deepEqual(report.unresolved_risks, []);
   assert.equal(report.issues?.length, 0);
+});
+
+test("parseVerifierAgentOutput: 接受字串數字 confidence/score 與 location", () => {
+  const report = parseVerifierAgentOutput(
+    JSON.stringify({
+      status: "passed",
+      recommendation: "stop",
+      confidence: "0.95",
+      requires_human: false,
+      score: "0.97",
+      issues: [
+        {
+          severity: "minor",
+          message: "example",
+          location: { file: "src/a.ts", line: "12", column: "4" },
+        },
+      ],
+    }),
+    { outputRef: "artifact://run-1/out.log" },
+  );
+  assert.equal(report.status, "passed");
+  assert.equal(report.confidence, 0.95);
+  assert.equal(report.score, 0.97);
+  assert.equal(report.issues?.[0]?.location?.line, 12);
+  assert.equal(report.issues?.[0]?.location?.column, 4);
 });

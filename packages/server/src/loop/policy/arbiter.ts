@@ -13,6 +13,7 @@
  *    只读动作放行，其余 deny（不升级，避免每个写操作都把 run 挂起）。
  */
 
+import path from "node:path";
 import type { PolicyProfile } from "@yep-anywhere/shared";
 import {
   type ClassifyContext,
@@ -27,6 +28,31 @@ export interface PolicyVerdict {
   /** 判定理由（机器可读 + 人读），进审计记录 / 拒绝消息。 */
   reason: string;
   classification: ToolCallClassification;
+  /**
+   * True when the verdict is a review_or_policy escalation that an
+   * independent reviewer may resolve before the run escalates to a human.
+   * Hard gates and human_required are never reviewable.
+   */
+  reviewable?: boolean;
+}
+
+/** True when a write target is inside one of the task-scoped allowlist paths. */
+function isAllowedDirectWriteTarget(
+  filePath: string,
+  workspacePath: string | undefined,
+  allowlist: string[],
+): boolean {
+  if (!filePath || !workspacePath || allowlist.length === 0) {
+    return false;
+  }
+  const resolved = path.resolve(workspacePath, filePath);
+  return allowlist.some((allowed) => {
+    const allowedPath = path.resolve(workspacePath, allowed);
+    return (
+      resolved === allowedPath ||
+      resolved.startsWith(`${allowedPath}${path.sep}`)
+    );
+  });
 }
 
 /**
@@ -39,6 +65,30 @@ export function arbitrate(
   ctx: ClassifyContext = {},
 ): PolicyVerdict {
   const classification = classifyToolCall(toolName, input, ctx);
+
+  // Direct-mode task boundary: a configured allowlist is the only set of
+  // files/directories that may be written. Missing targets fail closed.
+  if (ctx.directWriteAllowlist) {
+    const writeTargets = classification.writeTargets ?? [];
+    const isWrite =
+      classification.action === "write" || writeTargets.length > 0;
+    if (
+      isWrite &&
+      !writeTargets.every((target) =>
+        isAllowedDirectWriteTarget(
+          target,
+          ctx.workspacePath,
+          ctx.directWriteAllowlist ?? [],
+        ),
+      )
+    ) {
+      return {
+        decision: "hard_gate",
+        reason: `direct workspace write is outside IntentContract.target.files allowlist (${classification.summary}); escalating to human review`,
+        classification,
+      };
+    }
+  }
 
   // 1. 硬闸门：一律升级人工，approval_mode 不影响（bypass ≠ 绕过硬闸门）。
   if (
@@ -117,6 +167,12 @@ export function arbitrate(
       };
     }
     case "review_or_policy":
+      return {
+        decision: "hard_gate",
+        reason: `risk=${classification.risk} rule=${rule} (${classification.summary}); escalating to human review (人工闸门: 高风险 / critical 动作一律升级)`,
+        classification,
+        reviewable: true,
+      };
     case "human_required":
       return {
         decision: "hard_gate",

@@ -1,7 +1,7 @@
 /**
  * Phase-2 integration test (mocked Supervisor, real stores + control-plane):
- *  - retry turn goes through Supervisor.resumeSession on the SAME session
- *    (05 阶段 2 验收 3: 重试走 resume 而非新 session, 账本可见同一 thread 引用);
+ *  - retry turn opens a fresh session via Supervisor.startSession
+ *    (Loop Engineering: 每轮新 session + AU2 handoff);
  *  - the previous turn's judgment (unresolved_risks / evidence) is injected
  *    into the retry turn's context (retry = 证据传递);
  *  - the exponential backoff is waited between turns (sleep injected);
@@ -25,14 +25,14 @@ import type { LoopCardStore } from "./state/loop-card-store.js";
 import { RunLedgerStore } from "./state/run-ledger-store.js";
 import type { VerifyRunResult } from "./verification/verify-run.js";
 
-const SESSION_ID = "session-abc-123";
-
 interface SupervisorCall {
   method: "start" | "resume";
   role: "executor" | "collector";
   sessionId: string | null;
   text: string;
 }
+
+let sessionCounter = 0;
 
 /** Fake Supervisor: every start/resume returns a process that immediately
  *  emits a successful result message carrying token usage. */
@@ -43,15 +43,16 @@ class FakeSupervisor {
     _cwd: string,
     message: { text: string },
   ): Promise<Process> {
+    const sessionId = `session-abc-${++sessionCounter}`;
     this.calls.push({
       method: "start",
       role: message.text.includes("Collector input bundle")
         ? "collector"
         : "executor",
-      sessionId: null,
+      sessionId,
       text: message.text,
     });
-    return this.makeProcess(SESSION_ID);
+    return this.makeProcess(sessionId);
   }
 
   async resumeSession(
@@ -260,7 +261,7 @@ async function waitForRunSettled(
   }
 }
 
-test("retry: resumeSession on the same session, judgment injected, backoff waited, budget accumulated", async () => {
+test("retry: fresh session with AU2 handoff, judgment injected, backoff waited, budget accumulated", async () => {
   await withFixture(
     [RETRYABLE_JUDGMENT, PASSED_JUDGMENT],
     async ({
@@ -277,32 +278,40 @@ test("retry: resumeSession on the same session, judgment injected, backoff waite
       ]);
       assert.equal(finalState, "complete");
 
-      // turn 1: startSession; turn 2 (retry): resumeSession, same session
+      // turn 1 and turn 2 (retry) both open fresh sessions.
       const executorCalls = supervisor.calls.filter(
         (call) => call.role === "executor",
       );
       assert.equal(executorCalls.length, 2);
       assert.equal(executorCalls[0]?.method, "start");
-      const resume = executorCalls[1];
-      assert.equal(resume?.method, "resume");
-      assert.equal(resume?.sessionId, SESSION_ID);
+      const retry = executorCalls[1];
+      assert.equal(retry?.method, "start");
+      assert.ok(retry?.sessionId);
+      assert.notEqual(retry?.sessionId, executorCalls[0]?.sessionId);
 
       // retry = 证据传递：上一轮 judgment 的 unresolved_risks 注入新上下文
-      assert.match(resume?.text ?? "", /retry turn 2/);
-      assert.match(resume?.text ?? "", /lint errors in src\/foo\.ts/);
-      assert.match(resume?.text ?? "", /overall=failed/);
+      assert.match(retry?.text ?? "", /retry turn 2/);
+      assert.match(retry?.text ?? "", /lint errors in src\/foo\.ts/);
+      assert.match(retry?.text ?? "", /overall=failed/);
+      // fresh session prompt carries the AU2 handoff from turn 1.
+      assert.match(retry?.text ?? "", /## Loop turn handoff \(fresh session\)/);
+      assert.match(retry?.text ?? "", /### AU2 human report/);
+      assert.match(
+        retry?.text ?? "",
+        new RegExp(`artifact://${summary.run_id}/human-report\\.md`),
+      );
 
       // 指数退避：第 1 次 retry 等 1min
       assert.deepEqual(sleeps, [60_000]);
 
-      // 账本可见同一 session_ref（两轮各自的 run_ledger_entry）
+      // 账本可见每轮各自的 fresh session_ref。
       const decisions = await ledgerStore.readDecisionEntries(summary.run_id);
       assert.ok(decisions.some((d) => d.decision === "retry"));
       assert.ok(decisions.some((d) => d.decision === "resumed"));
       assert.ok(decisions.some((d) => d.decision === "complete"));
       const latest = await ledgerStore.readEntry(summary.run_id);
       assert.equal(latest?.final_status, "complete");
-      assert.equal(latest?.runtime.session_ref, SESSION_ID);
+      assert.equal(latest?.runtime.session_ref, retry?.sessionId);
 
       // budget 快照：两轮、一次 retry、token 来自 usage（100+50）× 2
       const record = await stateStore.load("loop-it");
@@ -346,16 +355,21 @@ test("needs_human → request_changes resumes the run (active) with feedback inj
       ]);
       assert.equal(finalState, "complete");
 
-      // 第二轮走 resumeSession（同一 session），人工 feedback 注入上下文
+      // 第二轮走 fresh session，人工 feedback 注入上下文
       const executorCalls = supervisor.calls.filter(
         (call) => call.role === "executor",
       );
       assert.equal(executorCalls.length, 2);
       const resume = executorCalls[1];
-      assert.equal(resume?.method, "resume");
-      assert.equal(resume?.sessionId, SESSION_ID);
+      assert.equal(resume?.method, "start");
+      assert.ok(resume?.sessionId);
+      assert.notEqual(resume?.sessionId, executorCalls[0]?.sessionId);
       assert.match(resume?.text ?? "", /请先修掉 lint 再交付/);
       assert.match(resume?.text ?? "", /requested changes/);
+      assert.match(
+        resume?.text ?? "",
+        /## Loop turn handoff \(fresh session\)/,
+      );
 
       // request_changes 不是 retry：不消耗 retry 预算、无退避
       const record = await stateStore.load("loop-it");
@@ -477,8 +491,9 @@ test("retry budget exhaustion ends the run as budget_limited (no infinite repair
       );
       assert.equal(executorCalls.length, 3);
       assert.deepEqual(sleeps, [60_000, 120_000]);
-      assert.equal(executorCalls[2]?.method, "resume");
-      assert.equal(executorCalls[2]?.sessionId, SESSION_ID);
+      assert.equal(executorCalls[2]?.method, "start");
+      assert.ok(executorCalls[2]?.sessionId);
+      assert.notEqual(executorCalls[2]?.sessionId, executorCalls[1]?.sessionId);
 
       const record = await stateStore.load("loop-it");
       assert.equal(record?.state, "budget_limited");

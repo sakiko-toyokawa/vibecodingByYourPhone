@@ -140,6 +140,8 @@ export interface AppOptions {
   loopIdleNoProgressTurnsThreshold?: number;
   /** Number of times the same blocker fingerprint may recur in needs_human decisions before forcing failed. */
   loopRepeatedBlockerThreshold?: number;
+  /** Ratio of max_tokens at which a loop-budget-warning is emitted. */
+  loopTokenAlertRatio?: number;
 }
 
 export interface AppResult {

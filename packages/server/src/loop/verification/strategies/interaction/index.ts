@@ -5,11 +5,17 @@ import type { LoopCard, VerifierReport } from "@yep-anywhere/shared";
 import { VerifierReportSchema } from "@yep-anywhere/shared";
 import { z } from "zod";
 import { extractJson } from "../../agent/parse.js";
-import { runCommand, type SubprocessOutcome } from "../../subprocess-verifier.js";
-import type { VerificationInput, VerificationStrategy } from "../../strategy.js";
+import type {
+  VerificationInput,
+  VerificationStrategy,
+} from "../../strategy.js";
 import {
-  checkInteractionDependencies,
+  type SubprocessOutcome,
+  runCommand,
+} from "../../subprocess-verifier.js";
+import {
   type InteractionDependencyCheck,
+  checkInteractionDependencies,
 } from "./dependency-check.js";
 
 const DEFAULT_INTERACTION_TIMEOUT_MS = 120_000;
@@ -124,7 +130,9 @@ export class InteractionAgentStrategy implements VerificationStrategy {
       script.endsWith("\n") ? script : `${script}\n`,
     );
     const timeoutMs =
-      this.config.timeout_ms ?? input.timeoutMs ?? DEFAULT_INTERACTION_TIMEOUT_MS;
+      this.config.timeout_ms ??
+      input.timeoutMs ??
+      DEFAULT_INTERACTION_TIMEOUT_MS;
     const outcome = await this.executeScript(script, input, { url, timeoutMs });
     const log = [
       `url: ${url}`,
@@ -192,7 +200,11 @@ async function executeScriptWithNode(
     tmpdir(),
     `yep-interaction-${input.contract.intent_id}-${input.turn}-${Date.now()}.mjs`,
   );
-  await writeFile(file, script.endsWith("\n") ? script : `${script}\n`, "utf-8");
+  await writeFile(
+    file,
+    script.endsWith("\n") ? script : `${script}\n`,
+    "utf-8",
+  );
   return runCommand(`node "${file}"`, {
     cwd: input.workspacePath,
     timeoutMs: options.timeoutMs,

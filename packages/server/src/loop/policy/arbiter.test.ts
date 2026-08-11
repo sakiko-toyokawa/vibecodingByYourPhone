@@ -76,6 +76,61 @@ test("bypass: local rollbackable work self-approves", () => {
   assert.equal(commit.decision, "allow");
 });
 
+test("direct allowlist: writes inside IntentContract.target.files are allowed; outside escalate", () => {
+  const inside = arbitrate(
+    BYPASS,
+    "Edit",
+    { file_path: "src/allowed.ts" },
+    { workspacePath: WS, directWriteAllowlist: ["src"] },
+  );
+  assert.equal(inside.decision, "allow");
+
+  const outside = arbitrate(
+    BYPASS,
+    "Write",
+    { file_path: "other.ts" },
+    { workspacePath: WS, directWriteAllowlist: ["src"] },
+  );
+  assert.equal(outside.decision, "hard_gate");
+  assert.match(outside.reason, /IntentContract\.target\.files/);
+
+  const bashOutside = arbitrate(
+    BYPASS,
+    "Bash",
+    { command: "echo x > other.txt" },
+    { workspacePath: WS, directWriteAllowlist: ["src"] },
+  );
+  assert.equal(bashOutside.decision, "hard_gate");
+});
+
+test("direct allowlist: managed workspace root allows Codex changes; escaped paths fail closed", () => {
+  const inside = arbitrate(
+    BYPASS,
+    "Edit",
+    {
+      file_path: WS,
+      changes: [
+        { path: "src/allowed.ts", kind: { type: "update", move_path: null } },
+      ],
+    },
+    { workspacePath: WS, directWriteAllowlist: ["."] },
+  );
+  assert.equal(inside.decision, "allow");
+
+  const escaping = arbitrate(
+    BYPASS,
+    "Edit",
+    {
+      file_path: WS,
+      changes: [
+        { path: "../outside.ts", kind: { type: "update", move_path: null } },
+      ],
+    },
+    { workspacePath: WS, directWriteAllowlist: ["."] },
+  );
+  assert.equal(escaping.decision, "hard_gate");
+});
+
 test("bypass: ALL seven hard gates still escalate (bypass ≠ 绕过硬闸门)", () => {
   const cases: Array<[string, unknown, string]> = [
     ["Bash", { command: "git merge feature" }, "merge"],
@@ -98,7 +153,7 @@ test("bypass: ALL seven hard gates still escalate (bypass ≠ 绕过硬闸门)",
   }
 });
 
-test("bypass: out-of-workspace / high-risk non-gate actions escalate too", () => {
+test("bypass: out-of-workspace / blacklisted non-gate actions escalate too", () => {
   const outside = arbitrate(
     BYPASS,
     "Write",
@@ -113,7 +168,15 @@ test("bypass: out-of-workspace / high-risk non-gate actions escalate too", () =>
     { command: "some-unknown-cli do-thing" },
     { workspacePath: WS },
   );
-  assert.equal(unknown.decision, "hard_gate");
+  assert.equal(unknown.decision, "allow");
+
+  const blacklisted = arbitrate(
+    BYPASS,
+    "Bash",
+    { command: "git push origin main" },
+    { workspacePath: WS },
+  );
+  assert.equal(blacklisted.decision, "hard_gate");
 
   const interactive = arbitrate(
     BYPASS,
@@ -122,6 +185,41 @@ test("bypass: out-of-workspace / high-risk non-gate actions escalate too", () =>
     { workspacePath: WS },
   );
   assert.equal(interactive.decision, "hard_gate");
+});
+
+test("review_or_policy is reviewable; human_required and hard gates are not", () => {
+  const high = arbitrate(
+    BYPASS,
+    "Bash",
+    { command: "git push origin main" },
+    { workspacePath: WS },
+  );
+  assert.equal(high.decision, "hard_gate");
+  assert.equal(high.reviewable, true);
+
+  const hardGate = arbitrate(
+    BYPASS,
+    "Bash",
+    { command: "git merge feature" },
+    { workspacePath: WS },
+  );
+  assert.equal(hardGate.reviewable, undefined);
+
+  const strict: PolicyProfile = {
+    ...BYPASS,
+    risk_rules: {
+      ...BYPASS.risk_rules,
+      high: "human_required",
+    },
+  };
+  const human = arbitrate(
+    strict,
+    "Bash",
+    { command: "git push origin main" },
+    { workspacePath: WS },
+  );
+  assert.equal(human.decision, "hard_gate");
+  assert.equal(human.reviewable, undefined);
 });
 
 test("bypass_scope narrows self-approval (workspace write disabled)", () => {
@@ -163,6 +261,17 @@ test("assisted: low/medium auto, high/critical escalate", () => {
       ASSISTED,
       "Bash",
       { command: "weird-cli x" },
+      {
+        workspacePath: WS,
+      },
+    ).decision,
+    "allow",
+  );
+  assert.equal(
+    arbitrate(
+      ASSISTED,
+      "Bash",
+      { command: "git push origin main" },
       {
         workspacePath: WS,
       },

@@ -1,12 +1,20 @@
 /**
- * Per-turn execution: start/resume a session, watch the process, and collect
- * the ExecutionOutcome.
+ * Per-turn execution: start a fresh session for every loop turn, watch the
+ * process, and collect the ExecutionOutcome. State is carried into the fresh
+ * session through the standing runtime prompt plus the Phase 6 AU2 handoff
+ * artifacts (human-report.md / machine-state.json).
  *
  * Extracted from run-service.ts during Phase-3 refactoring.
  */
 
 import { createHash } from "node:crypto";
-import type { JudgmentReport, TaskPlan } from "@yep-anywhere/shared";
+import {
+  type IntentContract,
+  type JudgmentReport,
+  type LoopCard,
+  MachineStateSchema,
+  type TaskPlan,
+} from "@yep-anywhere/shared";
 import type { ProviderName } from "@yep-anywhere/shared";
 import { AdapterError, toAdapterError } from "../../sdk/adapter-error.js";
 import type { Process } from "../../supervisor/Process.js";
@@ -19,9 +27,10 @@ import {
   type PermissionEvent,
   createLoopToolApprovalHook,
 } from "../policy/approval-hook.js";
+import { runPolicyReviewAgent } from "../policy/reviewer.js";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
 import type { ExecutionOutcome, RunExecutionContext } from "./types.js";
-import { loopRuntime } from "./workspace.js";
+import { isGitHubManagedLoop, loopRuntime } from "./workspace.js";
 
 export interface TurnExecutionDeps {
   supervisor: Supervisor;
@@ -30,6 +39,20 @@ export interface TurnExecutionDeps {
     turnIdleTimeoutMs: number;
     turnIdleCheckIntervalMs: number;
   };
+}
+
+/** Direct-mode write allowlist. GitHub-managed workspaces own the whole clone. */
+export function resolveDirectWriteAllowlist(
+  card: LoopCard,
+  contract: IntentContract | null,
+): string[] | undefined {
+  if (card.loop.workspace.strategy !== "direct") {
+    return undefined;
+  }
+  if (isGitHubManagedLoop(card)) {
+    return ["."];
+  }
+  return contract?.target?.files ?? [];
 }
 
 /**
@@ -212,9 +235,175 @@ export function buildHumanResumeContext(
   return lines.join("\n");
 }
 
+function turnSuffixedArtifactName(base: string, turn: number): string {
+  if (turn <= 1) {
+    return base;
+  }
+  const dot = base.lastIndexOf(".");
+  if (dot <= 0) {
+    return `${base}-turn${turn}`;
+  }
+  return `${base.slice(0, dot)}-turn${turn}${base.slice(dot)}`;
+}
+
+function artifactRef(runId: string, name: string): string {
+  return `artifact://${runId}/${name}`;
+}
+
+function turnHandoffRefs(raw: string | undefined): {
+  judgment_ref?: string | null;
+  collector_report_ref?: string | null;
+  evidence_refs?: string[];
+} | null {
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as {
+      judgment_ref?: unknown;
+      collector_report_ref?: unknown;
+      evidence_refs?: unknown;
+    };
+    return {
+      judgment_ref:
+        typeof parsed.judgment_ref === "string" ? parsed.judgment_ref : null,
+      collector_report_ref:
+        typeof parsed.collector_report_ref === "string"
+          ? parsed.collector_report_ref
+          : null,
+      evidence_refs: Array.isArray(parsed.evidence_refs)
+        ? parsed.evidence_refs.filter(
+            (ref): ref is string => typeof ref === "string",
+          )
+        : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function machineStateProjection(raw: string | undefined): string {
+  if (!raw) {
+    return "not_available";
+  }
+  try {
+    const parsed = MachineStateSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      return `unparseable machine-state.json: ${parsed.error.message}`;
+    }
+    const machine = parsed.data;
+    return [
+      `run_id=${machine.run_id}`,
+      `turn=${machine.turn}`,
+      `state=${machine.record.state}`,
+      `artifact_manifest=${machine.artifact_manifest_ref}`,
+      `checkpoint_event_id=${machine.checkpoint_event_id ?? "null"}`,
+      `workspace_snapshot=${JSON.stringify(machine.workspace_snapshot ?? null)}`,
+      `budget=${JSON.stringify(machine.record.budget ?? null)}`,
+    ].join("\n");
+  } catch {
+    return "unparseable machine-state.json";
+  }
+}
+
+function previousJudgmentSummary(
+  ctx: RunExecutionContext,
+  handoffRefs: ReturnType<typeof turnHandoffRefs>,
+): string {
+  const ref = ctx.lastJudgmentRef ?? handoffRefs?.judgment_ref ?? null;
+  if (!ctx.lastJudgment) {
+    return `overall=unknown; next_action=unknown; ref=${ref ?? "not_available"}`;
+  }
+  return `overall=${ctx.lastJudgment.overall}; next_action=${ctx.lastJudgment.next_action}; requires_human=${ctx.lastJudgment.requires_human}; ref=${ref ?? "not_available"}`;
+}
+
 /**
- * Execute one turn: turn 1 starts a new session; later turns resume the
- * run's session (05 阶段 2: retry = 新一轮 resumeSession, 不是新 session).
+ * Build the prompt for a loop turn. Turn 1 uses the assembled runtime input
+ * unchanged. Later turns reuse that standing task brief and add the Phase 6
+ * dual-track handoff so a fresh provider session can continue without
+ * inheriting the previous transcript.
+ */
+export async function buildLoopTurnStartPrompt(
+  ctx: RunExecutionContext,
+  store: RunLedgerStore,
+): Promise<string> {
+  if (!ctx.input) {
+    return "Continue the loop task and finish with a text report.";
+  }
+  const base = ctx.input.prompt;
+  if (ctx.turn <= 1) {
+    return base;
+  }
+
+  const { runId } = ctx.active;
+  const previousTurn = Math.max(1, ctx.turn - 1);
+  const humanReportName = "human-report.md";
+  const machineStateName = "machine-state.json";
+  const turnHandoffName = turnSuffixedArtifactName(
+    "turn-handoff.json",
+    previousTurn,
+  );
+  const executorSummaryName = turnSuffixedArtifactName(
+    "executor-summary.md",
+    previousTurn,
+  );
+  const runtimeEventsName = turnSuffixedArtifactName(
+    "runtime-events.jsonl",
+    previousTurn,
+  );
+
+  const [humanReport, machineState, turnHandoff, executorSummary] =
+    await Promise.all([
+      store.readArtifact(runId, humanReportName),
+      store.readArtifact(runId, machineStateName),
+      store.readArtifact(runId, turnHandoffName),
+      store.readArtifact(runId, executorSummaryName),
+    ]);
+  const handoffRefs = turnHandoffRefs(turnHandoff);
+  const judgmentSummary = previousJudgmentSummary(ctx, handoffRefs);
+
+  const lines = [
+    "",
+    "## Loop turn handoff (fresh session)",
+    `- current_turn: ${ctx.turn}`,
+    `- previous_turn: ${previousTurn}`,
+    `- handoff_available: ${humanReport && machineState ? "true" : "false"}`,
+    `- human_report: ${artifactRef(runId, humanReportName)}`,
+    `- machine_state: ${artifactRef(runId, machineStateName)}`,
+    `- turn_handoff: ${artifactRef(runId, turnHandoffName)}`,
+    `- previous_judgment: ${judgmentSummary}`,
+    `- previous_executor_summary: ${artifactRef(runId, executorSummaryName)}`,
+    `- previous_runtime_events: ${artifactRef(runId, runtimeEventsName)}`,
+    "",
+    "### AU2 human report",
+    humanReport ?? "(previous AU2 human report not available)",
+    "",
+    "### Machine state projection",
+    machineStateProjection(machineState),
+    "",
+    "### Previous executor summary",
+    executorSummary ?? "(previous executor summary not available)",
+    "",
+    "### Turn-specific instruction",
+    ctx.pendingContext ??
+      "Continue the loop task and finish with a text report.",
+  ];
+
+  if (ctx.taskPlan) {
+    lines.push(
+      "",
+      "### Current subtask",
+      buildNextSubtaskContext(ctx.currentSubtaskIndex, ctx.taskPlan),
+    );
+  }
+
+  return `${base}\n\n${lines.join("\n")}`;
+}
+
+/**
+ * Execute one turn. Every loop turn starts a fresh provider session; the
+ * standing prompt plus AU2 handoff supplies the context that an interactive
+ * resume would otherwise have inherited from the old transcript.
  */
 export async function executeTurn(
   ctx: RunExecutionContext,
@@ -230,19 +419,10 @@ export async function executeTurn(
       usage: null,
     };
   }
-  const isFirstTurn = ctx.turn === 1 || !ctx.sessionRef;
-  let prompt: string;
-  if (isFirstTurn) {
-    prompt = ctx.input.prompt;
-  } else if (ctx.pendingContext) {
-    prompt = ctx.pendingContext;
-  } else if (ctx.taskPlan) {
-    prompt = buildNextSubtaskContext(ctx.currentSubtaskIndex, ctx.taskPlan);
-  } else {
-    prompt = "Continue the loop task and finish with a text report.";
-  }
+  const runtimeInput = ctx.input;
+  const prompt = await buildLoopTurnStartPrompt(ctx, deps.runLedgerStore);
   ctx.pendingContext = null;
-  const message = { text: prompt, mode: ctx.input.permissionMode };
+  const message = { text: prompt, mode: runtimeInput.permissionMode };
 
   // Policy projection (05 阶段 2): when the card declared a policy, the
   // per-turn approval hook is the canUseTool rule source — self-approvals
@@ -252,16 +432,38 @@ export async function executeTurn(
   // + deny rules + auto-deny watcher, exactly as phase 0/1.
   ctx.policyEscalations = [];
   ctx.permissionEvents = [];
-  const toolApprovalHook = ctx.input.policyProfile
+  const directWriteAllowlist = resolveDirectWriteAllowlist(
+    ctx.card,
+    ctx.contract,
+  );
+  const toolApprovalHook = runtimeInput.policyProfile
     ? createLoopToolApprovalHook({
-        profile: ctx.input.policyProfile,
+        profile: runtimeInput.policyProfile,
         runId: ctx.active.runId,
         loopId: ctx.active.loopId,
         turn: ctx.turn,
-        workspacePath: ctx.input.cwd,
+        workspacePath: runtimeInput.cwd,
         store: deps.runLedgerStore,
         escalations: ctx.policyEscalations,
         permissionEvents: ctx.permissionEvents,
+        directWriteAllowlist,
+        contract: ctx.contract,
+        policyReviewer: (request) =>
+          runPolicyReviewAgent(
+            {
+              supervisor: deps.supervisor,
+              runLedgerStore: deps.runLedgerStore,
+            },
+            {
+              card: ctx.card,
+              contract: ctx.contract,
+              input: runtimeInput,
+              runId: ctx.active.runId,
+              loopId: ctx.active.loopId,
+              turn: ctx.turn,
+            },
+            request,
+          ),
       })
     : undefined;
   // adapter_policy 消费 (修复计划 #13): published / canary 的
@@ -269,31 +471,23 @@ export async function executeTurn(
   // 这里解析成真实旋钮 —— model 覆盖进 session settings,
   // timeout_seconds 进 watchProcess 的轮次超时 (02 §3: adapter 调用
   // 必须带超时)。
-  const adapterPolicy = resolveAdapterPolicy(ctx.input.adapterPolicy);
+  const adapterPolicy = resolveAdapterPolicy(runtimeInput.adapterPolicy);
   const sessionSettings = {
-    permissions: ctx.input.permissions,
+    permissions: runtimeInput.permissions,
     toolApprovalHook,
-    env: ctx.input.env,
+    env: runtimeInput.env,
     providerName: loopRuntime(ctx.card)?.provider as ProviderName | undefined,
     model: adapterPolicy.model ?? loopRuntime(ctx.card)?.model,
   };
 
   let result: Process | QueuedResponse | QueueFullResponse;
   try {
-    result = isFirstTurn
-      ? await deps.supervisor.startSession(
-          ctx.input.cwd,
-          message,
-          ctx.input.permissionMode,
-          sessionSettings,
-        )
-      : await deps.supervisor.resumeSession(
-          ctx.sessionRef as string,
-          ctx.input.cwd,
-          message,
-          ctx.input.permissionMode,
-          sessionSettings,
-        );
+    result = await deps.supervisor.startSession(
+      runtimeInput.cwd,
+      message,
+      runtimeInput.permissionMode,
+      sessionSettings,
+    );
   } catch (error) {
     // startSession can throw synchronously (e.g. adapter spawn failure on
     // an invalid workspace path). Convert it to a failed ExecutionOutcome
@@ -404,9 +598,13 @@ export async function watchProcess(
       }
       unsubscribe();
       opts.executingProcesses.delete(runId);
-      // Free the worker slot; the session jsonl stays on disk, so a
-      // later turn can still resumeSession on the same session_ref.
+      // Free the worker slot; the session jsonl stays on disk for audit, and
+      // later loop turns start fresh sessions from the AU2 handoff.
       void proc.abort().catch(() => {});
+      const hasMeaningfulRuntimeEvents = runtimeEvents.some((entry) => {
+        const message = (entry as { message?: { type?: string } }).message;
+        return message?.type !== "result";
+      });
       resolve({
         ok,
         finalText,
@@ -415,6 +613,14 @@ export async function watchProcess(
         usage: tokens === null ? null : { tokens },
         adapterError,
         runtimeEvents,
+        evidence: {
+          has_final_text: finalText.trim().length > 0,
+          has_runtime_events: hasMeaningfulRuntimeEvents,
+          has_diff: false,
+          has_required_artifacts: false,
+        },
+        producedEvidence:
+          finalText.trim().length > 0 || hasMeaningfulRuntimeEvents,
       });
     };
 

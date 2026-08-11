@@ -2,7 +2,7 @@ import type { IntentContract, LoopCard } from "@yep-anywhere/shared";
 import { z } from "zod";
 import type { Process } from "../../supervisor/Process.js";
 import type { Supervisor } from "../../supervisor/Supervisor.js";
-import { buildIntentContract } from "./intent-contract.js";
+import { type ContractSource, buildIntentContract } from "./intent-contract.js";
 import { matchIntentTemplate } from "./intent-templates.js";
 
 /**
@@ -106,7 +106,7 @@ function extractJson(text: string): unknown | null {
 
 export interface BuildContractOptions {
   runId: string;
-  source: "cron" | "manual";
+  source: ContractSource;
   plan?: IntentContract["plan"];
 }
 

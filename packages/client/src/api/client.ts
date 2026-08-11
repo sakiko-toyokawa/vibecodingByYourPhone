@@ -251,6 +251,7 @@ export async function fetchJSON<T>(
   });
 
   if (!res.ok) {
+    let body: Record<string, unknown> | undefined;
     // Signal login required for 401 errors (but not for auth endpoints themselves)
     if (res.status === 401 && !path.startsWith("/auth/")) {
       console.log("[API] 401 response, signaling login required");
@@ -260,10 +261,10 @@ export async function fetchJSON<T>(
     // Try to parse error message from response body
     let errorMessage = `API error: ${res.status} ${res.statusText}`;
     try {
-      const body = await res.json();
-      if (body.message) {
+      body = (await res.json()) as Record<string, unknown>;
+      if (typeof body?.message === "string") {
         errorMessage = body.message;
-      } else if (body.error) {
+      } else if (typeof body?.error === "string") {
         errorMessage = body.error;
       }
     } catch {
@@ -275,8 +276,10 @@ export async function fetchJSON<T>(
     const error = new Error(errorMessage) as Error & {
       status: number;
       setupRequired?: boolean;
+      data?: unknown;
     };
     error.status = res.status;
+    error.data = body;
     if (setupRequired) error.setupRequired = true;
     throw error;
   }

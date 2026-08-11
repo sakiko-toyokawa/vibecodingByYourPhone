@@ -11,13 +11,14 @@ import {
 
 const ALL_STATES = RunStateSchema.options;
 
-// 权威迁移表（loop-engineering/control-plane/状态机.md / 02-schema契约.md §7）:
-//   active → complete / retry / needs_human / paused / failed / budget_limited
-//   retry → active
-//   needs_human → active / failed / paused
-//   paused → active
-//   budget_limited → active
-//   complete / failed → exit（无出边）
+// 权威迁移表 + run discard 扩展:
+//   active → complete / retry / needs_human / paused / failed / budget_limited / discarded
+//   retry → active / discarded
+//   needs_human → active / failed / paused / discarded
+//   paused → active / discarded
+//   budget_limited → active / discarded
+//   complete / failed → discarded
+//   discarded → exit（无出边）
 const EXPECTED: Record<RunState, RunState[]> = {
   active: [
     "complete",
@@ -26,16 +27,18 @@ const EXPECTED: Record<RunState, RunState[]> = {
     "paused",
     "failed",
     "budget_limited",
+    "discarded",
   ],
-  retry: ["active"],
-  needs_human: ["active", "failed", "paused"],
-  paused: ["active"],
-  budget_limited: ["active"],
-  complete: [],
-  failed: [],
+  retry: ["active", "discarded"],
+  needs_human: ["active", "failed", "paused", "discarded"],
+  paused: ["active", "discarded"],
+  budget_limited: ["active", "discarded"],
+  complete: ["discarded"],
+  failed: ["discarded"],
+  discarded: [],
 };
 
-test("transition table covers exactly the 7-state enum", () => {
+test("transition table covers exactly the run state enum", () => {
   assert.deepEqual(
     Object.keys(RUN_STATE_TRANSITIONS).sort(),
     [...ALL_STATES].sort(),
@@ -79,12 +82,13 @@ test("every illegal transition is rejected (incl. terminal states and self-loops
       );
     }
   }
-  // 7×7 矩阵减去 12 条合法出边（active 6 + retry 1 + needs_human 3 +
-  // paused 1 + budget_limited 1）。
-  assert.equal(illegalCount, 49 - 12);
+  // 8×8 矩阵减去 19 条合法出边（active 7 + retry 2 + needs_human 4 +
+  // paused 2 + budget_limited 2 + complete 1 + failed 1）。
+  assert.equal(illegalCount, 64 - 19);
 });
 
-test("terminal states have no outgoing edges", () => {
-  assert.deepEqual(RUN_STATE_TRANSITIONS.complete, []);
-  assert.deepEqual(RUN_STATE_TRANSITIONS.failed, []);
+test("discarded is the only exit-only terminal state", () => {
+  assert.deepEqual(RUN_STATE_TRANSITIONS.complete, ["discarded"]);
+  assert.deepEqual(RUN_STATE_TRANSITIONS.failed, ["discarded"]);
+  assert.deepEqual(RUN_STATE_TRANSITIONS.discarded, []);
 });

@@ -1,5 +1,4 @@
 import { fetchJSON } from "./client";
-import type { LoopRunSummary } from "./loops";
 
 export interface GitHubCredentialStatus {
   configured: boolean;
@@ -19,14 +18,6 @@ export interface GitHubIssueCandidate {
   title: string;
   url: string;
   labels: string[];
-}
-
-export interface GitHubIssueLoopRun {
-  issue: GitHubIssueCandidate;
-  loopId: string;
-  workspacePath: string;
-  branch: string;
-  run: LoopRunSummary;
 }
 
 export const githubApi = {
@@ -58,10 +49,4 @@ export const githubApi = {
       `/github/issues/search?${params.toString()}`,
     );
   },
-
-  startIssueLoop: (query: string) =>
-    fetchJSON<GitHubIssueLoopRun>("/github/issue-loops/start", {
-      method: "POST",
-      body: JSON.stringify({ query }),
-    }),
 };

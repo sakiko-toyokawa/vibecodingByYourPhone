@@ -77,6 +77,7 @@ class VerifyFakeSupervisor {
     private readonly scripted: { tool: string; input: unknown }[],
     private readonly silent = false,
     private readonly providerErrorBeforeEmptyResult?: string,
+    private readonly emptyResult = false,
   ) {}
 
   async startSession(
@@ -121,6 +122,19 @@ class VerifyFakeSupervisor {
             });
             return;
           }
+          if (this.emptyResult) {
+            listener({
+              type: "message",
+              message: {
+                type: "result",
+                subtype: "success",
+                result: "",
+                is_error: false,
+                usage: { input_tokens: 1, output_tokens: 1 },
+              },
+            });
+            return;
+          }
           listener({
             type: "message",
             message: { type: "assistant", message: { content: [] } },
@@ -155,9 +169,17 @@ function makeCard(
       trigger: { type: "manual" },
       workspace: { strategy: "direct", path: WS },
       verification: { required: ["static"] },
+      handoff: { task: "fix src/foo.ts" },
       persistence: { state_file: "state/loop-verify.json" },
       stop_rules: { max_turns: 3, max_time_minutes: 30, max_retries: 2 },
-      ...(withPolicy ? { policy: { approval_mode: "bypass" as const } } : {}),
+      ...(withPolicy
+        ? {
+            policy: {
+              profile: "workspace_local_fix" as const,
+              approval_mode: "bypass" as const,
+            },
+          }
+        : {}),
       ...(provider
         ? ({ runtime: { provider } } as { runtime: { provider: string } })
         : {}),
@@ -195,6 +217,7 @@ async function withFixture(
     silent?: boolean;
     /** Emits a provider error followed by an empty result message. */
     providerErrorBeforeEmptyResult?: string;
+    emptyResult?: boolean;
     /** card 声明 observability.required_artifacts (产物存在性校验用例)。 */
     requiredArtifacts?: string[];
   },
@@ -258,6 +281,7 @@ async function withFixture(
       opts.scripted,
       opts.silent,
       opts.providerErrorBeforeEmptyResult,
+      opts.emptyResult,
     );
     const service = new LoopRunService({
       supervisor: supervisor as unknown as Supervisor,
@@ -579,6 +603,36 @@ test("provider error followed by empty result fails the run instead of completin
   );
 });
 
+test("successful empty output escalates to needs_human instead of complete", async () => {
+  await withFixture(
+    {
+      withPolicy: false,
+      scripted: [],
+      emptyResult: true,
+      verifyRunFn: PASSED_VERIFY,
+    },
+    async ({ service, controlPlane, ledgerStore }) => {
+      const summary = await service.startRun("loop-verify", "manual");
+      const state = await waitForState(controlPlane, summary.run_id, [
+        "needs_human",
+      ]);
+      assert.equal(state, "needs_human");
+
+      const decisions = await ledgerStore.readDecisionEntries(summary.run_id);
+      const needsHuman = decisions.find((d) => d.decision === "needs_human");
+      assert.ok(needsHuman, "needs_human decision ledgered");
+      assert.deepEqual(needsHuman.failure_tags, ["verification_error"]);
+      assert.match(needsHuman.reason, /inconclusive/);
+
+      const judgment = await ledgerStore.readArtifact(
+        summary.run_id,
+        "judgment-report.json",
+      );
+      assert.ok(judgment?.includes("executor produced no observable evidence"));
+    },
+  );
+});
+
 test("memory packet: open failure patterns are assembled into prompt and ledgered (02 §3)", async () => {
   await withFixture(
     {
@@ -608,7 +662,16 @@ test("memory packet: open failure patterns are assembled into prompt and ledgere
       );
       assert.ok(packet, "memory packet artifact written");
       assert.ok(packet.includes("pattern-flaky-test"));
-      const latest = await ledgerStore.readEntry(summary.run_id);
+      let latest = await ledgerStore.readEntry(summary.run_id);
+      const ledgerDeadline = Date.now() + 2000;
+      while (
+        latest?.input_refs.memory_packet !==
+          `artifact://${summary.run_id}/memory-packet.json` &&
+        Date.now() < ledgerDeadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        latest = await ledgerStore.readEntry(summary.run_id);
+      }
       assert.equal(
         latest?.input_refs.memory_packet,
         `artifact://${summary.run_id}/memory-packet.json`,

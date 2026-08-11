@@ -10,7 +10,6 @@ import { detectAdb } from "./device/adb.js";
 import {
   GitHubClient,
   GitHubCredentialStore,
-  type GitHubIssueLoopService,
   GitHubToolProvisioner,
 } from "./github/index.js";
 import { SessionIndexService } from "./indexes/index.js";
@@ -19,7 +18,7 @@ import {
   initLogger,
   interceptConsole,
 } from "./logging/index.js";
-import { LoopCardStore } from "./loop/index.js";
+import { LoopCardStore, RelationStore } from "./loop/index.js";
 import type {
   ControlPlane,
   CronScheduler,
@@ -27,6 +26,7 @@ import type {
   LoopRunService,
   ProposalPipeline,
   ProposalStore,
+  TriggerQueueStore,
 } from "./loop/index.js";
 import {
   ProjectMetadataService,
@@ -86,6 +86,9 @@ export interface ServicesContainer {
   proposalStore?: ProposalStore;
   // 阶段 3 第三刀: 发布管线 (worker 自动推进 draft→shadow→canary)
   proposalPipeline?: ProposalPipeline;
+  relationStore?: RelationStore;
+  triggerQueueStore?: TriggerQueueStore;
+  drainPendingTriggers?: (loopId?: string) => Promise<void>;
   sessionIndexService: SessionIndexService;
   pushService: PushService;
   browserProfileService: BrowserProfileService;
@@ -104,7 +107,6 @@ export interface ServicesContainer {
   githubCredentialStore: GitHubCredentialStore;
   githubToolProvisioner: GitHubToolProvisioner;
   githubClient: GitHubClient;
-  githubIssueLoopService?: GitHubIssueLoopService;
   // App-level dependencies registered in createApp
   scanner?: ProjectScanner;
   readerFactory?: (project: Project) => ISessionReader;
@@ -324,6 +326,9 @@ export async function initializeServices(): Promise<ServicesContainer> {
     ghPath: githubToolProvisioner.getGhPath(),
     tokenProvider: () => githubCredentialStore.getToken(),
   });
+  const relationStore = new RelationStore({
+    dataDir: config.dataDir,
+  });
 
   // Initialize services (loads state from disk)
   await installService.initialize();
@@ -340,6 +345,7 @@ export async function initializeServices(): Promise<ServicesContainer> {
   await serverSettingsService.initialize();
   await sharingService.initialize();
   await githubCredentialStore.initialize();
+  await relationStore.initialize();
   await remoteSessionService.setDiskPersistenceEnabled(
     serverSettingsService.getSetting("persistRemoteSessionsToDisk"),
   );
@@ -431,6 +437,7 @@ export async function initializeServices(): Promise<ServicesContainer> {
     githubCredentialStore,
     githubToolProvisioner,
     githubClient,
+    relationStore,
   };
 
   // Register all services in the DI container

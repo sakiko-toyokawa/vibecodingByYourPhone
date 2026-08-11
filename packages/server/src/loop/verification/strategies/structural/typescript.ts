@@ -61,6 +61,7 @@ export class TypeScriptChecker {
     const risks: string[] = [];
     let rawLog: string | null = null;
     let inconclusive = false;
+    let tscNonZeroNoDiagnostics = false;
 
     // 1. tsc diagnostics（僅有 tsconfig 時；無 tsconfig 的散裝 TS 檔不跑，
     //    tsc 無 config 時的行為不可預期）。
@@ -89,6 +90,9 @@ export class TypeScriptChecker {
               message: `${code}: ${message}`,
             });
           }
+        }
+        if (issues.length === 0) {
+          tscNonZeroNoDiagnostics = true;
         }
         risks.push(
           issues.length > 0
@@ -124,7 +128,7 @@ export class TypeScriptChecker {
       risks,
       rawLog,
       applicable: true,
-      inconclusive,
+      inconclusive: inconclusive || tscNonZeroNoDiagnostics,
     };
   }
 }

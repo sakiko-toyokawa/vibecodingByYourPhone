@@ -1,5 +1,5 @@
 /**
- * Run 状态机 — 7 态确定性转移表。
+ * Run 状态机 — 8 态确定性转移表。
  * 权威定义：loop-engineering/control-plane/状态机.md 与
  * docs/spec/02-schema契约.md §7 的状态迁移表（两处一致）。
  *
@@ -13,19 +13,25 @@
  *   active         → failed            不可恢复错误
  *   active         → budget_limited    预算耗尽
  *   active         → paused            人工主动暂停
+ *   active         → discarded         人工丢弃 run
  *   retry          → active            生成新上下文或沿用当前上下文继续
+ *   retry          → discarded         人工丢弃 run
  *   needs_human    → active            人类批准或补充上下文（恢复须携带人工响应）
  *   needs_human    → failed            人类拒绝
  *   needs_human    → paused            人工 pause 决策（03 迁移表）
+ *   needs_human    → discarded         人工丢弃 run
  *   paused         → active            收到恢复信号
+ *   paused         → discarded         人工丢弃 run
  *   budget_limited → active            人工补充预算并恢复
- *   complete       → (exit，无出边)
- *   failed         → (exit，无出边)
+ *   budget_limited → discarded         人工丢弃 run
+ *   complete       → discarded         人工归档/丢弃 run
+ *   failed         → discarded         人工归档/丢弃 run
+ *   discarded      → (exit，无出边)
  */
 
 import type { RunState } from "@yep-anywhere/shared";
 
-/** 合法出边表；complete / failed 是终态（exit，无出边）。 */
+/** 合法出边表；discarded 是终态（exit，无出边）。 */
 export const RUN_STATE_TRANSITIONS: Readonly<
   Record<RunState, readonly RunState[]>
 > = {
@@ -36,13 +42,15 @@ export const RUN_STATE_TRANSITIONS: Readonly<
     "paused",
     "failed",
     "budget_limited",
+    "discarded",
   ],
-  retry: ["active"],
-  needs_human: ["active", "failed", "paused"],
-  paused: ["active"],
-  budget_limited: ["active"],
-  complete: [],
-  failed: [],
+  retry: ["active", "discarded"],
+  needs_human: ["active", "failed", "paused", "discarded"],
+  paused: ["active", "discarded"],
+  budget_limited: ["active", "discarded"],
+  complete: ["discarded"],
+  failed: ["discarded"],
+  discarded: [],
 };
 
 export function isLegalTransition(from: RunState, to: RunState): boolean {

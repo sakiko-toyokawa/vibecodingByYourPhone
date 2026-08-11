@@ -17,6 +17,12 @@ export interface PendingReloads {
   frontend: boolean;
 }
 
+export interface ActiveLoopRun {
+  loop_id: string;
+  run_id: string;
+  state: string;
+}
+
 interface DevStatus {
   noBackendReload: boolean;
   noFrontendReload: boolean;
@@ -41,6 +47,7 @@ export function useReloadNotifications() {
     hasActiveWork: false,
     timestamp: "",
   });
+  const [activeLoopRuns, setActiveLoopRuns] = useState<ActiveLoopRun[]>([]);
 
   // Sync dev status and worker activity from server
   const syncFromServer = useCallback(() => {
@@ -158,6 +165,17 @@ export function useReloadNotifications() {
       console.log("[ReloadNotifications] Reload completed");
       setPendingReloads((prev) => ({ ...prev, backend: false }));
     } catch (err) {
+      const status = (err as { status?: number }).status;
+      const data = (err as { data?: { active_loop_runs?: ActiveLoopRun[] } })
+        .data;
+      if (status === 409 && data?.active_loop_runs) {
+        setActiveLoopRuns(data.active_loop_runs);
+        console.log(
+          "[ReloadNotifications] Backend restart blocked by active loop runs:",
+          data.active_loop_runs,
+        );
+        return;
+      }
       console.log("[ReloadNotifications] Reload error (may be expected):", err);
     }
   }, []);
@@ -216,6 +234,7 @@ export function useReloadNotifications() {
     dismiss,
     dismissAll,
     workerActivity,
-    unsafeToRestart: workerActivity.hasActiveWork,
+    activeLoopRuns,
+    unsafeToRestart: workerActivity.hasActiveWork || activeLoopRuns.length > 0,
   };
 }

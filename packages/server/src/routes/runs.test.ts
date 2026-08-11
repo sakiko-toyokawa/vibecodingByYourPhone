@@ -134,6 +134,56 @@ function postDecision(app: Hono, runId: string, body: unknown) {
   });
 }
 
+function postDiscard(app: Hono, runId: string, body: unknown) {
+  return app.request(`/${runId}/discard`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+test("discard: needs_human run → 200 discarded + decision entry + discard artifact", async () => {
+  await withFixture(async ({ app, controlPlane, ledgerStore }) => {
+    await seedNeedsHumanRun(controlPlane, ledgerStore);
+
+    const res = await postDiscard(app, "run-1", {
+      reason: "remove experimental run",
+      revert_files: false,
+      cleanup_worktree: false,
+    });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      run_state: { state: string };
+      discard_result_ref: string;
+    };
+    assert.equal(body.run_state.state, "discarded");
+    assert.match(
+      body.discard_result_ref,
+      /artifact:\/\/run-1\/discard-result\.json/,
+    );
+
+    const decisions = await ledgerStore.readDecisionEntries("run-1");
+    const last = at(decisions, decisions.length - 1);
+    assert.equal(last.decision, "discarded");
+    const discardArtifact = await ledgerStore.readArtifact(
+      "run-1",
+      "discard-result.json",
+    );
+    assert.ok(discardArtifact?.includes("remove experimental run"));
+  });
+});
+
+test("discard: invalid body → 400 invalid_decision", async () => {
+  await withFixture(async ({ app }) => {
+    const res = await postDiscard(app, "run-1", {});
+    assert.equal(res.status, 400);
+    assert.equal(
+      ((await res.json()) as { error: string }).error,
+      "invalid_decision",
+    );
+  });
+});
+
 test("needs_human run accepts approve → 200 active + override落账（阶段 2 恢复执行）; replay → 409 invalid_state", async () => {
   await withFixture(async ({ app, controlPlane, ledgerStore }) => {
     await seedNeedsHumanRun(controlPlane, ledgerStore);

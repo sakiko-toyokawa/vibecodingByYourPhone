@@ -233,7 +233,7 @@ test("短路规则: static 硬失败后 runtime 段跳过且注明原因 (四段
   });
 });
 
-test("P0: rule/structural 走策略管线, 未就绪时诚实回 inconclusive", async () => {
+test("P0: rule/structural 走策略管线; rule 無規則 inconclusive, structural 無 checker unverified", async () => {
   await withStore(async ({ store, workspace, runId }) => {
     const card = makeCard(workspace);
     card.loop.verification = { required: ["rule", "structural"] };
@@ -257,16 +257,19 @@ test("P0: rule/structural 走策略管线, 未就绪时诚实回 inconclusive", 
       result.reports.map((r) => r.verifier_phase),
       ["rule", "structural"],
     );
-    for (const report of result.reports) {
-      assert.equal(report.status, "inconclusive");
-      assert.equal(report.recommendation, "escalate");
-    }
-    // inconclusive 参与聚合: overall 不再是 passed
-    assert.equal(result.judgment.overall, "inconclusive");
+    assert.deepEqual(
+      result.reports.map((r) => r.status),
+      ["inconclusive", "unverified"],
+    );
+    assert.ok(
+      result.reports.every((report) => report.recommendation === "escalate"),
+    );
+    // unverified 參與聚合且不綠燈: overall 不再是 passed
+    assert.equal(result.judgment.overall, "unverified");
     assert.equal(result.judgment.next_action, "escalate");
     // per-phase artifact 落盘; P2 起 rule 由 RuleBasedStrategy 承載 ——
     // 無規則可跑是配置缺口 (inconclusive); P3 起 structural 由
-    // StructuralStrategy 承載, 空 workspace 無適用 checker 同屬 inconclusive。
+    // StructuralStrategy 承載, 空 workspace 無適用 checker 是 unverified。
     const ruleReport = JSON.parse(
       (await store.readArtifact(runId, "verifier-report-rule.json")) ?? "",
     );
@@ -408,11 +411,13 @@ test("P4: runReviewAgent 接管 review 段, agent 報告參與聚合", async () 
       },
     );
 
-    // static (vacuous pass, 無命令) + review (agent) 兩份報告
+    // static (unverified, 無命令) + review (agent) 兩份報告
     assert.equal(result.reports.length, 2);
     assert.equal(agentSawPriorReports, 1);
     assert.equal(result.judgment.overall, "failed");
-    assert.equal(result.judgment.next_action, "retry");
+    // unverified 層會讓鏈路不能自動 retry：review 判 failed，但 static
+    // 語言未驗證，整體仍要 escalate 給人工確認。
+    assert.equal(result.judgment.next_action, "escalate");
     const review = JSON.parse(
       (await store.readArtifact(runId, "verifier-report-review.json")) ?? "",
     );
@@ -508,7 +513,7 @@ test("interaction 段由 runner 接管並參與聚合", async () => {
     assert.equal(interactionSawPriorReports, 1);
     assert.equal(result.reports.length, 2);
     assert.equal(result.reports[1]?.verifier_phase, "interaction");
-    assert.equal(result.judgment.overall, "passed");
+    assert.equal(result.judgment.overall, "unverified");
     const interaction = JSON.parse(
       (await store.readArtifact(runId, "verifier-report-interaction.json")) ??
         "",

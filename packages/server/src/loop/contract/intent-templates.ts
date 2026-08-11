@@ -45,6 +45,21 @@ export const INTENT_CONTRACT_TEMPLATES: IntentContractTemplate[] = [
     ],
     constraints: ["workspace_bounded"],
   },
+  {
+    task_type: "bugfix",
+    outcome:
+      "在已 clone 的 GitHub issue workspace 中完成最小修復、通過相關檢查、建立本地 commit，並產出報告",
+    success_criteria: [
+      "issue 所述問題被最小範圍修復",
+      "相關 lint / typecheck / test 通過",
+      "建立本地 git commit",
+      "未 push / fork / 開 PR / 評論 / 關閉 issue",
+    ],
+    constraints: [
+      "workspace_bounded",
+      "不 push / fork / 開 PR / 評論 / 關閉 issue / release / deploy",
+    ],
+  },
 ];
 
 /** 按 task_type 匹配範本；無命中返回 null。 */

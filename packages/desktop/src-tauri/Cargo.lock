@@ -6390,7 +6390,7 @@ dependencies = [
 
 [[package]]
 name = "yep-anywhere-desktop"
-version = "0.2.3"
+version = "0.2.5"
 dependencies = [
  "dirs 5.0.1",
  "flate2",

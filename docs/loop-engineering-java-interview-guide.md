@@ -2155,6 +2155,8 @@ verifier theater、fail-closed、審計。
 
 下面這組問題常被用來判斷一個 loop 是否真能上線。對每個問題，我們給出當前實現的對應點與仍然存在的缺口。
 
+> 2026-08-09 起，下列缺口已有對應設計文件，狀態從「未設計」改為「已設計，核心已實作」：`docs/design/loop-production-readiness-index.md`。
+
 ### 1. loop 到底讀了什麼原始輸入？
 - **對應**：權威輸入是 `LoopCard`（`packages/server/src/loop/state/loop-card-store.ts`），具體是 `card.loop.handoff.task`；裝配層 `packages/server/src/loop/contract/intent-contract.ts` 把它轉成 `IntentContract`；最終 prompt 由 `packages/server/src/loop/assembly/runtime-input.ts` 的 `assembleRuntimeInput` 生成，混入 memory packet、人工反饋、子任務簡報。
 - **缺口**：沒有未授權外部輸入；還行。
@@ -2172,12 +2174,12 @@ verifier theater、fail-closed、審計。
 - **缺口**：direct 策略直接改用戶原目錄，隔離最弱。
 
 ### 5. 誰獨立驗證輸出？
-- **對應**：`packages/server/src/loop/verification/verify-run.ts` 的 verifier chain；`SubprocessStrategy` 跑命令；`ContractCriteriaStrategy` 檢查 workspace 文件是否滿足 success_criteria；`packages/server/src/loop/policy/arbiter.ts` 獨立於執行器做工具調用裁決。
-- **缺口**：`interaction` 段還是 `not_applicable` 占位；collector 的 review 段只在 card 聲明 review 時參與聚合。
+- **對應**：`packages/server/src/loop/verification/verify-run.ts` 的 verifier chain；`SubprocessStrategy` 跑命令；`ContractCriteriaStrategy` 檢查 workspace 文件是否滿足 success_criteria；`packages/server/src/loop/policy/arbiter.ts` 獨立於執行器做工具調用裁決；`InteractionAgentStrategy` 產生 Playwright 驗證腳本；Verifier Agent 作為 L4 Judge。
+- **缺口**：executor 空產出仍可能被 static 結果誤判為 complete；L4 輸入上限與 collector/judge 成本優化尚未實作。設計見 `docs/design/loop-empty-output-detection-design.md` 與 `docs/design/loop-verifier-extension-design.md`。
 
 ### 6. 成本、重試、超時限制各是什麼？
-- **對應**：budget（max_turns / max_time_minutes / max_tokens / max_retries）在 `control-plane.ts` 的 `exhaustedFields` 檢查；重試退避 `packages/server/src/loop/control-plane/retry-backoff.ts`（1min × 2^(n-1)，封頂 5min）；verifier 子進程默認 120s；單輪執行超時靠 `adapter_policy.timeout_seconds` / `nativeInvocation.timeout_seconds`。
-- **缺口**：單輪執行**默認沒有超時**；token 預算只記錄與檢查，沒有對 LLM provider 的獨立配額熔斷。
+- **對應**：budget（max_turns / max_time_minutes / max_tokens / max_retries）在 `control-plane.ts` 的 `exhaustedFields` 檢查；重試退避 `packages/server/src/loop/control-plane/retry-backoff.ts`（1min × 2^(n-1)，封頂 5min）；verifier 子進程默認 120s；單輪無固定硬超時是既定決策，由 idle watchdog 與 `adapter_policy.timeout_seconds` 治理。
+- **缺口**：token 預算只記錄與檢查，沒有 turn 前預檢與執行中成本熔斷。設計見 `docs/design/loop-token-quota-breaker-design.md`。
 
 ### 7. 哪一步明確需要人工批准？
 - **對應**：硬閘門命中 → `policy_blocked` → `needs_human`；judgment `requires_human: true`（merge gate、inconclusive escalate 等）；`budget_limited` 需調用 `POST /api/runs/:id/budget` 補充預算；`POST /api/runs/:id/decision` 發 approve/request_changes。
@@ -2188,7 +2190,7 @@ verifier theater、fail-closed、審計。
 - **缺口**：**direct 模式沒有自動回滾**；**目前沒有用戶級「丟棄某一次 run」的 API**，只能歸檔整個 loop 或手動刪文件。
 
 ### 結論
-這套 loop 目前是「有人工兜底的可審計自動化工具」，還不是無人值守的生產系統。要上線，最優先要麼禁用 direct 模式、要麼補自動 revert，其次要補一個丟棄/重置單次 run 的操作入口。
+這套 loop 目前是「有人工兜底的可審計自動化工具」，還不是無人值守的生產系統。要上線，最優先要麼禁用 direct 模式、要麼補自動 revert，其次要補一個丟棄/重置單次 run 的操作入口。這些決策已定稿，見 `docs/design/loop-run-rollback-discard-design.md` 與 `docs/design/loop-direct-workspace-boundary-design.md`。
 
 ---
 

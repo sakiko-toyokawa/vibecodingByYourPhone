@@ -13,13 +13,18 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { DecisionEntry, PolicyProfile } from "@yep-anywhere/shared";
+import type {
+  DecisionEntry,
+  IntentContract,
+  PolicyProfile,
+} from "@yep-anywhere/shared";
 import { RunLedgerStore } from "../state/run-ledger-store.js";
 import {
   type PermissionEvent,
   type PolicyEscalation,
   createLoopToolApprovalHook,
 } from "./approval-hook.js";
+import type { PolicyReviewRequest, PolicyReviewResult } from "./reviewer.js";
 
 const WS = "/workspace/project";
 
@@ -54,6 +59,12 @@ async function withStore(
     permissionEvents: PermissionEvent[];
     hook: ReturnType<typeof createLoopToolApprovalHook>;
   }) => Promise<void>,
+  options: {
+    contract?: IntentContract | null;
+    policyReviewer?: (
+      request: PolicyReviewRequest,
+    ) => Promise<PolicyReviewResult>;
+  } = {},
 ): Promise<void> {
   const dataDir = await mkdtemp(join(tmpdir(), "yep-policy-hook-"));
   try {
@@ -69,6 +80,8 @@ async function withStore(
       store,
       escalations,
       permissionEvents,
+      contract: options.contract ?? null,
+      policyReviewer: options.policyReviewer,
     });
     await fn({ store, escalations, permissionEvents, hook });
   } finally {
@@ -134,6 +147,7 @@ test("hard gate under bypass: denied + escalation collected + policy_blocked aud
     assert.equal(escalations.length, 1);
     assert.equal(escalations[0]?.action, "merge");
     assert.equal(escalations[0]?.policyRef, "policy://loop_bypass");
+    assert.equal(escalations[0]?.reviewable, false);
 
     const entries = await store.readDecisionEntries("run-hook-1");
     assert.equal(entries.length, 1);
@@ -193,4 +207,87 @@ test("manual profile denies mutations without audit entries", async () => {
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }
+});
+
+test("review_or_policy: independent review allow becomes audited self-approval", async () => {
+  await withStore(
+    async ({ store, escalations, hook }) => {
+      const result = await hook("Bash", {
+        command: "git push origin main",
+      });
+      assert.deepEqual(result, { behavior: "allow" });
+      assert.equal(escalations.length, 0);
+
+      const entries = await store.readDecisionEntries("run-hook-1");
+      assert.equal(entries.length, 1);
+      const audit = entries[0] as DecisionEntry;
+      assert.equal(audit.decision, "bypass_used");
+      assert.match(audit.reason, /independent policy review approved/);
+      assert.deepEqual(audit.evidence_refs, [
+        "artifact://run-hook-1/policy-review-output.log",
+      ]);
+    },
+    {
+      contract: { raw_goal: "push allowed" } as unknown as IntentContract,
+      policyReviewer: async () => ({
+        decision: "allow",
+        reason: "allowed by test",
+        confidence: 0.9,
+        evidenceRefs: ["artifact://run-hook-1/policy-review-output.log"],
+      }),
+    },
+  );
+});
+
+test("review_or_policy: independent review deny rejects without escalation", async () => {
+  await withStore(
+    async ({ store, escalations, permissionEvents, hook }) => {
+      const result = await hook("Bash", {
+        command: "git push origin main",
+      });
+      assert.equal(result.behavior, "deny");
+      assert.match(result.message ?? "", /Independent policy review denied/);
+      assert.equal(escalations.length, 0);
+      assert.equal(
+        permissionEvents.filter((e) => e.decision === "review_denied").length,
+        1,
+      );
+      assert.equal((await store.readDecisionEntries("run-hook-1")).length, 0);
+    },
+    {
+      contract: { raw_goal: "push blocked" } as unknown as IntentContract,
+      policyReviewer: async () => ({
+        decision: "deny",
+        reason: "denied by test",
+        confidence: 0.9,
+        evidenceRefs: [],
+      }),
+    },
+  );
+});
+
+test("review_or_policy: reviewer hard_gate or failure escalates to human", async () => {
+  await withStore(
+    async ({ store, escalations, hook }) => {
+      const result = await hook("Bash", {
+        command: "git push origin main",
+      });
+      assert.equal(result.behavior, "deny");
+      assert.match(result.message ?? "", /escalated for human review/);
+      assert.equal(escalations.length, 1);
+      assert.equal(escalations[0]?.reviewable, true);
+      const entries = await store.readDecisionEntries("run-hook-1");
+      assert.equal(entries.length, 1);
+      assert.equal(entries[0]?.decision, "policy_blocked");
+    },
+    {
+      contract: { raw_goal: "push ambiguous" } as unknown as IntentContract,
+      policyReviewer: async () => ({
+        decision: "hard_gate",
+        reason: "ambiguous by test",
+        confidence: 0.4,
+        evidenceRefs: [],
+      }),
+    },
+  );
 });

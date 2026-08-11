@@ -4,13 +4,13 @@ import {
   detectCommandsForProjectType,
   detectProjectType,
 } from "./project-type.js";
-import { ContractCriteriaStrategy } from "./strategies/contract-criteria.js";
 import { FileContentStrategy } from "./strategies/file-content.js";
 import { FileExistenceStrategy } from "./strategies/file-existence.js";
 import { InteractionAgentStrategy } from "./strategies/interaction/index.js";
 import { RuleBasedStrategy } from "./strategies/rule-based.js";
 import { StructuralStrategy } from "./strategies/structural/index.js";
 import { SubprocessStrategy } from "./strategies/subprocess.js";
+import { UnverifiedLanguageStrategy } from "./strategies/unverified-language.js";
 import type {
   ExecutableVerificationPhase,
   VerificationStrategy,
@@ -33,7 +33,7 @@ import type {
  */
 export async function selectVerificationStrategy(
   card: LoopCard,
-  contract: IntentContract,
+  _contract: IntentContract,
   workspacePath: string,
   phase: ExecutableVerificationPhase = "static",
 ): Promise<VerificationStrategy> {
@@ -81,11 +81,9 @@ export async function selectVerificationStrategy(
     }
   }
 
-  // 3. If intent contract has success criteria, use ContractCriteriaStrategy
-  if (contract.success_criteria.length > 0) {
-    return new ContractCriteriaStrategy(contract.success_criteria);
-  }
-
-  // 4. Default to FileExistenceStrategy (check basic files exist)
-  return new FileExistenceStrategy([]);
+  // Fail closed: no supported language/toolchain or no executable command
+  // means the deterministic phase cannot verify anything. A contract/file
+  // heuristic could pass here, but that would green-light an unverified
+  // language without evidence.
+  return new UnverifiedLanguageStrategy(projectType);
 }

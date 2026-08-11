@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { IntentContract } from "@yep-anywhere/shared";
+import { PythonChecker } from "./checkers/python.js";
+import { RustChecker } from "./checkers/rust.js";
 import { buildImportGraph, findCycles } from "./import-graph.js";
 import { StructuralStrategy } from "./index.js";
 import { SchemaChecker } from "./schema.js";
@@ -151,6 +153,22 @@ test("TypeScriptChecker: tsc 不存在時 inconclusive 而非假裝通過", asyn
   );
 });
 
+test("TypeScriptChecker: tsc 非零退出且無可解析 diagnostics 時 inconclusive", async () => {
+  await withWorkspace(
+    { "tsconfig.json": "{}", "a.ts": "export const x = 1;" },
+    async (workspacePath) => {
+      const node = `"${process.execPath}"`;
+      const fakeTsc = `${node} -e "console.log('npm error npx canceled'); process.exit(1)"`;
+      const outcome = await new TypeScriptChecker(fakeTsc).run({
+        workspacePath,
+        phase: "structural",
+      });
+      assert.equal(outcome.inconclusive, true);
+      assert.match(outcome.risks[0] ?? "", /退出碼 1/);
+    },
+  );
+});
+
 test("TypeScriptChecker: 無 TS 痕跡時不適用", async () => {
   await withWorkspace({ "readme.md": "hi" }, async (workspacePath) => {
     const outcome = await new TypeScriptChecker().run({
@@ -158,6 +176,78 @@ test("TypeScriptChecker: 無 TS 痕跡時不適用", async () => {
       phase: "structural",
     });
     assert.equal(outcome.applicable, false);
+  });
+});
+
+// --- Python checker ---
+
+test("PythonChecker: 解析 pyright diagnostics 為帶位置的 issues", async () => {
+  await withWorkspace(
+    {
+      "pyproject.toml": "",
+      "src/a.py": "x: int = 's'",
+    },
+    async (workspacePath) => {
+      const node = `"${process.execPath}"`;
+      const fakePyright = `${node} -e "console.log('src/a.py:3:7 - error: \\"int\\" is not assignable to \\"str\\"'); process.exit(2)"`;
+      const outcome = await new PythonChecker(fakePyright).run({
+        workspacePath,
+        phase: "structural",
+      });
+      assert.equal(outcome.applicable, true);
+      assert.equal(outcome.inconclusive, false);
+      assert.equal(outcome.issues.length, 1);
+      assert.equal(outcome.issues[0]?.location?.file, "src/a.py");
+      assert.equal(outcome.issues[0]?.location?.line, 3);
+      assert.match(outcome.issues[0]?.message ?? "", /not assignable/);
+    },
+  );
+});
+
+test("PythonChecker: pyright 不存在時 inconclusive 而非假裝通過", async () => {
+  await withWorkspace({ "src/a.py": "x = 1" }, async (workspacePath) => {
+    const outcome = await new PythonChecker(
+      "definitely-not-a-real-pyright",
+    ).run({
+      workspacePath,
+      phase: "structural",
+    });
+    assert.equal(outcome.inconclusive, true);
+    assert.match(outcome.risks[0] ?? "", /不可執行|無法取得/);
+  });
+});
+
+// --- Rust checker ---
+
+test("RustChecker: 解析 cargo check diagnostics 為帶位置的 issues", async () => {
+  await withWorkspace(
+    {
+      "Cargo.toml": '[package]\nname = "demo"',
+      "src/main.rs": 'fn main() { let x: i32 = "s"; }',
+    },
+    async (workspacePath) => {
+      const node = `"${process.execPath}"`;
+      const fakeCargo = `${node} -e "console.log('src/main.rs:5:9: error[E0308]: mismatched types'); process.exit(101)"`;
+      const outcome = await new RustChecker(fakeCargo).run({
+        workspacePath,
+        phase: "structural",
+      });
+      assert.equal(outcome.applicable, true);
+      assert.equal(outcome.issues.length, 1);
+      assert.equal(outcome.issues[0]?.location?.file, "src/main.rs");
+      assert.match(outcome.issues[0]?.message ?? "", /E0308/);
+    },
+  );
+});
+
+test("RustChecker: cargo 不存在時 inconclusive", async () => {
+  await withWorkspace({ "Cargo.toml": "" }, async (workspacePath) => {
+    const outcome = await new RustChecker("definitely-not-a-real-cargo").run({
+      workspacePath,
+      phase: "structural",
+    });
+    assert.equal(outcome.inconclusive, true);
+    assert.match(outcome.risks[0] ?? "", /不可執行|無法取得/);
   });
 });
 
@@ -256,11 +346,11 @@ test("StructuralStrategy: 乾淨 TS 專案判 passed, tsc log 落 evidence", asy
   );
 });
 
-test("StructuralStrategy: 無適用 checker 時 inconclusive + escalate", async () => {
+test("StructuralStrategy: 無適用 checker 時 unverified + escalate", async () => {
   await withWorkspace({ "readme.md": "hi" }, async (workspacePath) => {
     const { input } = makeInput(workspacePath);
     const report = await new StructuralStrategy().verify(input);
-    assert.equal(report.status, "inconclusive");
+    assert.equal(report.status, "unverified");
     assert.equal(report.recommendation, "escalate");
     assert.match(report.unresolved_risks[0] ?? "", /無適用 checker/);
   });

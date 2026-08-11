@@ -4,13 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { IntentContract, LoopCard } from "@yep-anywhere/shared";
-import { ContractCriteriaStrategy } from "./strategies/contract-criteria.js";
 import { FileContentStrategy } from "./strategies/file-content.js";
 import { FileExistenceStrategy } from "./strategies/file-existence.js";
 import { InteractionAgentStrategy } from "./strategies/interaction/index.js";
 import { RuleBasedStrategy } from "./strategies/rule-based.js";
 import { StructuralStrategy } from "./strategies/structural/index.js";
 import { SubprocessStrategy } from "./strategies/subprocess.js";
+import { UnverifiedLanguageStrategy } from "./strategies/unverified-language.js";
 import { selectVerificationStrategy } from "./strategy-selector.js";
 
 function makeCard(overrides: Partial<LoopCard["loop"]> = {}): LoopCard {
@@ -87,24 +87,24 @@ test("selectVerificationStrategy: uses SubprocessStrategy for Node.js projects",
   }
 });
 
-test("selectVerificationStrategy: uses ContractCriteriaStrategy when success criteria exist", async () => {
+test("selectVerificationStrategy: unknown language fails closed even with success criteria", async () => {
   const card = makeCard();
   const strategy = await selectVerificationStrategy(
     card,
     makeContract(["search-results.md exists", "found 3 candidate issues"]),
     "/tmp/test",
   );
-  assert.ok(strategy instanceof ContractCriteriaStrategy);
+  assert.ok(strategy instanceof UnverifiedLanguageStrategy);
 });
 
-test("selectVerificationStrategy: uses FileExistenceStrategy as fallback", async () => {
+test("selectVerificationStrategy: unknown language uses fail-closed fallback", async () => {
   const card = makeCard();
   const strategy = await selectVerificationStrategy(
     card,
     makeContract(),
     "/tmp/test",
   );
-  assert.ok(strategy instanceof FileExistenceStrategy);
+  assert.ok(strategy instanceof UnverifiedLanguageStrategy);
 });
 
 test("selectVerificationStrategy: rule 掛載 RuleBasedStrategy (P2)", async () => {
@@ -178,7 +178,7 @@ test("selectVerificationStrategy: 缺省 phase 维持 static 行为", async () =
     makeContract(),
     "/tmp/test",
   );
-  assert.ok(strategy instanceof FileExistenceStrategy);
+  assert.ok(strategy instanceof UnverifiedLanguageStrategy);
 });
 
 // --- P1: file_exists / file_contains 被消費 ---

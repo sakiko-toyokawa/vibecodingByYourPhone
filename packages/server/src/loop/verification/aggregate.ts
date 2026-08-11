@@ -32,7 +32,8 @@ export interface AggregatePolicy {
 const SEVERITY: Record<VerifierStatus, number> = {
   passed: 0,
   inconclusive: 1,
-  failed: 2,
+  unverified: 2,
+  failed: 3,
 };
 
 export function aggregateVerifierReports(
@@ -68,7 +69,8 @@ export function aggregateVerifierReports(
   }
 
   // 3. 可重试性
-  const retryable = overall !== "passed" && retryAllowed;
+  const retryable =
+    overall !== "passed" && overall !== "unverified" && retryAllowed;
 
   return {
     overall,

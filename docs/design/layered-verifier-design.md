@@ -1,7 +1,8 @@
 # 分層 Verifier 設計文檔
 
 > 基於現有 Loop 驗證鏈路的漸進式改造方案：確定性檢查 → LSP/結構/Schema 檢查 → Verifier Agent 語義評判。
-> 版本：v1.0 | 日期：2026-08-05
+> 版本：v1.1 | 日期：2026-08-09
+> 實作狀態：Phase 0-7 已落地；本文件保留設計演進脈絡，現況以 `loop-production-readiness-index.md` 為索引。
 
 ---
 
@@ -11,13 +12,14 @@
 
 - `static`：lint、typecheck 等靜態命令（`subprocess-verifier.ts`）。
 - `runtime`：test 等運行時命令（`subprocess-verifier.ts`）。
-- `interaction` / `review`：Phase-1 僅為 placeholder，或僅由 collector 做輔助證據採集（`run-service.ts:2496`）。
+- `interaction`：`InteractionAgentStrategy` 產生 Playwright 驗證腳本並由子程序執行。
+- `review`：Verifier Agent 以 read-only plan session 輸出結構化 verdict；collector 僅保留證據採集角色。
 
 現有瓶頸：
 
 1. 沒有 **結構層**（L3）：無法檢查循環依賴、跨層引用、介面契約、API Schema 一致性。
 2. 沒有 **語義層**（L4）：無法判斷「產出是否符合需求描述、邊界是否覆蓋、風格是否一致」。
-3. `review` 段的 collector 只是讀取證據寫 summary，不產生結構化 verdict。
+3. `review` 段已由 Verifier Agent 產生結構化 verdict；collector 與 judge 的兩次 LLM 調用仍是成本優化空間。
 
 本設計目標是在不改動控制面狀態機與 retry 鏈路的前提下，把驗證層擴展為 **L1 確定性 → L2 規則 → L3 結構 → L4 語義** 的四層模型。
 
@@ -98,7 +100,7 @@ export const VerificationPhaseSchema = z.enum([
   "runtime",     // L1 確定性運行時檢查
   "rule",        // L2 規則檢查（可選）
   "structural",  // L3 結構/語義關係檢查（新增）
-  "interaction", // 仍為 placeholder
+  "interaction", // InteractionAgentStrategy：Playwright 腳本生成 + 執行
   "review",      // L4 Verifier Agent（改造）
 ]);
 ```
@@ -309,6 +311,24 @@ interface ProjectGraphCheck {
 3. **Rubric 評分**：不要簡單 yes/no，按維度評分並給出 confidence。
 4. **對抗性審查**：prompt 中可加入「請找出能欺騙本 verifier 的漏洞」步驟。
 5. **輸出約束**：強制 JSON，無效輸出視為 `inconclusive`。
+
+---
+
+## 6.5 Fail-closed 語意
+
+`VerifierReport.status` 增加 `unverified`，與 `passed` / `failed` /
+`inconclusive` 明確區分：
+
+- `passed`：已用支援的檢查實際驗證過。
+- `failed`：檢查執行成功並發現錯誤。
+- `inconclusive`：檢查執行過但無法得出確定結論。
+- `unverified`：沒有可用的語言/toolchain/checker，或沒有可執行驗證
+  命令；系統沒有能力驗證這個 phase。
+
+聚合順序為 `failed > unverified > inconclusive > passed`。`unverified`
+不 retry、不 complete，控制面走 escalate/needs_human；failure tag 映射為
+`verification_error`。目的是避免小眾語言在 L1 因「未知專案型別 + 空命令」
+靜默 vacuous pass。
 
 ---
 

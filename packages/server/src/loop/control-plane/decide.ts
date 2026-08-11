@@ -17,7 +17,7 @@
  * | ok        | requires_human (any overall)                     | needs_human    |
  * | ok        | overall == failed && retryable && budget 有余量  | retry          |
  * | ok        | overall == failed && retryable && budget 耗尽    | budget_limited |
- * | ok        | failed && !retryable / inconclusive / escalate   | needs_human    |
+ * | ok        | failed && !retryable / inconclusive / unverified / escalate | needs_human |
  *
  * subtask_advance 一行不经 decideControl (ControlDecisionKind 是 run state
  * 词汇, 推進不是状态): run-service 在推进轮短路 (shouldAdvanceSubtask →
@@ -33,8 +33,9 @@
  *   先触者停 — 预算与停止规则.md). A retryable failure with an exhausted
  *   budget is budget_limited (状态机.md: active --预算耗尽--> budget_limited),
  *   not needs_human: there is a well-defined automatic path, just no budget.
- * - failed && !retryable / inconclusive judgments escalate to needs_human —
- *   no automatic path exists, a human decides whether the run stands.
+ * - failed && !retryable / inconclusive / unverified judgments escalate to
+ *   needs_human — no automatic path exists, a human decides whether the run
+ *   stands.
  */
 
 import type { JudgmentReport } from "@yep-anywhere/shared";

@@ -21,6 +21,7 @@
  */
 
 import type {
+  FailureTag,
   IntentContract,
   JudgmentReport,
   LoopCard,
@@ -34,6 +35,7 @@ import {
 } from "@yep-anywhere/shared";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
 import { aggregateVerifierReports } from "./aggregate.js";
+import { failureTagsFromReports } from "./failure-tags.js";
 import { selectVerificationStrategy } from "./strategy-selector.js";
 import { runVerificationCommands } from "./subprocess-verifier.js";
 
@@ -124,6 +126,8 @@ export interface VerifyRunResult {
   reports: VerifierReport[];
   judgment: JudgmentReport;
   refs: VerificationRefs;
+  /** Phase 7: L3/L4 failure signals mapped to the FailureTag vocabulary. */
+  failureTags?: FailureTag[];
 }
 
 /** Phases without a direct implementation get a not_applicable placeholder. */
@@ -408,6 +412,7 @@ export async function verifyRun(
   return {
     reports,
     judgment,
+    failureTags: failureTagsFromReports(reports),
     refs: {
       verification_input: `artifact://${runId}/${inputName}`,
       verifier_runtime: `verifier-runtime://subprocess:${

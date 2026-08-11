@@ -174,6 +174,52 @@ test("passed judgment → complete: state persisted, decision ledgered with budg
   });
 });
 
+test("discardRun: needs_human → discarded with decision entry and resolved listener", async () => {
+  await withFixture(async ({ controlPlane, ledgerStore, stateStore }) => {
+    let resolved: string | null = null;
+    controlPlane.onRunResolved((runId, state) => {
+      if (state === "discarded") resolved = runId;
+    });
+    await controlPlane.applyJudgment(applyInput());
+
+    const updated = await controlPlane.discardRun(
+      "run-1",
+      "user discarded the run",
+    );
+    assert.equal(updated.state, "discarded");
+    assert.equal((await stateStore.load("loop-1"))?.state, "discarded");
+    assert.equal(resolved, "run-1");
+
+    const decisions = await ledgerStore.readDecisionEntries("run-1");
+    const last = at(decisions, decisions.length - 1);
+    assert.equal(last.decision, "discarded");
+    assert.equal(last.reason, "user discarded the run");
+  });
+});
+
+test("discardRun: active run rejects without force and succeeds with force", async () => {
+  await withFixture(async ({ controlPlane, ledgerStore, stateStore }) => {
+    await controlPlane.applyJudgment(
+      applyInput({ judgment: retryableJudgment() }),
+    );
+    await controlPlane.beginTurn("run-1", 2);
+    assert.equal((await stateStore.load("loop-1"))?.state, "active");
+
+    await assert.rejects(
+      () => controlPlane.discardRun("run-1", "discard without force"),
+      (error: unknown) =>
+        error instanceof ControlPlaneError && error.code === "invalid_state",
+    );
+
+    const updated = await controlPlane.discardRun("run-1", "discard active", {
+      force: true,
+    });
+    assert.equal(updated.state, "discarded");
+    const decisions = await ledgerStore.readDecisionEntries("run-1");
+    assert.equal(at(decisions, decisions.length - 1).decision, "discarded");
+  });
+});
+
 test("retryable failure with budget headroom → retry; beginTurn drives retry → active; turn 2 completes", async () => {
   await withFixture(async ({ controlPlane, bus, ledgerStore, stateStore }) => {
     const applied = await controlPlane.applyJudgment(
@@ -897,6 +943,27 @@ test("loop-budget-warning: budget 消耗越过 80% 阈值广播, 一次/run/字�
     assert.equal(retryWarnings.length, 2);
     assert.equal(at(retryWarnings, 1).near_limit, "max_retries");
     assert.equal(at(retryWarnings, 1).retries_used, 1);
+  });
+});
+
+test("loop-budget-warning: token usage crossing LOOP_TOKEN_ALERT_RATIO emits max_tokens warning", async () => {
+  await withFixture(async ({ controlPlane, bus }) => {
+    await controlPlane.applyJudgment(
+      applyInput({
+        budget: { ...DEFAULT_BUDGET, max_tokens: 10 },
+        usage: { tokens: 9, timeMinutes: 1 },
+        judgment: makeJudgment({
+          overall: "passed",
+          next_action: "complete",
+          requires_human: false,
+        }),
+      }),
+    );
+    const warnings = bus.ofType("loop-budget-warning");
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0]?.near_limit, "max_tokens");
+    assert.equal(warnings[0]?.tokens_used, 9);
+    assert.equal(warnings[0]?.max_tokens, 10);
   });
 });
 

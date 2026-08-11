@@ -178,6 +178,18 @@ cd site && npm run build   # Astro check + build（或从根目录运行 pnpm si
 
 在认为任务完成前，先修复所有错误。
 
+## Loop 基准
+
+Loop 模組級基準與 Phase 7 基準：
+
+```bash
+pnpm test:loop-modules           # 31 個 loop 模組 behavior cases
+pnpm test:phase7:full-chain      # 真實 runtime full-chain（需 provider auth）
+pnpm benchmark:phase7            # state log / tsc / token 成本基準
+```
+
+詳細定義見 `docs/plans/phase7-integration-testing-and-benchmark-plan.md`。
+
 ## 依赖安全维护
 
 定期运行 `pnpm audit --prod`，并特别关注 `web-push -> asn1.js -> bn.js` 依赖链。在 `web-push` 上游修复发布前，保持 `bn.js` 处于已补丁状态（当前通过 pnpm override 实现）。

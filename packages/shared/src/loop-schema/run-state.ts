@@ -8,9 +8,9 @@ import { RunStateSchema } from "./run-ledger.js";
  * 见 04-存储约定.md）。
  * 权威定义：docs/spec/02-schema契约.md §7。
  *
- * 阶段 2 起 7 态枚举全部可出现（active / complete / retry / paused /
- * needs_human / failed / budget_limited），由 control-plane 的完整状态机
- * 推进。
+ * 阶段 2 起状态枚举全部可出现（active / complete / retry / paused /
+ * needs_human / failed / budget_limited / discarded），由 control-plane
+ * 的完整状态机推进。
  *
  * 相对 02 §7 的扩展（偏差与 decision.ts 的扩展同口径记录）：
  * - `run_id`：§7 未列出，但阶段 2 的幂等键（run_id + turn + state）与
@@ -57,3 +57,66 @@ export const RunStateRecordSchema = z.object({
   updated_at: z.string().datetime(),
 });
 export type RunStateRecord = z.infer<typeof RunStateRecordSchema>;
+
+/**
+ * Phase 6 append-only state log：
+ * - `state_snapshot`：每次控制面状态迁移 append 一个完整 run_state。
+ * - `checkpoint`：每轮完成后 append，供重启恢复判断是否可自动续跑。
+ * 每个 event 带 schema_version 与 checksum；坏行读取时跳过并回滚到前一个
+ * 有效 event。
+ */
+export const RunStateSnapshotEventSchema = z.object({
+  type: z.literal("state_snapshot"),
+  schema_version: z.number().int().positive().default(2),
+  event_id: z.string(),
+  loop_id: z.string(),
+  record: RunStateRecordSchema,
+  checksum: z.string(),
+  created_at: z.string().datetime(),
+});
+export type RunStateSnapshotEvent = z.infer<typeof RunStateSnapshotEventSchema>;
+
+export const WorkspaceSnapshotSchema = z.object({
+  head: z.string(),
+  status: z.string(),
+});
+export type WorkspaceSnapshot = z.infer<typeof WorkspaceSnapshotSchema>;
+
+export const RunStateCheckpointSchema = z.object({
+  type: z.literal("checkpoint"),
+  schema_version: z.number().int().positive().default(2),
+  event_id: z.string(),
+  loop_id: z.string(),
+  run_id: z.string(),
+  state: RunStateSchema,
+  turn: z.number().int().nonnegative(),
+  workspace_snapshot: WorkspaceSnapshotSchema.nullable(),
+  artifact_manifest_hash: z.string(),
+  checksum: z.string(),
+  created_at: z.string().datetime(),
+});
+export type RunStateCheckpoint = z.infer<typeof RunStateCheckpointSchema>;
+
+export const RunStateEventSchema = z.discriminatedUnion("type", [
+  RunStateSnapshotEventSchema,
+  RunStateCheckpointSchema,
+]);
+export type RunStateEvent = z.infer<typeof RunStateEventSchema>;
+
+/**
+ * machine_state.json — 新 session 的精确恢复载体。machine state 是事实源
+ * 的投影，不做人工阅读用；human_report.md 才是 AU2 八段式交接报告。
+ */
+export const MachineStateSchema = z.object({
+  schema_version: z.number().int().positive().default(2),
+  run_id: z.string(),
+  loop_id: z.string(),
+  turn: z.number().int().nonnegative(),
+  record: RunStateRecordSchema,
+  checkpoint_event_id: z.string().nullable(),
+  artifact_manifest_ref: z.string(),
+  workspace_snapshot: WorkspaceSnapshotSchema.nullable(),
+  checksum: z.string(),
+  created_at: z.string().datetime(),
+});
+export type MachineState = z.infer<typeof MachineStateSchema>;

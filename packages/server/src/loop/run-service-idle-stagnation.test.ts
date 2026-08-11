@@ -293,7 +293,12 @@ async function withFixture(
       stateStore,
     });
   } finally {
-    await rm(dataDir, { recursive: true, force: true });
+    await rm(dataDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    });
   }
 }
 

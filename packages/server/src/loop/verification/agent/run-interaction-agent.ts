@@ -59,15 +59,20 @@ export async function runInteractionAgent(
         return "interaction agent could not start: supervisor queue unavailable";
       }
 
-      const watched = await deps.watchProcess(agentCtx.runId, result as Process, {
-        timeoutMs: Math.max(
-          adapterPolicy.timeoutMs ??
-            (ctx.input.nativeInvocation.timeout_seconds
-              ? ctx.input.nativeInvocation.timeout_seconds * 1000
-              : 0),
-          ctx.card.loop.verification.interaction?.timeout_ms ?? 0,
-        ) || undefined,
-      });
+      const watched = await deps.watchProcess(
+        agentCtx.runId,
+        result as Process,
+        {
+          timeoutMs:
+            Math.max(
+              adapterPolicy.timeoutMs ??
+                (ctx.input.nativeInvocation.timeout_seconds
+                  ? ctx.input.nativeInvocation.timeout_seconds * 1000
+                  : 0),
+              ctx.card.loop.verification.interaction?.timeout_ms ?? 0,
+            ) || undefined,
+        },
+      );
       return (
         watched.finalText ||
         watched.error ||
@@ -101,7 +106,7 @@ function buildInteractionPrompt(
     "",
     "硬性要求：",
     "- 只輸出 JSON，不要輸出 Markdown。",
-    "- JSON shape: { \"script\": string, \"rationale\": string, \"assumptions\": string[] }。",
+    '- JSON shape: { "script": string, "rationale": string, "assumptions": string[] }。',
     "- script 必須從 process.env.INTERACTION_URL 讀取 URL。",
     "- script 必須啟動 browser/page，執行至少一個與 success criteria 相關的 assertion。",
     "- assertion 失敗時讓腳本 throw，成功時正常 exit 0。",

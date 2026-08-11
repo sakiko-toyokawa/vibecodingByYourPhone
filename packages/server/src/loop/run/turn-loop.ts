@@ -6,6 +6,7 @@
  */
 
 import type {
+  FailureTag,
   IntentContract,
   JudgmentReport,
   LoopCard,
@@ -34,7 +35,9 @@ import type {
   ResumeSignal,
 } from "../control-plane/control-plane.js";
 import { retryBackoffMs } from "../control-plane/retry-backoff.js";
+import type { RunStateStore } from "../control-plane/run-state-store.js";
 import type { FailurePatternStore } from "../state/failure-pattern-store.js";
+import { writeDualTrackHandoff } from "../state/handoff.js";
 import type { LoopCardStore } from "../state/loop-card-store.js";
 import type { ProposalStore } from "../state/proposal-store.js";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
@@ -90,6 +93,7 @@ import {
 } from "./workspace.js";
 
 export interface TurnLoopDeps extends RunContextDeps {
+  runStateStore?: RunStateStore;
   supervisor: Supervisor;
   /** Backoff wait between retry turns; injectable for tests. */
   sleep?: (ms: number) => Promise<void>;
@@ -167,6 +171,7 @@ export async function executeRun(
     recentTurnOutputHashes: [],
     recentTurnDiffStatHashes: [],
     recentBlockerFingerprints: [],
+    relation: null,
   };
   try {
     const { card: executableCard, worktree } = await resolveExecutableCard(
@@ -271,6 +276,18 @@ export async function executeRun(
       githubCredentialStore: deps.githubCredentialStore,
       githubToolProvisioner: deps.githubToolProvisioner,
     });
+    if (active.relationId && deps.relationStore) {
+      const relation = deps.relationStore.findById(active.relationId);
+      if (relation) {
+        ctx.relation = relation;
+        runtimeContext.relation = relation;
+        await deps.runLedgerStore.writeArtifact(
+          runId,
+          "relation.json",
+          `${JSON.stringify(relation, null, 2)}\n`,
+        );
+      }
+    }
     // 02 §3 memory packet: 失败模式账本 open 模式的摘要进装配
     // (04 单写者表: assembly 读 failure-patterns)。
     const memoryPacket = buildMemoryPacket(
@@ -597,6 +614,19 @@ export async function runTurns(
         }
       }
 
+      if (outcome.evidence) {
+        outcome.evidence.has_diff = Boolean(diffRef);
+        const required = ctx.card.loop.observability?.required_artifacts ?? [];
+        outcome.evidence.has_required_artifacts = required.some((name) =>
+          artifactRefs.some((ref) => ref.endsWith(`/${name}`)),
+        );
+        outcome.producedEvidence =
+          outcome.evidence.has_final_text ||
+          outcome.evidence.has_runtime_events ||
+          outcome.evidence.has_diff ||
+          outcome.evidence.has_required_artifacts;
+      }
+
       const permissionEventRefs: string[] = [];
       if (ctx.permissionEvents.length > 0) {
         const permissionName =
@@ -611,35 +641,39 @@ export async function runTurns(
         permissionEventRefs.push(`artifact://${runId}/${permissionName}`);
       }
 
-      const collector = await runCollector(
-        {
-          supervisor: deps.supervisor,
-          runLedgerStore: deps.runLedgerStore,
-          watchProcess: async (runId_, proc, opts) => {
-            const result = await watchProcess(runId_, proc, {
-              timeoutMs: opts.timeoutMs,
-              deps,
-              executingProcesses: state.executingProcesses,
-            });
-            return {
-              ok: result.ok,
-              finalText: result.finalText,
-              error: result.error,
-            };
-          },
-        },
-        ctx,
-        outcome,
-        `artifact://${runId}/${stdoutName}`,
-      );
-      if (collector.inputRef) {
-        artifactRefs.push(collector.inputRef);
-      }
-      if (collector.outputRef) {
-        artifactRefs.push(collector.outputRef);
-      }
-      if (collector.reportRef) {
-        artifactRefs.push(collector.reportRef);
+      const collector = ctx.card.loop.verification.review?.judge_only
+        ? null
+        : await runCollector(
+            {
+              supervisor: deps.supervisor,
+              runLedgerStore: deps.runLedgerStore,
+              watchProcess: async (runId_, proc, opts) => {
+                const result = await watchProcess(runId_, proc, {
+                  timeoutMs: opts.timeoutMs,
+                  deps,
+                  executingProcesses: state.executingProcesses,
+                });
+                return {
+                  ok: result.ok,
+                  finalText: result.finalText,
+                  error: result.error,
+                };
+              },
+            },
+            ctx,
+            outcome,
+            `artifact://${runId}/${stdoutName}`,
+          );
+      if (collector) {
+        if (collector.inputRef) {
+          artifactRefs.push(collector.inputRef);
+        }
+        if (collector.outputRef) {
+          artifactRefs.push(collector.outputRef);
+        }
+        if (collector.reportRef) {
+          artifactRefs.push(collector.reportRef);
+        }
       }
 
       // --- verification ---
@@ -652,6 +686,7 @@ export async function runTurns(
       let verificationRan = false;
       let judgment: JudgmentReport | null = null;
       let judgmentRef: string | null = null;
+      let verifierFailureTags: FailureTag[] = [];
       let preVerifySnapshot: WorkspaceSnapshot | null = null;
 
       const requiredPhases = ctx.card.loop.verification.required;
@@ -706,6 +741,7 @@ export async function runTurns(
                             ok: result.ok,
                             finalText: result.finalText,
                             error: result.error,
+                            usage: result.usage,
                           };
                         },
                       },
@@ -729,6 +765,7 @@ export async function runTurns(
                             ok: result.ok,
                             finalText: result.finalText,
                             error: result.error,
+                            usage: result.usage,
                           };
                         },
                       },
@@ -740,14 +777,15 @@ export async function runTurns(
           );
           verificationRefs = verification.refs;
           verificationRan = true;
+          verifierFailureTags = verification.failureTags ?? [];
           // collector 報告恆作為證據合併進 judgment (不充當 verdict);
           // P4 前 review-in-chain 時不合併是怕重複計票 —— 現在 review
           // verdict 由 Verifier Agent 產出, collector 純證據, 恆合併。
-          judgment = collector.reportRef
+          judgment = collector?.reportRef
             ? mergeEvidence(verification.judgment, [collector.reportRef])
             : verification.judgment;
           judgmentRef = verification.refs.judgment_report;
-          if (collector.reportRef) {
+          if (collector?.reportRef) {
             await store.writeArtifact(
               runId,
               verificationArtifactName("judgment-report.json", ctx.turn),
@@ -795,6 +833,7 @@ export async function runTurns(
             ],
           };
           judgmentRef = null;
+          verifierFailureTags = ["runtime_blackbox_error"];
         }
       }
 
@@ -851,6 +890,31 @@ export async function runTurns(
             `${JSON.stringify(judgment, null, 2)}\n`,
           );
         }
+      }
+
+      // Empty-output guard: a successful process that produced no text, no
+      // runtime events, no diff, and none of the declared required artifacts
+      // is not evidence of a completed task. Static lint passing must not
+      // turn that into complete.
+      if (outcome.ok && outcome.producedEvidence === false) {
+        judgment = {
+          overall: "inconclusive",
+          next_action: "needs_human",
+          retryable: false,
+          requires_human: true,
+          evidence: artifactRefs,
+          unresolved_risks: [
+            "executor produced no observable evidence (empty output, no diff, no required artifacts)",
+          ],
+        };
+        verificationRan = true;
+        judgmentRef = null;
+        verifierFailureTags = ["verification_error"];
+        await store.writeArtifact(
+          runId,
+          verificationArtifactName("judgment-report.json", ctx.turn),
+          `${JSON.stringify(judgment, null, 2)}\n`,
+        );
       }
 
       // --- merge gate (worktree 策略 + modify) ---
@@ -1044,6 +1108,7 @@ export async function runTurns(
                 message: outcome.adapterError.message,
               }
             : undefined,
+          verifierFailureTags,
         });
         finalStatus = applied.state;
         retriesUsed = applied.budget.used_retries;
@@ -1078,6 +1143,7 @@ export async function runTurns(
                 message: outcome.adapterError.message,
               }
             : undefined,
+          verifierFailureTags,
         });
         finalStatus = applied.state;
         blockerFingerprint = applied.entry.blocker_fingerprint;
@@ -1110,7 +1176,7 @@ export async function runTurns(
         { runLedgerStore: deps.runLedgerStore },
         ctx,
         {
-          collectorReportRef: collector.reportRef,
+          collectorReportRef: collector?.reportRef ?? null,
           judgmentRef,
           evidenceRefs: judgment?.evidence ?? artifactRefs,
           blockerFingerprint,
@@ -1118,6 +1184,42 @@ export async function runTurns(
         },
       );
       artifactRefs.push(handoffRef);
+
+      // Phase 6 dual-track handoff + checkpoint. The checkpoint is appended
+      // after handoff artifacts so its manifest hash covers the full turn.
+      if (deps.runStateStore && deps.controlPlane) {
+        const runRecord = await deps.controlPlane.getRunState(loopId);
+        if (runRecord && runRecord.run_id === runId) {
+          const previousCheckpoint =
+            await deps.runStateStore.latestCheckpoint(loopId);
+          const workspaceSnapshot = workspacePath
+            ? await captureWorkspaceSnapshot(workspacePath)
+            : null;
+          const dual = await writeDualTrackHandoff(
+            { runLedgerStore: deps.runLedgerStore },
+            ctx,
+            {
+              runStateRecord: runRecord,
+              checkpointEventId: previousCheckpoint?.event_id ?? null,
+              workspaceSnapshot,
+              executionError: outcome.error ?? null,
+              toolUsage: ctx.permissionEvents.map((event) => ({
+                tool: event.tool,
+                purpose: `${event.action} (${event.summary})`,
+              })),
+            },
+          );
+          artifactRefs.push(dual.humanReportRef, dual.machineStateRef);
+          const artifactManifestHash = await store.artifactManifestHash(runId);
+          await deps.runStateStore.appendCheckpoint(loopId, {
+            run_id: runId,
+            state: runRecord.state,
+            turn: runRecord.turn,
+            workspace_snapshot: workspaceSnapshot,
+            artifact_manifest_hash: artifactManifestHash,
+          });
+        }
+      }
 
       // --- per-turn ledger entry ---
       const adapterInfo = describeAdapter(loopRuntime(ctx.card)?.provider);
@@ -1285,8 +1387,9 @@ export async function runTurns(
  * Continue a suspended run after a ResumeSignal (human approve /
  * request_changes, resume signal, budget supplemented): advance the turn,
  * inject the human response (and the previous judgment) as context, run
- * the pre-turn budget check, and re-enter the turn loop on the same
- * session. After a server restart the context is rebuilt from the stores.
+ * the pre-turn budget check, and re-enter the turn loop. The next
+ * executeTurn starts a fresh provider session from the AU2 handoff. After
+ * a server restart the context is rebuilt from the stores.
  */
 export async function continueRun(
   signal: ResumeSignal,
@@ -1397,15 +1500,24 @@ export async function continueRun(
     );
   }
 
-  ctx.turn += 1;
-  const resumeContext = buildHumanResumeContext(
-    signal,
-    ctx.lastJudgment,
-    ctx.lastJudgmentRef,
-  );
-  ctx.pendingContext = ctx.taskPlan
-    ? `${resumeContext}\n\n${buildNextSubtaskContext(ctx.currentSubtaskIndex, ctx.taskPlan)}`
-    : resumeContext;
+  const restartRecoveryActive =
+    signal.cause === "restart_recovery_approve" &&
+    signal.restartRecoveryFromState === "active";
+  if (restartRecoveryActive) {
+    // An active run's checkpoint points at the turn to execute; approval
+    // resumes that same turn instead of skipping it.
+    ctx.pendingContext = null;
+  } else {
+    ctx.turn += 1;
+    const resumeContext = buildHumanResumeContext(
+      signal,
+      ctx.lastJudgment,
+      ctx.lastJudgmentRef,
+    );
+    ctx.pendingContext = ctx.taskPlan
+      ? `${resumeContext}\n\n${buildNextSubtaskContext(ctx.currentSubtaskIndex, ctx.taskPlan)}`
+      : resumeContext;
+  }
   const begin = await controlPlane.beginTurn(signal.runId, ctx.turn);
   if (!begin.ok) {
     state.suspended.set(signal.runId, ctx);
@@ -1435,6 +1547,19 @@ export async function resumeAfterRestart(
     return;
   }
   if (runState.state !== "active" && runState.state !== "retry") {
+    return;
+  }
+
+  const recoveryReason = await findRestartRecoveryReason(
+    deps,
+    loopId,
+    runState,
+  );
+  if (recoveryReason) {
+    console.warn(
+      `[LoopRunService] run ${runState.run_id} for loop '${loopId}' requires restart confirmation: ${recoveryReason}`,
+    );
+    await controlPlane.requestRestartRecovery(loopId, recoveryReason);
     return;
   }
 
@@ -1492,4 +1617,51 @@ export async function resumeAfterRestart(
     );
     releaseRun(ctx.active.runId, state);
   });
+}
+
+/** Returns a reason string when a restart should ask the human first. */
+async function findRestartRecoveryReason(
+  deps: TurnLoopDeps,
+  loopId: string,
+  runState: import("@yep-anywhere/shared").RunStateRecord,
+): Promise<string | null> {
+  if (!deps.runStateStore) {
+    return null; // Legacy test wiring: keep previous auto-resume behavior.
+  }
+  const checkpoint = await deps.runStateStore.latestCheckpoint(loopId);
+  if (!checkpoint) {
+    return `no checkpoint found for ${runState.state} run at turn ${runState.turn}`;
+  }
+  const sameRun = checkpoint.run_id === runState.run_id;
+  const sameState =
+    checkpoint.state === runState.state ||
+    (checkpoint.state === "active" && runState.state === "active");
+  const sameTurn =
+    checkpoint.turn === runState.turn ||
+    (checkpoint.state === "active" &&
+      runState.state === "active" &&
+      checkpoint.turn === runState.turn - 1);
+  if (!sameRun || !sameState || !sameTurn) {
+    return `checkpoint does not match persisted ${runState.state} state (checkpoint run=${checkpoint.run_id}, state=${checkpoint.state}, turn=${checkpoint.turn})`;
+  }
+  const integrity = await deps.runLedgerStore.verifyArtifactIntegrity(
+    runState.run_id,
+  );
+  if (!integrity.ok) {
+    return `external artifact mismatch: ${integrity.mismatches
+      .map((item) => item.name)
+      .join(", ")}`;
+  }
+  const stored = deps.loopCardStore.getLoop(loopId);
+  const workspacePath = stored?.card.loop.workspace.path;
+  if (workspacePath && checkpoint.workspace_snapshot) {
+    const current = await captureWorkspaceSnapshot(workspacePath);
+    if (
+      current &&
+      workspaceSnapshotChanged(checkpoint.workspace_snapshot, current)
+    ) {
+      return "workspace changed since the last checkpoint";
+    }
+  }
+  return null;
 }

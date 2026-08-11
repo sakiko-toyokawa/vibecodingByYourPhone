@@ -17,6 +17,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { Budget, RunState } from "@yep-anywhere/shared";
+import { redactForHumanReport } from "./redact.js";
 
 /** 投影所需的 run 状态快照 (取自迁移后的 RunStateRecord)。 */
 export interface StateMdSnapshot {
@@ -47,17 +48,21 @@ function budgetLine(label: string, used: number, max: number): string {
 }
 
 function renderStateMd(snapshot: StateMdSnapshot): string {
+  const loopId = redactForHumanReport(snapshot.loopId);
+  const runId = redactForHumanReport(snapshot.runId);
+  const sessionRef = redactForHumanReport(snapshot.sessionRef ?? "none");
+  const updatedAt = redactForHumanReport(snapshot.updatedAt);
   const lines: string[] = [
-    `# Loop State: ${snapshot.loopId}`,
+    `# Loop State: ${loopId}`,
     "",
     "<!-- 人可读投影: 事实源在 ~/.yep-anywhere/loops/, 本文件由 control-plane 状态迁移时整体重写, 请勿手改。 -->",
     "",
-    `- **loop_id**: ${snapshot.loopId}`,
-    `- **run_id**: ${snapshot.runId}`,
+    `- **loop_id**: ${loopId}`,
+    `- **run_id**: ${runId}`,
     `- **state**: ${snapshot.state}`,
     `- **turn**: ${snapshot.turn}`,
-    `- **session_ref**: ${snapshot.sessionRef ?? "none"}`,
-    `- **updated_at**: ${snapshot.updatedAt}`,
+    `- **session_ref**: ${sessionRef}`,
+    `- **updated_at**: ${updatedAt}`,
     "",
   ];
   if (snapshot.budget) {

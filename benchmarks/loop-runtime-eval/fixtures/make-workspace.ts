@@ -39,9 +39,52 @@ export async function makeTestWorkspace(
   );
 
   await mkdir(join(dir, "src"), { recursive: true });
+  await mkdir(join(dir, ".verifier"), { recursive: true });
   await writeFile(
     join(dir, "src", "index.js"),
     "export function answer() { return 42; }\n",
+  );
+  await writeFile(
+    join(dir, "src", "index.ts"),
+    'export function describeAnswer(): string {\n  return "The answer is 42";\n}\n',
+  );
+  await writeFile(
+    join(dir, "tsconfig.json"),
+    `${JSON.stringify(
+      {
+        compilerOptions: {
+          target: "ES2022",
+          module: "ESNext",
+          moduleResolution: "Bundler",
+          strict: true,
+          noEmit: true,
+          skipLibCheck: true,
+        },
+        include: ["src/**/*.ts"],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    join(dir, ".verifier", "rules.json"),
+    `${JSON.stringify(
+      {
+        version: 1,
+        rules: [
+          {
+            name: "no-hardcoded-secrets",
+            pattern: "secret",
+            severity: "error",
+            message: "Detected a likely hardcoded secret",
+            suggestion: "Move the value to environment configuration",
+            scope: "changed",
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
   );
 
   await writeFile(

@@ -65,6 +65,7 @@ export function ConnectedAppContent({ children }: { children: ReactNode }) {
     dismiss,
     unsafeToRestart,
     workerActivity,
+    activeLoopRuns,
   } = useReloadNotifications();
 
   const showRelayResumeWarning = useMemo(() => {
@@ -118,6 +119,7 @@ export function ConnectedAppContent({ children }: { children: ReactNode }) {
           onDismiss={() => dismiss("backend")}
           unsafeToRestart={unsafeToRestart}
           activeWorkers={workerActivity.activeWorkers}
+          activeLoopRuns={activeLoopRuns}
         />
       )}
       {isManualReloadMode && pendingReloads.frontend && (

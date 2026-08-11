@@ -76,6 +76,7 @@ function AppContent({ children }: Props) {
     dismiss,
     unsafeToRestart,
     workerActivity,
+    activeLoopRuns,
   } = useReloadNotifications();
 
   return (
@@ -89,6 +90,7 @@ function AppContent({ children }: Props) {
             onDismiss={() => dismiss("backend")}
             unsafeToRestart={unsafeToRestart}
             activeWorkers={workerActivity.activeWorkers}
+            activeLoopRuns={activeLoopRuns}
           />
         )}
         {isManualReloadMode && pendingReloads.frontend && (

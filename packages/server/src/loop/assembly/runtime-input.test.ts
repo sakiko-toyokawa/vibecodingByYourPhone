@@ -68,6 +68,37 @@ test("github_prompt loops assemble as agent-led GitHub repair runs", () => {
   assert.match(input.prompt, /去寻找 agent 项目的 bug 修复/);
 });
 
+test("relation context switches prompt into maintenance mode", () => {
+  const card = githubPromptCard();
+  const contract = buildIntentContract(card, {
+    runId: "run-relation",
+    source: "webhook",
+  });
+  const input = assembleRuntimeInput(card, contract, [], {
+    github: { ghPath: "E:/tools/gh/bin/gh.exe", token: "t" },
+    relation: {
+      relation_id: "rel-1",
+      loop_id: card.loop.id,
+      subject: {
+        type: "github_pr",
+        repository: "open-multi-agent/open-multi-agent",
+        pr_number: 490,
+        branch: "fix/488-isolate-oma-model-in-runtime-tests",
+      },
+      state: "awaiting_feedback",
+      last_processed: {},
+      feedback_count: 0,
+      repair_count: 0,
+      created_at: "2026-08-11T00:00:00.000Z",
+      updated_at: "2026-08-11T00:00:00.000Z",
+    },
+  });
+  assert.match(input.prompt, /外部關係維護模式/);
+  assert.match(input.prompt, /relation_id: rel-1/);
+  assert.match(input.prompt, /pr_number: 490/);
+  assert.match(input.prompt, /不要重新搜尋新 issue/);
+});
+
 test("assembled prompt requires the marked executor summary block (02 §5)", () => {
   const card = githubPromptCard();
   const contract = buildIntentContract(card, {
@@ -111,7 +142,7 @@ test("extractExecutorSummary: extracts the marked block, null when absent", () =
 
 test("policy bridge guard: codex allowed (06 #39), unverified bridges fail-closed (06 #24)", () => {
   // codex 桥策略投影已接线 (policyHookWired → on-request/read-only)——
-  // 装配放行, 且 policyProjection.sandbox 如实记 read-only
+  // 装配放行, 且 policyProjection 按合约安全等级记录原生 sandbox
   const codexCard = {
     loop: {
       ...githubPromptCard().loop,
@@ -126,7 +157,11 @@ test("policy bridge guard: codex allowed (06 #39), unverified bridges fail-close
     codexInput.policyProfile?.policy_profile,
     "github_issue_local_fix",
   );
-  assert.equal(codexInput.policyProjection?.sandbox, "read-only");
+  assert.equal(codexInput.policyProjection?.sandbox, "danger-full-access");
+  assert.equal(
+    codexInput.policyProjection?.approval_or_permission_mode,
+    "untrusted+bypassPermissions",
+  );
   assert.equal(codexInput.nativeInvocation.bridge, "app_server");
 
   // 未接线桥 (gemini 等) 仍 fail-closed

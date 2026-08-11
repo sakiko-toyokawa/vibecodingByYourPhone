@@ -46,6 +46,7 @@ export const VerifierStatusSchema = z.enum([
   "passed",
   "failed",
   "inconclusive",
+  "unverified",
 ]);
 export type VerifierStatus = z.infer<typeof VerifierStatusSchema>;
 
@@ -119,7 +120,7 @@ export const JudgmentNextActionSchema = z.enum([
 export type JudgmentNextAction = z.infer<typeof JudgmentNextActionSchema>;
 
 export const JudgmentReportSchema = z.object({
-  // 各 verifier_report status 的最差级：failed > inconclusive > passed
+  // 各 verifier_report status 的最差级：failed > unverified > inconclusive > passed
   overall: VerifierStatusSchema,
   next_action: JudgmentNextActionSchema,
   // 策略规则依据 overall / next_action 判定

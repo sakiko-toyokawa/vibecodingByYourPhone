@@ -14,6 +14,7 @@ import { test } from "node:test";
 import type { RunLedgerEntry, RunStateRecord } from "@yep-anywhere/shared";
 import { RunStateStore } from "../control-plane/run-state-store.js";
 import { runLoopStorageCleanup } from "./cleanup.js";
+import { listColdArchives, readColdLedger } from "./cold-storage.js";
 import { LearningEventStore } from "./learning-event-store.js";
 import { RunLedgerStore } from "./run-ledger-store.js";
 
@@ -112,7 +113,7 @@ async function seedRun(
   await store.writeArtifact(runId, "runtime-events.jsonl", "{}\n");
 }
 
-test("超保留线的账本压缩 + artifacts 裁剪 (终态保留最小证据)", async () => {
+test("超保留线的 run 冷归档 + hot 移除 (终态最小证据入 cold)", async () => {
   const dataDir = await mkdtemp(join(tmpdir(), "yep-cleanup-"));
   try {
     const store = new RunLedgerStore({ dataDir });
@@ -129,14 +130,12 @@ test("超保留线的账本压缩 + artifacts 裁剪 (终态保留最小证据)"
       { keepRunsPerLoop: 1 },
     );
 
-    assert.equal(result.ledgersCompressed, 1);
-    // 旧账本只剩 run_ledger_entry 行
-    const oldRaw = await readFile(
-      join(dataDir, "loops", "runs", "run-old.jsonl"),
-      "utf-8",
-    );
-    assert.ok(!oldRaw.includes("decision_entry"));
-    assert.ok(oldRaw.includes("run_ledger_entry"));
+    assert.equal(result.archivesCreated, 1);
+    assert.equal(result.ledgersCompressed, 0);
+    const oldRaw = await readColdLedger(store, "run-old");
+    assert.ok(oldRaw?.includes("run_ledger_entry"));
+    assert.ok(oldRaw?.includes("decision_entry"));
+    assert.equal((await listColdArchives(store)).length, 1);
     // 新账本原样
     const newRaw = await readFile(
       join(dataDir, "loops", "runs", "run-new.jsonl"),
@@ -144,20 +143,18 @@ test("超保留线的账本压缩 + artifacts 裁剪 (终态保留最小证据)"
     );
     assert.ok(newRaw.includes("decision_entry"));
 
-    // 旧 run (complete): judgment-report 与 diff 保留, 其余删除
-    const oldArtifacts = await readdir(
-      join(dataDir, "loops", "artifacts", "run-old"),
+    // 旧 run 的 hot artifacts 已整体移除
+    await assert.rejects(
+      readdir(join(dataDir, "loops", "artifacts", "run-old")),
     );
-    assert.deepEqual(oldArtifacts.sort(), [
-      "diff.patch",
-      "judgment-report.json",
-    ]);
-    assert.ok(result.artifactFilesDeleted >= 2);
     // 新 run artifacts 原样
     const newArtifacts = await readdir(
       join(dataDir, "loops", "artifacts", "run-new"),
     );
-    assert.equal(newArtifacts.length, 4);
+    assert.equal(
+      newArtifacts.filter((name) => name !== "manifest.jsonl").length,
+      4,
+    );
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }
@@ -185,7 +182,10 @@ test("非终态 run 的一切受保护 (活跃扫描)", async () => {
     const artifacts = await readdir(
       join(dataDir, "loops", "artifacts", "run-active"),
     );
-    assert.equal(artifacts.length, 4);
+    assert.equal(
+      artifacts.filter((name) => name !== "manifest.jsonl").length,
+      4,
+    );
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }

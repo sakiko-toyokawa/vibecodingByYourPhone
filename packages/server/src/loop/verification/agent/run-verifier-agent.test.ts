@@ -143,3 +143,146 @@ test("runVerifierAgent: 合法 JSON 輸出解析為 verdict", async () => {
     await rm(workspace, { recursive: true, force: true, maxRetries: 5 });
   }
 });
+
+test("runVerifierAgent: invalid JSON 會帶 validation error 重新生成一次", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-agent-retry-"));
+  const workspace = await mkdtemp(join(tmpdir(), "yep-agent-retry-ws-"));
+  try {
+    const store = new RunLedgerStore({ dataDir });
+    const runId = "run-agent-retry-1";
+    const ctx = makeCtx(workspace, runId);
+    ctx.input = {
+      cwd: workspace,
+      permissions: {},
+      env: {},
+      adapterPolicy: undefined,
+      nativeInvocation: { timeout_seconds: null },
+    } as never;
+    const prompts: string[] = [];
+    let attempts = 0;
+    const report = await runVerifierAgent(
+      {
+        supervisor: {
+          startSession: async (_cwd: string, options: { text: string }) => {
+            prompts.push(options.text);
+            return { fake: true };
+          },
+        } as never,
+        runLedgerStore: store,
+        watchProcess: async () => {
+          attempts += 1;
+          if (attempts === 1) {
+            return {
+              ok: true,
+              finalText:
+                "No further work is pending. The verdict is passed, stop.",
+            };
+          }
+          return {
+            ok: true,
+            finalText: JSON.stringify({
+              status: "passed",
+              recommendation: "stop",
+              confidence: 0.9,
+            }),
+          };
+        },
+      },
+      ctx,
+      {
+        contract: ctx.contract as never,
+        runId,
+        turn: 1,
+        workspacePath: workspace,
+        priorReports: [],
+        evidenceRefs: {
+          diff: null,
+          stdout: null,
+          runtime_events: null,
+          executor_summary: null,
+        },
+      },
+    );
+    assert.equal(attempts, 2);
+    assert.equal(report.status, "passed");
+    assert.equal(report.recommendation, "stop");
+    assert.equal(prompts.length, 2);
+    assert.ok(prompts[1]?.includes("Previous output was rejected"));
+    assert.ok(prompts[1]?.includes("no JSON object found"));
+    assert.ok(
+      (await store.readArtifact(runId, "verifier-agent-output-retry1.log")) !==
+        undefined,
+    );
+  } finally {
+    await rm(dataDir, { recursive: true, force: true, maxRetries: 5 });
+    await rm(workspace, { recursive: true, force: true, maxRetries: 5 });
+  }
+});
+
+test("runVerifierAgent: recovery retry 仍失敗時保留兩次輸出證據", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-agent-retry2-"));
+  const workspace = await mkdtemp(join(tmpdir(), "yep-agent-retry2-ws-"));
+  try {
+    const store = new RunLedgerStore({ dataDir });
+    const runId = "run-agent-retry-2";
+    const ctx = makeCtx(workspace, runId);
+    ctx.input = {
+      cwd: workspace,
+      permissions: {},
+      env: {},
+      adapterPolicy: undefined,
+      nativeInvocation: { timeout_seconds: null },
+    } as never;
+    let attempts = 0;
+    const report = await runVerifierAgent(
+      {
+        supervisor: {
+          startSession: async () => ({ fake: true }),
+        } as never,
+        runLedgerStore: store,
+        watchProcess: async () => {
+          attempts += 1;
+          return {
+            ok: true,
+            finalText: "I still don't understand JSON.",
+          };
+        },
+      },
+      ctx,
+      {
+        contract: ctx.contract as never,
+        runId,
+        turn: 1,
+        workspacePath: workspace,
+        priorReports: [],
+        evidenceRefs: {
+          diff: null,
+          stdout: null,
+          runtime_events: null,
+          executor_summary: null,
+        },
+      },
+    );
+    assert.equal(attempts, 2);
+    assert.equal(report.status, "inconclusive");
+    assert.equal(report.recommendation, "escalate");
+    assert.ok(
+      report.unresolved_risks.some((risk) =>
+        risk.includes("recovery retry failed"),
+      ),
+    );
+    assert.ok(
+      report.evidence_refs.some((ref) =>
+        ref.endsWith("verifier-agent-output.log"),
+      ),
+    );
+    assert.ok(
+      report.evidence_refs.some((ref) =>
+        ref.endsWith("verifier-agent-output-retry1.log"),
+      ),
+    );
+  } finally {
+    await rm(dataDir, { recursive: true, force: true, maxRetries: 5 });
+    await rm(workspace, { recursive: true, force: true, maxRetries: 5 });
+  }
+});

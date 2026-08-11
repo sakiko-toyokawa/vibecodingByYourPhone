@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   IntentContract,
   JudgmentReport,
@@ -46,6 +47,23 @@ const RUBRIC = [
   { criterion: "無邏輯漏洞", weight: 0.1 },
 ];
 
+/** L4 prompt inline evidence cap. Larger evidence stays in artifacts. */
+export const MAX_VERIFIER_INPUT_CHARS = 64_000;
+
+function boundedJson(value: unknown, label: string): unknown {
+  const raw = JSON.stringify(value, null, 2);
+  if (raw.length <= MAX_VERIFIER_INPUT_CHARS) {
+    return value;
+  }
+  return {
+    truncated: true,
+    label,
+    original_chars: raw.length,
+    sha256: createHash("sha256").update(raw).digest("hex"),
+    instruction: `完整內容已落盤並以 artifact ref 提供；請回讀 ${label} 的完整 artifact，不要猜測。`,
+  };
+}
+
 export function buildVerifierAgentPrompt(bundle: VerifierAgentBundle): string {
   return [
     "你是 Verifier Agent（L4 語義評判）。你是 judge，不是 fixer：只能閱讀證據、輸出裁決，嚴禁修改任何檔案。",
@@ -57,16 +75,20 @@ export function buildVerifierAgentPrompt(bundle: VerifierAgentBundle): string {
     "3. 給出總裁決。",
     "",
     "## 需求與驗收標準",
-    JSON.stringify(bundle.requirement, null, 2),
+    JSON.stringify(boundedJson(bundle.requirement, "requirement"), null, 2),
     "",
     "## 下層檢查報告（L1-L3，已通過/已執行）",
-    JSON.stringify(bundle.prior_reports, null, 2),
+    JSON.stringify(boundedJson(bundle.prior_reports, "prior_reports"), null, 2),
     "",
     "## 上一輪裁決（如有；不要重複已解決的問題）",
-    JSON.stringify(bundle.previous_judgment, null, 2),
+    JSON.stringify(
+      boundedJson(bundle.previous_judgment, "previous_judgment"),
+      null,
+      2,
+    ),
     "",
     "## 證據引用（可用 Read/Grep/Glob 回讀 workspace 與 artifact 內容）",
-    JSON.stringify(bundle.evidence_refs, null, 2),
+    JSON.stringify(boundedJson(bundle.evidence_refs, "evidence_refs"), null, 2),
     `輸入包: ${bundle.input_ref}`,
     `workspace: ${bundle.workspace_path}`,
     "",
@@ -97,6 +119,33 @@ export function buildVerifierAgentPrompt(bundle: VerifierAgentBundle): string {
     "```",
     "",
     "裁決口徑：下層已 failed 的問題不重複判；你的職責是下層檢查看不到的語義層（需求對齊/邊界/風格/邏輯漏洞）。證據不足 = inconclusive，不要猜。",
+  ].join("\n");
+}
+
+/**
+ * Corrective retry prompt for structured output recovery. The original
+ * requirement is kept verbatim so the retry is a fresh, self-contained
+ * session rather than an implicit conversation continuation.
+ */
+export function buildVerifierAgentRecoveryPrompt(input: {
+  basePrompt: string;
+  previousOutput: string;
+  validationError: string;
+}): string {
+  const previous = input.previousOutput.replace(/```/g, "'''").slice(0, 8_000);
+  return [
+    input.basePrompt,
+    "",
+    "## Previous output was rejected",
+    "Your previous output was not accepted as valid JSON. Do not repeat or explain it.",
+    "Return ONLY the JSON object described above, with no prose, markdown, or extra text.",
+    "",
+    `Validation error: ${input.validationError}`,
+    "",
+    "Previous output:",
+    "```text",
+    previous || "(empty)",
+    "```",
   ].join("\n");
 }
 

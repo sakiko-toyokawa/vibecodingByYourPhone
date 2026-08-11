@@ -137,6 +137,7 @@ export async function transition(
     to === "complete" ||
     to === "failed" ||
     to === "budget_limited" ||
+    to === "discarded" ||
     (entry.failure_tags?.length ?? 0) > 0
   ) {
     const event: LearningEvent = {
@@ -169,13 +170,17 @@ export function attributeFailureTags(
   if (input.adapterFailure) {
     tags.add(input.adapterFailure.failureTag);
   }
-  if (input.policyEscalation) {
+  if (input.policyEscalation && !input.policyEscalation.reviewable) {
     tags.add("policy_error");
+  }
+  for (const tag of input.verifierFailureTags ?? []) {
+    tags.add(tag);
   }
   if (
     input.judgment &&
     (input.judgment.overall === "failed" ||
-      input.judgment.overall === "inconclusive")
+      input.judgment.overall === "inconclusive" ||
+      input.judgment.overall === "unverified")
   ) {
     tags.add("verification_error");
   }

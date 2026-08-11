@@ -108,15 +108,18 @@ export async function runVerificationCommands(
   const { phase, commands, writeEvidence } = options;
 
   if (commands.length === 0) {
-    // No commands configured or detected: nothing to verify, so the phase
-    // passes vacuously (do not escalate — empty workspace is not a failure).
+    // Fail closed: no command means this phase could not verify anything.
+    // `unverified` is distinct from `failed` (nothing broke) and `passed`
+    // (nothing was actually checked), so the chain cannot green-light it.
     return {
       verifier_phase: phase,
-      status: "passed",
+      status: "unverified",
       evidence_refs: [],
-      unresolved_risks: [],
-      recommendation: "stop",
-      confidence: 0.9,
+      unresolved_risks: [
+        `no verification command configured or detected for phase '${phase}'; language/toolchain is unverified`,
+      ],
+      recommendation: "escalate",
+      confidence: 0.5,
       requires_human: false,
     };
   }

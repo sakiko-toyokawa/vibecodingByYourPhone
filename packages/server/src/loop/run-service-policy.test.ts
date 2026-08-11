@@ -27,6 +27,7 @@ import type { ToolApprovalHook } from "../supervisor/types.js";
 import { ControlPlane } from "./control-plane/control-plane.js";
 import { RunStateStore } from "./control-plane/run-state-store.js";
 import { LoopRunService } from "./run-service.js";
+import { buildCollectorPrompt } from "./run/artifacts.js";
 import type { LoopCardStore } from "./state/loop-card-store.js";
 import { RunLedgerStore } from "./state/run-ledger-store.js";
 import type { VerifyRunResult } from "./verification/verify-run.js";
@@ -147,9 +148,17 @@ function makeCard(withPolicy: boolean): LoopCard {
       trigger: { type: "manual" },
       workspace: { strategy: "direct", path: WS },
       verification: { required: ["static"] },
+      handoff: { task: "fix src/foo.ts" },
       persistence: { state_file: "state/loop-policy.json" },
       stop_rules: { max_turns: 3, max_time_minutes: 30, max_retries: 2 },
-      ...(withPolicy ? { policy: { approval_mode: "bypass" as const } } : {}),
+      ...(withPolicy
+        ? {
+            policy: {
+              profile: "workspace_local_fix" as const,
+              approval_mode: "bypass" as const,
+            },
+          }
+        : {}),
     },
   };
 }
@@ -368,7 +377,7 @@ test("hard gate smoke: git merge under bypass is denied and the run escalates to
       const control = decisions.find((d) => d.decision === "needs_human");
       assert.ok(control, "needs_human control decision ledgered");
       assert.match(control.reason, /policy gate 'merge'/);
-      assert.deepEqual(control.policy_refs, ["policy://loop_bypass"]);
+      assert.deepEqual(control.policy_refs, ["policy://workspace_local_fix"]);
 
       // 02 §3 policy_projection 快照落 artifact
       const projection = await ledgerStore.readArtifact(
@@ -377,7 +386,7 @@ test("hard gate smoke: git merge under bypass is denied and the run escalates to
       );
       assert.ok(projection, "policy projection artifact written");
       const parsed = JSON.parse(projection);
-      assert.equal(parsed.policy_intent_ref, "policy://loop_bypass");
+      assert.equal(parsed.policy_intent_ref, "policy://workspace_local_fix");
       assert.deepEqual(parsed.hard_gates, [
         "merge",
         "deploy",
@@ -399,7 +408,7 @@ test("hard gate smoke: git merge under bypass is denied and the run escalates to
       );
       assert.match(
         latest?.runtime.adapter_capability_snapshot ?? "",
-        /policy=loop_bypass/,
+        /policy=workspace_local_fix/,
       );
       assert.match(
         latest?.runtime.adapter_capability_snapshot ?? "",
@@ -550,7 +559,9 @@ test("bypass smoke: workspace write self-approves with audit, run completes unat
       assert.match(audits[0]?.reason ?? "", /tool=Write/);
       assert.match(audits[1]?.reason ?? "", /tool=Bash/);
       assert.ok(
-        audits.every((d) => d.policy_refs.includes("policy://loop_bypass")),
+        audits.every((d) =>
+          d.policy_refs.includes("policy://workspace_local_fix"),
+        ),
       );
     },
   );
@@ -589,5 +600,18 @@ test("legacy card without policy: no hook, plan mode, read-only prompt (unchange
         /permissionMode=plan/,
       );
     },
+  );
+});
+
+test("collector prompt exposes artifact dir and forbids Bash enumeration", () => {
+  const prompt = buildCollectorPrompt("artifact://run-1/collector-input.json", {
+    run_id: "run-1",
+    artifact_dir: "C:/data/loops/artifacts/run-1",
+  });
+  assert.match(prompt, /C:\/data\/loops\/artifacts\/run-1/);
+  assert.match(prompt, /Use Read\/Glob\/Grep/);
+  assert.match(
+    prompt,
+    /Do not use Bash to enumerate server-managed directories/,
   );
 });

@@ -32,7 +32,7 @@ import {
   type TaskPlan,
 } from "@yep-anywhere/shared";
 
-export type ContractSource = "cron" | "manual";
+export type ContractSource = "cron" | "manual" | "webhook" | "resume";
 
 /** stop_rules / budget 校验失败（构造期兜底；正常路径 API 层已 400）。 */
 export class ContractValidationError extends Error {

@@ -90,6 +90,8 @@ export const PolicyProfileSchema = z.object({
   policy_profile: z.string(),
   approval_mode: ApprovalModeSchema,
   risk_rules: RiskRulesSchema,
+  /** Direct workspaces require explicit opt-in before mutating actions. */
+  allow_direct_mutations: z.boolean().optional(),
   // 本轮启用的硬闸门（七项的子集）；命中即升级人工
   hard_gates: z.array(HardGateActionSchema),
   // approval_mode == "bypass" 时的自批准允许范围；缺省视为全允许

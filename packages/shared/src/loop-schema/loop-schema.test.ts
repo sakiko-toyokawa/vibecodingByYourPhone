@@ -255,6 +255,14 @@ test("VerifierReport: confidence 超出 0–1 应失败", () => {
   assert.equal(VerifierReportSchema.safeParse(invalid).success, false);
 });
 
+test("VerifierReport: unverified status is accepted separately from pass/error", () => {
+  const unverified = structuredClone(verifierReportExample);
+  unverified.status = "unverified";
+  const result = VerifierReportSchema.safeParse(unverified);
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+  assert.equal(result.data?.status, "unverified");
+});
+
 test("LoopCard: 旧卡（无 verification.commands）向后兼容 parse 通过", () => {
   const result = LoopCardSchema.safeParse(loopCardExample);
   assert.equal(result.success, true, JSON.stringify(result.error?.issues));

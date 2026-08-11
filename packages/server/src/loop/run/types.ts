@@ -21,6 +21,7 @@ import type {
   PermissionEvent,
   PolicyEscalation,
 } from "../policy/approval-hook.js";
+import type { RelationRecord } from "../relation/relation-store.js";
 
 export interface GithubCredentialStore {
   getToken(): Promise<string | null>;
@@ -35,6 +36,7 @@ export interface ActiveRun {
   loopId: string;
   source: ContractSource;
   createdAt: string;
+  relationId?: string;
 }
 
 export interface ExecutionOutcome {
@@ -51,6 +53,14 @@ export interface ExecutionOutcome {
    *  runtime-events artifact and referenced by the verification input
    *  (02 §5 runtime_event_refs / structured_output). */
   runtimeEvents?: unknown[];
+  /** Whether the turn produced observable evidence. Missing for legacy paths. */
+  evidence?: {
+    has_final_text: boolean;
+    has_runtime_events: boolean;
+    has_diff: boolean;
+    has_required_artifacts: boolean;
+  };
+  producedEvidence?: boolean;
 }
 
 export interface CollectorOutcome {
@@ -71,7 +81,8 @@ export interface RunExecutionContext {
   contractJson: string | null;
   input: RuntimeInput | null;
   turn: number;
-  /** Session ref shared by all turns (resumeSession target); null pre-turn-1. */
+  /** Latest turn's provider session ref for audit/run_state/handoff; loop
+   *  turns never resume it. Each executeTurn starts a fresh session. */
   sessionRef: string | null;
   lastJudgment: JudgmentReport | null;
   lastJudgmentRef: string | null;
@@ -110,6 +121,9 @@ export interface RunExecutionContext {
   recentTurnDiffStatHashes: string[];
   /** Most recent blocker fingerprints, used for loop/dead-loop detection. */
   recentBlockerFingerprints: string[];
+  /** Durable external relationship this run is maintaining, when started
+   *  from a relation-aware trigger. */
+  relation?: RelationRecord | null;
 }
 
 /** Public projection of a run for routes; kept here to share with ledger-summary. */

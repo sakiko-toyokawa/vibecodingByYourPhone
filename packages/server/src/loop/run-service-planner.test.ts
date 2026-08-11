@@ -17,17 +17,29 @@ import { LoopCardStore } from "./state/loop-card-store.js";
 import { RunLedgerStore } from "./state/run-ledger-store.js";
 import type { VerifyRunResult } from "./verification/verify-run.js";
 
-const SESSION_ID = "session-planner-test";
+let sessionCounter = 0;
 
 class FakeSupervisor {
-  readonly calls: { method: string; text: string }[] = [];
+  readonly calls: {
+    method: string;
+    text: string;
+    isCollector: boolean;
+    sessionId: string;
+  }[] = [];
 
   async startSession(
     _cwd: string,
     message: { text: string },
   ): Promise<Process> {
-    this.calls.push({ method: "start", text: message.text });
-    return this.makeProcess(SESSION_ID);
+    const isCollector = message.text.startsWith("Collector input bundle:");
+    const sessionId = `session-planner-${++sessionCounter}`;
+    this.calls.push({
+      method: "start",
+      text: message.text,
+      isCollector,
+      sessionId,
+    });
+    return this.makeProcess(sessionId);
   }
 
   async resumeSession(
@@ -35,7 +47,12 @@ class FakeSupervisor {
     _cwd: string,
     message: { text: string },
   ): Promise<Process> {
-    this.calls.push({ method: "resume", text: message.text });
+    this.calls.push({
+      method: "resume",
+      text: message.text,
+      isCollector: false,
+      sessionId,
+    });
     return this.makeProcess(sessionId);
   }
 
@@ -428,13 +445,16 @@ test("planner retry re-runs the same subtask instead of skipping ahead", async (
     // 回归 (turn↔subtask 解耦): retry 消耗轮次但不推进子任务 —— 重试轮
     // 必须重做 subtask-1 (轮首不再按 turn-1 同步索引, 否则 subtask-1 从未
     // 通过却被跳过, 账本还记它 passed)。collector 每轮另起 startSession,
-    // 轮次续跑只看 resume 调用。
-    const resumeCalls = supervisor.calls.filter((c) => c.method === "resume");
-    assert.equal(resumeCalls.length, 2, "retry turn + advance turn");
-    const retryCall = resumeCalls[0];
-    const advanceCall = resumeCalls[1];
+    // executor 每轮也都开 fresh session。
+    const executorCalls = supervisor.calls.filter((call) => !call.isCollector);
+    assert.equal(executorCalls.length, 3, "start + retry + advance");
+    const retryCall = executorCalls[1];
+    const advanceCall = executorCalls[2];
     assert.ok(retryCall);
     assert.ok(advanceCall);
+    assert.equal(retryCall.method, "start");
+    assert.equal(advanceCall.method, "start");
+    assert.notEqual(retryCall.sessionId, advanceCall.sessionId);
     assert.match(
       retryCall.text,
       /Current subtask \(subtask-1\)/,

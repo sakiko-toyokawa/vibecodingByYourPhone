@@ -75,7 +75,16 @@ test("GitHubClient publish flow forks, pushes, and opens a draft PR", async () =
       "fork",
     ],
     ["api", "user", "--jq", ".login"],
-    ["git", "push", "fork", "yep/7-bug"],
+    [
+      "git",
+      "-c",
+      "http.proxy=",
+      "-c",
+      "https.proxy=",
+      "push",
+      "fork",
+      "yep/7-bug",
+    ],
     [
       "pr",
       "create",
@@ -91,6 +100,41 @@ test("GitHubClient publish flow forks, pushes, and opens a draft PR", async () =
     ],
   ]);
   assert.equal(url, "https://github.com/owner/repo/pull/12");
+});
+
+test("GitHubClient publish flow opens a normal PR when draft is false", async () => {
+  const calls: string[][] = [];
+  const client = new GitHubClient({
+    ghPath: "/tools/gh",
+    tokenProvider: async () => "secret-token",
+    runGh: async (args) => {
+      calls.push(args);
+      if (args[0] === "api") {
+        return { exitCode: 0, stdout: "contributor\n", stderr: "" };
+      }
+      if (args[0] === "pr") {
+        return {
+          exitCode: 0,
+          stdout: "https://github.com/owner/repo/pull/13\n",
+          stderr: "",
+        };
+      }
+      return { exitCode: 0, stdout: "", stderr: "" };
+    },
+  });
+
+  await client.publishDraftPr({
+    repository: "owner/repo",
+    branch: "yep/7-bug",
+    title: "Fix bug",
+    body: "Verification passed.",
+    cwd: "E:/work/owner/repo",
+    draft: false,
+  });
+
+  const prCall = calls.find((args) => args[0] === "pr");
+  assert.ok(prCall, "pr create was called");
+  assert.equal(prCall.includes("--draft"), false);
 });
 
 test("GitHubClient clones a repository and creates the working branch", async () => {
@@ -113,7 +157,11 @@ test("GitHubClient clones a repository and creates the working branch", async ()
   assert.deepEqual(calls, [
     {
       args: [
-        "repo",
+        "git",
+        "-c",
+        "http.proxy=",
+        "-c",
+        "https.proxy=",
         "clone",
         "owner/repo",
         "E:/data/github-workspaces/owner/repo/issues/7",

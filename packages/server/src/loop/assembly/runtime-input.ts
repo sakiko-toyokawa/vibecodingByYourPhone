@@ -49,9 +49,14 @@ import {
   type TaskPlan,
 } from "@yep-anywhere/shared";
 import { resolvePolicyProfile } from "../policy/profiles.js";
+import type { RelationRecord } from "../relation/relation-store.js";
 import { describeAdapter } from "./adapter-info.js";
 import { resolveAdapterPolicy } from "./adapter-policy.js";
 import { resolveProposalEffects } from "./proposal-effects.js";
+import {
+  type RuntimePermissionProjection,
+  projectRuntimePermission,
+} from "./runtime-permission.js";
 
 /**
  * 执行者自述（02 §5 evidence_refs.executor_summary）的 prompt 契约：
@@ -103,6 +108,12 @@ export interface RuntimeInput {
    * runtime_adapter_proposal 的 payload.adapter_policy，原样透传）。
    */
   adapterPolicy?: Record<string, unknown>;
+  /**
+   * Contract security level projected into the runtime's native permission,
+   * sandbox, and approval policy. Used by policy projection and available to
+   * session wiring without re-deriving the contract mapping.
+   */
+  runtimePermission?: RuntimePermissionProjection;
   /**
    * 本次装配实际生效的提案 id（阶段 3 装配消费，审计/观测用）。
    */
@@ -177,6 +188,8 @@ export interface RuntimeAssemblyContext {
   /** 02 §3 budget_remaining: 本轮开始时的剩余预算 (run-service 从
    *  control-plane 快照计算; 首轮为合约全量)。 */
   budgetRemaining?: BudgetLimits;
+  /** Durable external relationship this run is maintaining. */
+  relation?: RelationRecord;
 }
 
 /** File-mutating tools denied outright in legacy read-only runs. */
@@ -206,6 +219,10 @@ function isGitHubPromptLoop(card: LoopCard): boolean {
   return card.loop.discovery?.source === "github_prompt";
 }
 
+function isGitHubManagedLoop(card: LoopCard): boolean {
+  return isGitHubPromptLoop(card);
+}
+
 function githubPromptLines(github: RuntimeAssemblyContext["github"]): string[] {
   const ghPath = github?.ghPath ?? "gh";
   return [
@@ -223,6 +240,32 @@ function githubPromptLines(github: RuntimeAssemblyContext["github"]): string[] {
     "- 不要 fork、push、创建 pull request、评论、关闭 issue、release、deploy 或删除外部资源。",
     "- 结束时提供：选中的仓库和 issue URL、分支、本地提交哈希、验证命令与结果、残留风险，以及 PR 标题和正文草稿。",
   ];
+}
+
+function relationPromptLines(relation: RelationRecord): string[] {
+  const lines = [
+    "外部關係維護模式",
+    `- relation_id: ${relation.relation_id}`,
+    `- state: ${relation.state}`,
+    "- 只處理這個 relation 的目標與回饋，不要重新搜尋新 issue。",
+  ];
+  if (relation.subject.type === "github_pr") {
+    lines.push(
+      `- repository: ${relation.subject.repository}`,
+      ...(relation.subject.issue_number
+        ? [`- issue_number: ${relation.subject.issue_number}`]
+        : []),
+      ...(relation.subject.pr_number
+        ? [`- pr_number: ${relation.subject.pr_number}`]
+        : []),
+      `- branch: ${relation.subject.branch}`,
+      ...(relation.subject.base_sha
+        ? [`- base_sha: ${relation.subject.base_sha}`]
+        : []),
+      "- 先讀取最新 comments / reviews / CI status，再判斷 idle、修復或 needs_human。",
+    );
+  }
+  return lines;
 }
 
 export function assembleRuntimeInput(
@@ -317,8 +360,8 @@ export function assembleRuntimeInput(
     mode: adapterInfo.mode,
     cwd_ref: `workspace://${loop.id}`,
     timeout_seconds: policyTimeoutMs ? policyTimeoutMs / 1000 : null,
-    // 本 bundle 是首轮装配快照; 后续轮 resume 经 Supervisor.resumeSession,
-    // 不重新装配 (06 偏差 #35)。
+    // 本 bundle 是首轮装配快照; 后续轮会开 fresh session, 但沿用这份
+    // standing prompt 作为任务契约, 再叠加 AU2 handoff 交接上下文。
     resume_ref: null,
   };
 
@@ -359,6 +402,7 @@ export function assembleRuntimeInput(
     ...(isGitHubPromptLoop(card)
       ? [...githubPromptLines(context.github), ""]
       : []),
+    ...(context.relation ? [...relationPromptLines(context.relation), ""] : []),
     ...(policyActive && profile
       ? policyPromptLines(profile)
       : [
@@ -450,31 +494,27 @@ export function assembleRuntimeInput(
     .filter((line): line is string => line !== null)
     .join("\n");
 
-  // Map security_level to executor permission mode.
-  // read_only → plan (Claude read-only) / read-only (Codex sandbox)
-  // workspace_write → default (Claude workspace write) / workspace-write (Codex sandbox)
-  // full_access → bypassPermissions (Claude full access) / danger-full-access (Codex sandbox)
-  const permissionModeBySecurityLevel = {
-    read_only: "plan",
-    workspace_write: "default",
-    full_access: "bypassPermissions",
-  } as const;
-  const permissionMode =
-    permissionModeBySecurityLevel[
-      contract.security_level as keyof typeof permissionModeBySecurityLevel
-    ] ?? "plan";
+  // Contract security level is the source of truth. The policy hook adds
+  // "untrusted" so every file/command action reaches the loop arbiter; the
+  // native sandbox still comes from the contract (see runtime-permission.ts).
+  const runtimePermission = projectRuntimePermission(contract.security_level, {
+    policyHookWired: policyActive,
+    bridge: adapterInfo.bridge,
+  });
+  const permissionMode = runtimePermission.permissionMode;
 
   if (!policyActive || !profile) {
     return {
       prompt,
       cwd,
       permissionMode,
+      runtimePermission,
       permissions: { deny: [...READ_ONLY_DENY] },
       ...bundleExtras,
-      // github_prompt 的 legacy (无 policy) 分支同样注入 GH_TOKEN/gh PATH —
+      // GitHub managed loop 的 legacy (无 policy) 分支同样注入 GH_TOKEN/gh PATH —
       // 此前 env 只在策略分支返回, 无 policy 的 github 卡拿到 gh 指令却拿
       // 不到 token (修复计划留档项)。
-      ...(isGitHubPromptLoop(card) && context.github
+      ...(isGitHubManagedLoop(card) && context.github
         ? {
             env: {
               GH_TOKEN: context.github.token,
@@ -496,10 +536,11 @@ export function assembleRuntimeInput(
     prompt,
     cwd,
     permissionMode,
+    runtimePermission,
     // 显式规则留空：裁决全部走策略钩子（钩子对任何调用都会给出结论）。
     permissions: {},
     ...bundleExtras,
-    ...(isGitHubPromptLoop(card) && context.github
+    ...(isGitHubManagedLoop(card) && context.github
       ? {
           env: {
             GH_TOKEN: context.github.token,
@@ -511,11 +552,8 @@ export function assembleRuntimeInput(
     policyProfile: profile,
     policyProjection: {
       policy_intent_ref: `policy://${profile.policy_profile}`,
-      // 06 #24/#39: Claude 桥无 OS 沙盒 (写边界由策略钩子强制, 记
-      // "none"); Codex 桥策略投影映射 read-only 沙盒 (一切变更走审批
-      // 反向请求到钩子) —— 两桥如实记录, 不写死单一值。
-      sandbox: adapterInfo.bridge === "app_server" ? "read-only" : "none",
-      approval_or_permission_mode: "bypass_self_approve_with_audit",
+      sandbox: runtimePermission.sandbox,
+      approval_or_permission_mode: `${runtimePermission.approvalPolicy}+${runtimePermission.permissionMode}`,
       // 显式 allow/deny 清单为空是设计使然: 一切工具调用都经策略钩子
       // 裁决 (钩子即规则来源), 不是"未配置"。
       allowed_tools: [],

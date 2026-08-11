@@ -6,7 +6,6 @@ import {
   createContainerInstance,
   registerValue,
 } from "./container.js";
-import { GitHubIssueLoopService } from "./github/index.js";
 import { PlannerService } from "./loop/contract/planner.js";
 import {
   ControlPlane,
@@ -20,6 +19,8 @@ import {
   ProposalStore,
   RunLedgerStore,
   RunStateStore,
+  TriggerQueueStore,
+  drainPendingTriggers,
   pruneStaleWorktrees,
 } from "./loop/index.js";
 import { createAuthMiddleware } from "./middleware/auth.js";
@@ -236,6 +237,7 @@ export function createApp(
       runLedgerStore,
       eventBus: options.eventBus,
       learningEventStore,
+      loopTokenAlertRatio: options.loopTokenAlertRatio ?? 0.9,
       // .loop/STATE.md 人可读投影 (04-存储约定): 迁移时读 card 的
       // workspace.path / persistence.state_file
       loopCardStore,
@@ -253,6 +255,7 @@ export function createApp(
       supervisor,
       loopCardStore,
       runLedgerStore,
+      runStateStore,
       controlPlane: loopControlPlane,
       // 阶段 3 装配消费: 新 run 装配读取 published / canary 提案
       proposalStore,
@@ -262,6 +265,7 @@ export function createApp(
       githubCredentialStore: container.cradle.githubCredentialStore,
       githubToolProvisioner: container.cradle.githubToolProvisioner,
       dataDir: options.dataDir,
+      relationStore: container.cradle.relationStore,
       planner,
       loopWatchdog: {
         turnIdleTimeoutMs: options.loopTurnIdleTimeoutMs ?? 10 * 60 * 1000,
@@ -360,17 +364,26 @@ export function createApp(
     registerValue("learningWorker", learningWorker);
     registerValue("proposalStore", proposalStore);
     registerValue("proposalPipeline", proposalPipeline);
-    const { config, githubToolProvisioner, githubClient } = container.cradle;
-    registerValue(
-      "githubIssueLoopService",
-      new GitHubIssueLoopService({
-        dataDir: config.dataDir,
-        toolProvisioner: githubToolProvisioner,
-        githubClient,
-        loopCardStore,
-        runService: loopRunService,
-      }),
-    );
+    const triggerQueueStore = new TriggerQueueStore({
+      dataDir: options.dataDir,
+    });
+    const drainPending = (loopId?: string) =>
+      drainPendingTriggers(
+        {
+          queueStore: triggerQueueStore,
+          runService: loopRunService,
+          controlPlane: loopControlPlane,
+        },
+        loopId,
+      );
+    registerValue("triggerQueueStore", triggerQueueStore);
+    registerValue("drainPendingTriggers", drainPending);
+    const triggerDrainTimer = setInterval(() => {
+      void drainPending().catch((error) =>
+        console.warn("[LoopTrigger] queue drain failed:", error),
+      );
+    }, 30_000);
+    triggerDrainTimer.unref?.();
   }
 
   // Register all API routes

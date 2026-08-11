@@ -347,12 +347,13 @@ test("resumeAfterRestart resumes a retry-state run on a new service", async () =
 
     await restartedService.resumeAfterRestart("loop-it");
 
-    // The resumed run should start turn 2 via resumeSession.
+    // The resumed run should start turn 2 via a fresh session.
     await waitFor(
       () => restartedSupervisor.calls.length >= 1,
       "turn 2 to start after restart",
     );
-    assert.equal(restartedSupervisor.calls[0]?.method, "resume");
+    assert.equal(restartedSupervisor.calls[0]?.method, "start");
+    assert.ok(restartedSupervisor.calls[0]?.sessionId);
     assert.ok(
       restartedSupervisor.calls[0]?.text.includes("retry"),
       "turn 2 prompt should include retry context",
@@ -466,13 +467,14 @@ test("resumeAfterRestart resumes an active-state run on a new service", async ()
 
     await restartedService.resumeAfterRestart("loop-it");
 
-    // Turn 2 should be executed via resumeSession on the same session_ref.
+    // Turn 2 should be executed via a fresh session, not the old session_ref.
     await waitFor(
       () => restartedSupervisor.calls.length >= 1,
       "turn 2 to resume after restart",
     );
-    assert.equal(restartedSupervisor.calls[0]?.method, "resume");
-    assert.equal(restartedSupervisor.calls[0]?.sessionId, runId);
+    assert.equal(restartedSupervisor.calls[0]?.method, "start");
+    assert.ok(restartedSupervisor.calls[0]?.sessionId);
+    assert.notEqual(restartedSupervisor.calls[0]?.sessionId, runId);
   } finally {
     await rm(stores.dataDir, { recursive: true, force: true }).catch(() => {});
   }

@@ -12,6 +12,7 @@ export const RunStateSchema = z.enum([
   "needs_human",
   "failed",
   "budget_limited",
+  "discarded",
 ]);
 export type RunState = z.infer<typeof RunStateSchema>;
 
@@ -40,8 +41,12 @@ export type FailureTag = z.infer<typeof FailureTagSchema>;
 export const RunLedgerEntrySchema = z.object({
   loop_id: z.string(),
   run_id: z.string(),
+  /** Phase 6: 新写入固定为 2；旧文件缺省时视为 v1。 */
+  schema_version: z.number().int().positive().optional(),
+  /** Phase 6: 对 entry 本体（不含 schema_version / checksum）的 sha256。 */
+  checksum: z.string().optional(),
   /** 触发来源 (扩展字段, 06 偏差 #28; 旧条目缺省按 "cron" 读取) */
-  source: z.enum(["cron", "manual"]).optional(),
+  source: z.enum(["cron", "manual", "webhook", "resume"]).optional(),
   runtime: z.object({
     adapter: z.string(),
     session_ref: z.string(),
@@ -69,3 +74,17 @@ export const RunLedgerEntrySchema = z.object({
   created_at: z.string().datetime(),
 });
 export type RunLedgerEntry = z.infer<typeof RunLedgerEntrySchema>;
+
+/**
+ * Artifact manifest entry — Phase 6 外部状态同步：writeArtifact 每次写档
+ * 都记录 idempotency_key 与 expected_hash，恢复时可侦测外部篡改。
+ */
+export const ArtifactManifestEntrySchema = z.object({
+  schema_version: z.number().int().positive().default(2),
+  run_id: z.string(),
+  name: z.string(),
+  idempotency_key: z.string(),
+  expected_hash: z.string(),
+  created_at: z.string().datetime(),
+});
+export type ArtifactManifestEntry = z.infer<typeof ArtifactManifestEntrySchema>;

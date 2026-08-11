@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import http from "node:http";
 import https from "node:https";
@@ -75,26 +76,48 @@ export class GitHubToolProvisioner {
   }
 
   getGhPath(): string {
-    const binary = this.platform === "win32" ? "gh.exe" : "gh";
-    return path.join(
-      this.dataDir,
-      "tools",
-      "gh",
-      this.version,
-      assetRoot(this.version, this.platform, this.arch),
-      "bin",
-      binary,
+    const candidates = this.ghCandidates();
+    return (
+      candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]
     );
   }
 
   async ensureGh(): Promise<GitHubToolStatus> {
-    const ghPath = this.getGhPath();
+    const destination = path.join(this.dataDir, "tools", "gh", this.version);
+    const ghPath = await this.resolveInstalledGhPath();
     if (!(await this.pathExists(ghPath))) {
-      const destination = path.join(this.dataDir, "tools", "gh", this.version);
       await fs.mkdir(destination, { recursive: true });
       await this.downloadAndExtract(this.downloadUrl(), destination);
     }
-    return { installed: true, path: ghPath, version: this.version };
+    return {
+      installed: true,
+      path: await this.resolveInstalledGhPath(),
+      version: this.version,
+    };
+  }
+
+  private ghCandidates(): [string, string] {
+    const binary = this.platform === "win32" ? "gh.exe" : "gh";
+    const root = path.join(this.dataDir, "tools", "gh", this.version);
+    return [
+      path.join(
+        root,
+        assetRoot(this.version, this.platform, this.arch),
+        "bin",
+        binary,
+      ),
+      path.join(root, "bin", binary),
+    ];
+  }
+
+  private async resolveInstalledGhPath(): Promise<string> {
+    const candidates = this.ghCandidates();
+    for (const candidate of candidates) {
+      if (await this.pathExists(candidate)) {
+        return candidate;
+      }
+    }
+    return candidates[0];
   }
 
   private downloadUrl(): string {

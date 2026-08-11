@@ -41,6 +41,8 @@ export interface ControlPlaneDeps {
   loopCardStore?: Pick<LoopCardStore, "getLoop">;
   /** Server data directory; used to resolve managed:// workspace paths for STATE.md projection. */
   dataDir?: string;
+  /** Ratio of max_tokens at which a loop-budget-warning is emitted. */
+  loopTokenAlertRatio?: number;
 }
 
 export interface PendingApproval {
@@ -103,7 +105,11 @@ export interface ApplyJudgmentInput {
     action: string;
     reason: string;
     policyRef: string;
+    /** Review_or_policy lanes are human-reviewable, not necessarily failures. */
+    reviewable?: boolean;
   };
+  /** Phase 7: deterministic tags derived from L3/L4 verifier signals. */
+  verifierFailureTags?: FailureTag[];
   /**
    * 合约的非预算停止规则 (02 §2 stop_rules; 当前只有
    * repetition.max_same_failure 被消费: 同一阻断指纹重复超过上限即停,
@@ -147,7 +153,10 @@ export interface ResumeSignal {
     | "human_approve"
     | "human_request_changes"
     | "resume_signal"
-    | "budget_supplemented";
+    | "budget_supplemented"
+    | "restart_recovery_approve";
+  /** Original state when a restart-recovery approval resumes a run. */
+  restartRecoveryFromState?: "active" | "retry";
   /** Human feedback to inject into the next turn's context, when given. */
   feedback?: string;
 }
@@ -166,9 +175,9 @@ export interface PauseSeed {
   /** Contract budget limits; null when setup failed before a contract existed. */
   budget: BudgetLimits | null;
   createdAt: string;
-  /** Session of the in-flight turn being killed, kept so a resume after a
-   *  server restart can continue on the same session (06 #32); null when no
-   *  session had started yet. */
+  /** Session of the in-flight turn being killed, kept for audit/recovery
+   *  reference after a server restart; loop resumes open a fresh session
+   *  (06 #32). Null when no session had started yet. */
   sessionRef?: string | null;
 }
 

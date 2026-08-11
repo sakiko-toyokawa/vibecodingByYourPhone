@@ -67,7 +67,11 @@ export async function buildLedgerSummary(
   const handoffRef =
     [...artifactRefs]
       .reverse()
-      .find((ref) => /\/turn-handoff(?:-turn\d+)?\.json$/.test(ref)) ?? null;
+      .find((ref) => /\/machine-state\.json$/.test(ref)) ??
+    [...artifactRefs]
+      .reverse()
+      .find((ref) => /\/turn-handoff(?:-turn\d+)?\.json$/.test(ref)) ??
+    null;
 
   // turns_used / retries_used come from the control-plane's budget snapshot
   // (03: budget 消耗对照 max_turns / max_retries); the run_state belongs to

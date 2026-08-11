@@ -74,21 +74,34 @@ export function maybeWarnBudget(
   if (!deps.eventBus) {
     return;
   }
-  const fields: { field: "max_turns" | "max_retries"; ratio: number }[] = [];
+  const fields: {
+    field: "max_turns" | "max_retries" | "max_tokens";
+    ratio: number;
+    threshold: number;
+  }[] = [];
   if (budget.max_turns > 0) {
     fields.push({
       field: "max_turns",
       ratio: budget.used_turns / budget.max_turns,
+      threshold: 0.8,
     });
   }
   if (budget.max_retries > 0) {
     fields.push({
       field: "max_retries",
       ratio: budget.used_retries / budget.max_retries,
+      threshold: 0.8,
     });
   }
-  for (const { field, ratio } of fields) {
-    if (ratio < 0.8) {
+  if (budget.max_tokens > 0) {
+    fields.push({
+      field: "max_tokens",
+      ratio: budget.used_tokens / budget.max_tokens,
+      threshold: deps.loopTokenAlertRatio ?? 0.9,
+    });
+  }
+  for (const { field, ratio, threshold } of fields) {
+    if (ratio < threshold) {
       continue;
     }
     const key = `${input.runId}:${field}`;
@@ -104,6 +117,9 @@ export function maybeWarnBudget(
       max_turns: budget.max_turns,
       retries_used: budget.used_retries,
       max_retries: budget.max_retries,
+      ...(field === "max_tokens"
+        ? { tokens_used: budget.used_tokens, max_tokens: budget.max_tokens }
+        : {}),
       near_limit: field,
       timestamp: new Date().toISOString(),
     });

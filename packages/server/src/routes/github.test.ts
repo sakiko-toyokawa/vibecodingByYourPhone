@@ -4,7 +4,6 @@ import { Hono } from "hono";
 import type {
   GitHubClient,
   GitHubCredentialStore,
-  GitHubIssueLoopService,
   GitHubToolProvisioner,
 } from "../github/index.js";
 import { createGitHubRoutes } from "./github.js";
@@ -172,43 +171,112 @@ test("GitHub routes reject draft PR publication without explicit approval flag",
   assert.equal((await json(response)).error, "approval_required");
 });
 
-test("GitHub routes start an issue loop from a search query", async () => {
+test("GitHub webhook enqueues a trigger for a known relation", async () => {
+  const enqueued: Array<{
+    event_id: string;
+    loop_id: string;
+    payload: object;
+  }> = [];
+  let drainedLoop: string | undefined;
+  const relationStore = {
+    findByGitHubPr: () => ({
+      relation_id: "rel-1",
+      loop_id: "loop-maintainer",
+    }),
+  } as never;
+  const triggerQueueStore = {
+    enqueue: async (input: {
+      event_id: string;
+      loop_id: string;
+      payload: object;
+    }) => {
+      enqueued.push(input);
+      return { ...input, state: "pending" };
+    },
+  } as never;
   const app = new Hono().route(
     "/github",
     createGitHubRoutes({
       credentialStore: {} as GitHubCredentialStore,
       toolProvisioner: {} as GitHubToolProvisioner,
       githubClient: {} as GitHubClient,
-      issueLoopService: {
-        startFromQuery: async (query: string) => ({
-          issue: {
-            repository: "owner/repo",
-            number: 7,
-            title: query,
-            url: "https://github.com/owner/repo/issues/7",
-            labels: ["bug"],
-          },
-          loopId: "github-owner-repo-issue-7",
-          workspacePath: "E:/data/github-workspaces/owner/repo/issues/7",
-          branch: "yep/7-bug",
-          run: {
-            run_id: "run-1",
-            loop_id: "github-owner-repo-issue-7",
-            state: "active",
-            source: "manual",
-            created_at: "2026-07-24T00:00:00.000Z",
-          },
-        }),
-      } as GitHubIssueLoopService,
+      relationStore,
+      triggerQueueStore,
+      drainPendingTriggers: async (loopId?: string) => {
+        drainedLoop = loopId;
+      },
     }),
   );
 
-  const response = await app.request("/github/issue-loops/start", {
+  const response = await app.request("/github/webhook", {
     method: "POST",
-    body: JSON.stringify({ query: "label:bug language:TypeScript" }),
+    headers: {
+      "x-github-event": "pull_request_review",
+      "x-github-delivery": "delivery-1",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      repository: { full_name: "owner/repo" },
+      pull_request: { number: 12 },
+    }),
+  });
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await json(response), {
+    accepted: true,
+    event_id: "delivery-1",
+  });
+  assert.equal(enqueued.length, 1);
+  assert.equal(enqueued[0]?.loop_id, "loop-maintainer");
+  assert.equal(
+    (enqueued[0]?.payload as { relation_id: string }).relation_id,
+    "rel-1",
+  );
+  assert.equal(drainedLoop, "loop-maintainer");
+});
+
+test("GitHub publish draft PR creates a relation when relation metadata is supplied", async () => {
+  const relations: Array<{
+    relation_id: string;
+    subject: { pr_number?: number };
+  }> = [];
+  const relationStore = {
+    findById: () => null,
+    upsert: async (relation: (typeof relations)[number]) => {
+      relations.push(relation);
+      return relation;
+    },
+  } as never;
+  const app = new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {
+        publishDraftPr: async () => "https://github.com/owner/repo/pull/12",
+      } as unknown as GitHubClient,
+      relationStore,
+    }),
+  );
+
+  const response = await app.request("/github/publish/draft-pr", {
+    method: "POST",
+    body: JSON.stringify({
+      repository: "owner/repo",
+      branch: "fix/12",
+      title: "Fix bug",
+      body: "Verification passed.",
+      cwd: "E:/work/owner/repo",
+      relation_id: "rel-1",
+      loop_id: "loop-maintainer",
+      issue_number: 1,
+      approved: true,
+    }),
     headers: { "content-type": "application/json" },
   });
 
-  assert.equal(response.status, 201);
-  assert.equal((await json(response)).loopId, "github-owner-repo-issue-7");
+  assert.equal(response.status, 200);
+  assert.equal(relations.length, 1);
+  assert.equal(relations[0]?.relation_id, "rel-1");
+  assert.equal(relations[0]?.subject.pr_number, 12);
 });

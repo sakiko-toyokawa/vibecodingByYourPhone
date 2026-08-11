@@ -55,6 +55,15 @@ const BudgetSupplementSchema = z
     },
   );
 
+const DiscardRunBodySchema = z
+  .object({
+    reason: z.string().min(1),
+    revert_files: z.boolean().optional(),
+    cleanup_worktree: z.boolean().optional(),
+    force: z.boolean().optional(),
+  })
+  .strict();
+
 export function createRunsRoutes(deps: RunsRoutesDeps): Hono {
   const app = new Hono();
 
@@ -233,6 +242,55 @@ export function createRunsRoutes(deps: RunsRoutesDeps): Hono {
         parsed.data,
       );
       return c.json({ run_state: runState }, 200);
+    } catch (error) {
+      if (error instanceof ControlPlaneError) {
+        return c.json(
+          { error: error.code, message: error.message },
+          decisionErrorStatus(error),
+        );
+      }
+      throw error;
+    }
+  });
+
+  /**
+   * POST /api/runs/:id/discard — human-initiated run discard.
+   *
+   * The run moves to the `discarded` terminal state. For direct workspaces
+   * this can reverse tracked diff evidence; for worktree workspaces this can
+   * remove the run branch/worktree. Ledger and artifacts are preserved.
+   */
+  app.post("/:id/discard", async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json(
+        {
+          error: "invalid_decision",
+          message: "Request body must be valid JSON",
+        },
+        400,
+      );
+    }
+    const parsed = DiscardRunBodySchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "invalid_decision",
+          message: parsed.error.issues
+            .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+            .join("; "),
+        },
+        400,
+      );
+    }
+    try {
+      const result = await deps.runService.discardRun(
+        c.req.param("id"),
+        parsed.data,
+      );
+      return c.json(result, 200);
     } catch (error) {
       if (error instanceof ControlPlaneError) {
         return c.json(

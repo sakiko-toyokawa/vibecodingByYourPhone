@@ -18,7 +18,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
-import type { JudgmentReport, LoopCard, RunState } from "@yep-anywhere/shared";
+import type {
+  JudgmentReport,
+  LoopCard,
+  RunLedgerEntry,
+  RunState,
+} from "@yep-anywhere/shared";
 import { Hono } from "hono";
 import { createLoopsRoutes } from "../routes/loops.js";
 import { createRunsRoutes } from "../routes/runs.js";
@@ -205,7 +210,12 @@ async function withFixture(fn: (ctx: Fixture) => Promise<void>): Promise<void> {
     app.route("/", createRunsRoutes({ runService: service, controlPlane }));
     await fn({ app, controlPlane, supervisor, ledgerStore, events });
   } finally {
-    await rm(dataDir, { recursive: true, force: true });
+    await rm(dataDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    });
   }
 }
 
@@ -225,6 +235,24 @@ async function waitForState(
       throw new Error(
         `timed out waiting for ${expected.join("/")} (current: ${state})`,
       );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+async function waitForEntry(
+  store: RunLedgerStore,
+  runId: string,
+  timeoutMs = 5_000,
+): Promise<RunLedgerEntry> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const entry = await store.readEntry(runId);
+    if (entry) {
+      return entry;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for ledger entry for run ${runId}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
@@ -287,7 +315,7 @@ test("worktree 策略: run 在隔离 worktree 中执行, workspace.json 落盘�
         assert.ok(evidence.base_sha.length > 0);
 
         // 账本 artifact_refs 引用 workspace.json
-        const entry = await ledgerStore.readEntry(run.run_id);
+        const entry = await waitForEntry(ledgerStore, run.run_id);
         assert.ok(
           entry?.artifact_refs.includes(
             `artifact://${run.run_id}/workspace.json`,

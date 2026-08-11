@@ -15,6 +15,11 @@ import { assembleRuntimeInput } from "../assembly/runtime-input.js";
 import { buildIntentContract } from "../contract/intent-contract.js";
 import type { ResumeSignal } from "../control-plane/control-plane.js";
 import type { ControlPlane } from "../control-plane/control-plane.js";
+import type { RunStateStore } from "../control-plane/run-state-store.js";
+import type {
+  RelationRecord,
+  RelationStore,
+} from "../relation/relation-store.js";
 import type { FailurePatternStore } from "../state/failure-pattern-store.js";
 import type { LoopCardStore } from "../state/loop-card-store.js";
 import type { ProposalStore } from "../state/proposal-store.js";
@@ -33,12 +38,15 @@ import {
 export interface RunContextDeps {
   loopCardStore: LoopCardStore;
   runLedgerStore: RunLedgerStore;
+  /** Phase 6 checkpoint writing / restart recovery. */
+  runStateStore?: RunStateStore;
   controlPlane?: ControlPlane;
   proposalStore?: ProposalStore;
   failurePatternStore?: FailurePatternStore;
   githubCredentialStore?: GithubCredentialStore;
   githubToolProvisioner?: GithubToolProvisioner;
   dataDir?: string;
+  relationStore?: RelationStore;
 }
 
 /**
@@ -162,6 +170,15 @@ export async function rebuildContext(
       githubCredentialStore: deps.githubCredentialStore,
       githubToolProvisioner: deps.githubToolProvisioner,
     });
+    const relationJson = await store
+      .readArtifact(signal.runId, "relation.json")
+      .catch(() => undefined);
+    const relation = relationJson
+      ? (JSON.parse(relationJson) as RelationRecord)
+      : null;
+    if (relation) {
+      runtimeContext.relation = relation;
+    }
     const memoryPacket = buildMemoryPacket(
       executableCard,
       deps.failurePatternStore,
@@ -240,6 +257,7 @@ export async function rebuildContext(
           ? null
           : entry.runtime.session_ref
         : // 首轮暂停无账本: 暂停时落进 run_state 的 session_ref (06 #32)
+          // 仅作最新 session 记录; 续跑时不再 resume 它。
           runState.session_ref,
       lastJudgment,
       lastJudgmentRef: runState.last_judgment,
@@ -252,6 +270,7 @@ export async function rebuildContext(
       recentTurnOutputHashes: [],
       recentTurnDiffStatHashes: [],
       recentBlockerFingerprints: [],
+      relation,
     };
   } catch (error) {
     console.error(

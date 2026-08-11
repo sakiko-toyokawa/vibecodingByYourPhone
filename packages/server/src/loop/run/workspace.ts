@@ -16,6 +16,11 @@ export function isGitHubPromptLoop(card: LoopCard): boolean {
   return card.loop.discovery?.source === "github_prompt";
 }
 
+/** Any GitHub-managed loop whose workspace is owned by the server. */
+export function isGitHubManagedLoop(card: LoopCard): boolean {
+  return isGitHubPromptLoop(card);
+}
+
 export function displayGitHubPromptWorkspacePath(loopId: string): string {
   return `managed://github-workspaces/prompt-loops/${loopId}`;
 }
@@ -128,30 +133,30 @@ export async function resolveRuntimeAssemblyContext(
   card: LoopCard,
   deps: ResolveRuntimeAssemblyContextDeps,
 ): Promise<RuntimeAssemblyContext> {
-  if (!isGitHubPromptLoop(card)) {
+  if (!isGitHubManagedLoop(card)) {
     return {};
   }
   if (!deps.githubCredentialStore) {
     throw new AssemblyError(
-      "GitHub prompt loop cannot start: GitHub credential store is not configured",
+      "GitHub loop cannot start: GitHub credential store is not configured",
     );
   }
   if (!deps.githubToolProvisioner) {
     throw new AssemblyError(
-      "GitHub prompt loop cannot start: GitHub CLI provisioner is not configured",
+      "GitHub loop cannot start: GitHub CLI provisioner is not configured",
     );
   }
 
   const token = await deps.githubCredentialStore.getToken();
   if (!token) {
     throw new AssemblyError(
-      "GitHub prompt loop cannot start: save a GitHub token before running this loop",
+      "GitHub loop cannot start: save a GitHub token before running this loop",
     );
   }
   const tool = await deps.githubToolProvisioner.ensureGh();
   if (!tool.path) {
     throw new AssemblyError(
-      "GitHub prompt loop cannot start: managed GitHub CLI path is unavailable",
+      "GitHub loop cannot start: managed GitHub CLI path is unavailable",
     );
   }
   return { github: { token, ghPath: tool.path } };

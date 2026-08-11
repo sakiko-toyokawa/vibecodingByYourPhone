@@ -167,6 +167,7 @@ export async function startServer(): Promise<{
       config.loopStagnationSimilarTurnsThreshold,
     loopIdleNoProgressTurnsThreshold: config.loopIdleNoProgressTurnsThreshold,
     loopRepeatedBlockerThreshold: config.loopRepeatedBlockerThreshold,
+    loopTokenAlertRatio: config.loopTokenAlertRatio,
   });
 
   const extraScanners = new Map<string, ProviderScanner>();

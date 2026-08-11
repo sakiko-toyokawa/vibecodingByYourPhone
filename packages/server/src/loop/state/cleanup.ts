@@ -4,12 +4,10 @@
  * events.jsonl 无限增长)。
  *
  * 保留线 (04 建议值, 常量化于此; LoopCard cleanup_rule 覆盖未排期):
- * - runs/<run_id>.jsonl: 每 loop 保留最近 20 轮完整账本; 更早的压缩为
- *   仅 run_ledger_entry 行 (决策明细剔除);
+ * - runs/<run_id>.jsonl: 每 loop 保留最近 20 轮完整账本; 更早的
+ *   Phase 6 改為 gzip 冷歸檔到 cold/，再移除 hot ledger/artifacts；
  * - artifacts/<run_id>/: 随账本生命周期, 最近 20 轮全量保留; 超出后
- *   删除, 但 complete/failed 的 run 永久保留最小证据 (judgment-report
- *   与 diff 系列文件 —— 04 写的是 judgment_report.json/diff.patch,
- *   实现是 per-turn 命名, 两者都认);
+ *   冷歸檔 (含 manifest.jsonl)，不再只在 hot 層壓縮;
  * - learning/events.jsonl: worker 消费位点之前、且超过 30 天的行截断;
  * - state/ proposals/ failure-patterns.json: 不清理 (04 明确)。
  *
@@ -22,6 +20,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { RunStateStore } from "../control-plane/run-state-store.js";
+import { archiveRunToCold, removeHotRunStorage } from "./cold-storage.js";
 import type { LearningEventStore } from "./learning-event-store.js";
 import type { RunLedgerStore } from "./run-ledger-store.js";
 
@@ -52,6 +51,8 @@ export interface LoopCleanupOptions {
 }
 
 export interface LoopCleanupResult {
+  /** 被冷歸檔並移除 hot 儲存的 run 数 */
+  archivesCreated: number;
   /** 被压缩 (剔除 decision_entry 行) 的账本数 */
   ledgersCompressed: number;
   /** 被删除的 artifact 文件数 */
@@ -68,6 +69,7 @@ export async function runLoopStorageCleanup(
   const maxAgeDays = options.eventsMaxAgeDays ?? 30;
   const now = deps.now ?? (() => new Date());
   const result: LoopCleanupResult = {
+    archivesCreated: 0,
     ledgersCompressed: 0,
     artifactFilesDeleted: 0,
     eventsTruncated: 0,
@@ -107,6 +109,15 @@ export async function runLoopStorageCleanup(
   for (const runs of byLoop.values()) {
     runs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     for (const expired of runs.slice(keep)) {
+      const archived = await archiveRunToCold(
+        deps.runLedgerStore,
+        expired.runId,
+      );
+      if (archived.archived) {
+        result.archivesCreated += 1;
+        await removeHotRunStorage(deps.runLedgerStore, expired.runId);
+        continue;
+      }
       if (await deps.runLedgerStore.compressLedgerToRunEntries(expired.runId)) {
         result.ledgersCompressed += 1;
       }
@@ -147,7 +158,9 @@ async function pruneArtifacts(
     return 0; // 目录不存在 (ENOENT) — 无可清理
   }
   const keepForRun =
-    run.finalStatus === "complete" || run.finalStatus === "failed";
+    run.finalStatus === "complete" ||
+    run.finalStatus === "failed" ||
+    run.finalStatus === "discarded";
   let deleted = 0;
   for (const name of names) {
     if (keepForRun && KEEP_ARTIFACT.test(name)) {

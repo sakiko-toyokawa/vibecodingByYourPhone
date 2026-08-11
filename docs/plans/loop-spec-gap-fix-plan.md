@@ -164,7 +164,17 @@
 
 ## 计划内未做（不算壳，记录备查）
 
-webhook/issue/resume 触发源；interaction/review 两段验证（05 阶段 1/2 明确不做）；YAML 权威格式加载；工作区隔离 worktree（05 阶段 2 明确不做）；eval 版本对比面板（05 阶段 3 从简）。
+已由设计定稿且核心已实作：
+
+- webhook/issue/resume 触发源 -> `../design/loop-trigger-expansion-design.md`
+- run 回滚 / 丢弃 -> `../design/loop-run-rollback-discard-design.md`
+- direct 工作区边界 -> `../design/loop-direct-workspace-boundary-design.md`
+- token 成本熔断 -> `../design/loop-token-quota-breaker-design.md`
+- verifier 扩展 -> `../design/loop-verifier-extension-design.md`
+
+已实作：interaction/review 两段验证（Phase 4 落地）、工作区隔离 worktree、merge gate。
+
+尚未排期：YAML 权威格式加载；eval 版本对比面板。
 
 ## spec 自身矛盾（需回 spec 仓库处理）
 
@@ -176,7 +186,7 @@ webhook/issue/resume 触发源；interaction/review 两段验证（05 阶段 1/2
 
 **Codex 桥策略投影（06 #39，本轮新增）**：`policyHookWired`（钩子经 ModelSettings.toolApprovalHook → Supervisor → StartSessionOptions 透传）时 codex thread policy 映射为 `on-request + read-only`，一切变更经审批反向请求到 loop 策略钩子；装配守卫放开 codex/codex-oss，legacy（无 policy）github_prompt 分支补 GH_TOKEN/gh PATH 注入。单测/集成全绿。决定性端到端（真实 fileChange 审批请求被钩子裁决）**被本机 codex 账号余额阻断**（app-server 报 403 INSUFFICIENT_BALANCE）——接线各段已验，真实裁决待有余额环境复验。
 
-**冒烟二次发现（已记录，未修）**：executor 因 403/空产出结束时，run 仍被判 complete（finalText 空 + static lint 通过 → judgment passed）——验证层缺"executor 无产出"信号，空 stdout 应让结论倾向 inconclusive 而非看命令退出码判过。留待后续（与 verification_error 归因分类一起设计）。
+**冒烟二次发现（已记录，已定设计，未实作）**：executor 因 403/空产出结束时，run 仍被判 complete（finalText 空 + static lint 通过 → judgment passed）——验证层缺"executor 无产出"信号，空 stdout 应让结论倾向 inconclusive 而非看命令退出码判过。设计见 `../design/loop-empty-output-detection-design.md`。
 
 在真实 server（dist 直跑）上以 codex provider 完成端到端 run 验证：
 memory packet 注入 prompt 并落 artifact、native_invocation 真实投影（adapter=codex/bridge=app_server/mode=exec，快照 `interrupt=kill-only` 与 06 #17 一致）、budget_remaining、verification-input 的 known_failure_patterns 与 runtime_event_refs 真实填充、账本 source 如实、learning events 落盘、eval 内置 9 个 behavior case 在生产数据目录播种成功。
@@ -225,11 +235,11 @@ memory packet 注入 prompt 并落 artifact、native_invocation 真实投影（a
 
 ### 轮次挂起治理：空转检测与死循环检测（替代硬超时）
 
-背景：2026-07-27 用户决策——**轮次不设默认硬超时**（曾设 5min/15min 默认值，太绝对：真实只读扫描常需 5-10min，一刀切会误杀健康轮次、丢弃已完成报告、白烧一轮重试；实证见 run-20260727T142618Z-8d6db6de turn 1）。当前行为：仅 `adapter_policy.timeout_seconds` 显式配置时才计时，否则轮次可以无限运行。挂起风险用下面两项治理，不做固定计时。
+背景：2026-07-27 用户决策——**轮次不设默认硬超时**（曾设 5min/15min 默认值，太绝对：真实只读扫描常需 5-10min，一刀切会误杀健康轮次、丢弃已完成报告、白烧一轮重试；实证见 run-20260727T142618Z-8d6db6de turn 1）。当前行为：仅 `adapter_policy.timeout_seconds` 显式配置时才计时，否则轮次没有固定硬超时。挂起风险由下列已实作治理承担。
 
-- [ ] **空转检测（idle watchdog）**：watchProcess 已逐条收集 runtime events——以"最后一条消息的时间"为活性信号，N 分钟（建议 10min，可配）无任何消息才判挂起 → 杀轮 + failed（归因 timeout/idle）。与硬超时的本质区别：只要在持续产出（思考、读文件、写报告）就永远不误杀，杀的是真正卡死的进程。
-- [ ] **死循环检测（loop stagnation）**：轮次级——连续 N 轮 stdout/报告内容高度相似（哈希或相似度）或同一 blocker fingerprint 重复（`repeated_blocker_count` 已有雏形），提前转 needs_human 而不是烧完 max_turns；轮内级——executor 在同一文件/命令上反复空转（事件流模式识别）可作为后续增强。
-- [ ] **配套**：`adapter_policy.timeout_seconds` 保留为显式兜底（02 §3 adapter 调用必须带超时的合规出口）；前端 Stream Output 已有实时事件流，可在 UI 上直接显示"最后活动于 X 分钟前"，让人一眼识别空转。
+- [x] **空转检测（idle watchdog）**：`watchProcess` 以"最后一条消息的时间"为活性信号，默认 10 分钟无活动即杀轮并归因 timeout/idle。已接入 `app.ts` 的 `loopWatchdog.turnIdleTimeoutMs`。
+- [x] **死循环检测（loop stagnation）**：连续相似输出、连续无 diff 进展、同一 blocker fingerprint 重复均会升级 needs_human 或 force failed。已接入 `turn-loop.ts`。
+- [ ] **配套**：`adapter_policy.timeout_seconds` 保留为显式兜底；前端 Stream Output 显示"最后活动于 X 分钟前"仍待 UI 排期。
 
 ### 验证工作区隔离：worktree 策略落地 ✅ 已实现（2026-07-27）
 
@@ -260,6 +270,6 @@ memory packet 注入 prompt 并落 artifact、native_invocation 真实投影（a
 
 背景：2026-07-27 实证（run-20260727T150455Z-a40e562e）——paused run 的重启恢复已修（b8b51b3），但 **active 态的 run 在服务器重启后无人接管**：runTurns 随进程死亡，run_state 停在 active/retry，开机没有任何扫描把它捞起来；界面回退显示账本里最后一轮的 final_status（如 "retry"），看起来永远卡住；首轮在飞时甚至连账本/run_state 都没有，run 直接消失（run-20260727T153203Z-cffdae0e）。当天两次实证均为开发模式下用户按 UI 的 Reload / Ctrl+Shift+R（该快捷键是重启后端而非刷新页面）触发。
 
-- [ ] 开机恢复扫描：服务启动时遍历 run_state，对 state=active/retry 且有 run_id 的记录，按 rebuildContext 重建上下文并续跑（等价于 resume）；首轮在飞（无 run_state）的 run 无从恢复，应在操作侧避免（见下）。
-- [ ] 重启防护：POST /server/restart 在有 active run 时返回 409 + 提示先暂停（或先自动暂停所有 active run 再重启，重启后自动 resume——已有 pause/resume 原语可组合）。
-- [ ] UI 警示强化：ReloadBanner 的 "N active sessions will be interrupted" 对 loop run 场景写明"正在运行的 loop 会被杀死且无法恢复"；考虑把 Ctrl+Shift+R 从"重启后端"改为仅刷新前端（用户肌肉记忆 = 浏览器硬刷新，误杀率高）。
+- [x] 开机恢复扫描：`app.ts` 启动时遍历 run_state，对 state=active/retry 且有 run_id 的记录调用 `resumeAfterRestart()`。首轮在飞（无 run_state）的 run 仍应在操作侧避免。
+- [ ] 重启防护：POST /server/restart 在有 active run 时返回 409 + 提示先暂停。设计见 `../design/loop-restart-protection-design.md`。
+- [ ] UI 警示强化：ReloadBanner 对 loop run 场景显示专属中断警告；Ctrl+Shift+R 改为仅在明确需要时重载 backend。设计见 `../design/loop-restart-protection-design.md`。

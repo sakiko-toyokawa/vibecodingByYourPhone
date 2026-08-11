@@ -12,6 +12,7 @@
       "dist",
       "dist-*",
       "*.d.ts",
+      ".tmp-*",
 
       "docs/tasks",
       "branding",

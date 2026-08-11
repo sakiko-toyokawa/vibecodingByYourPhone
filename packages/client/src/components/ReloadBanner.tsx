@@ -4,6 +4,7 @@ interface Props {
   onDismiss: () => void;
   unsafeToRestart?: boolean;
   activeWorkers?: number;
+  activeLoopRuns?: Array<{ loop_id: string; run_id: string; state: string }>;
 }
 
 export function ReloadBanner({
@@ -12,9 +13,11 @@ export function ReloadBanner({
   onDismiss,
   unsafeToRestart,
   activeWorkers,
+  activeLoopRuns = [],
 }: Props) {
   const label = target === "backend" ? "Server" : "Frontend";
   const showWarning = unsafeToRestart && target === "backend";
+  const workerCount = activeWorkers ?? 0;
 
   return (
     <div
@@ -25,8 +28,21 @@ export function ReloadBanner({
       </span>
       {showWarning && (
         <span className="font-semibold">
-          {activeWorkers} active session{activeWorkers !== 1 ? "s" : ""} will be
-          interrupted
+          {workerCount > 0
+            ? `${workerCount} active session${workerCount !== 1 ? "s" : ""}`
+            : ""}
+          {workerCount > 0 && activeLoopRuns.length > 0 ? " and " : ""}
+          {activeLoopRuns.length > 0
+            ? `${activeLoopRuns.length} active loop run${activeLoopRuns.length !== 1 ? "s" : ""}`
+            : ""}
+          {" will be interrupted"}
+        </span>
+      )}
+      {activeLoopRuns.length > 0 && (
+        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+          {activeLoopRuns
+            .map((run) => `${run.loop_id}:${run.state}`)
+            .join(", ")}
         </span>
       )}
       <button

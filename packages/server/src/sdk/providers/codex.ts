@@ -309,6 +309,10 @@ export interface CodexProviderConfig {
   baseUrl?: string;
   /** API key override (normally read from ~/.codex/auth.json) */
   apiKey?: string;
+  /** `CODEX_HOME` override passed to codex app-server subprocesses. */
+  codexHome?: string;
+  /** Extra CLI args passed before `app-server`, e.g. `-c key="value"`. */
+  appServerArgs?: string[];
   /**
    * Timeout (ms) for app-server JSON-RPC requests (thread/start, turn/start,
    * thread/resume). Defaults to 60s; also configurable via the
@@ -439,6 +443,7 @@ export class CodexAppServerClient {
      * process exit (terminal error notification + child termination).
      */
     private readonly requestTimeoutMs = DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS,
+    private readonly extraArgs: string[] = [],
   ) {}
 
   /**
@@ -446,7 +451,7 @@ export class CodexAppServerClient {
    * subclass and point at a fake server without touching the real spawn path.
    */
   protected getAppServerArgs(): string[] {
-    return ["app-server", "--listen", "stdio://"];
+    return [...this.extraArgs, "app-server", "--listen", "stdio://"];
   }
 
   setServerRequestHandler(handler: AppServerRequestHandler): void {
@@ -793,6 +798,8 @@ export class CodexProvider implements AgentProvider {
    */
   private async resolveCodexCommand(): Promise<string> {
     if (this.config.codexPath) return this.config.codexPath;
+    const envCodexPath = process.env.YEP_CODEX_PATH;
+    if (envCodexPath) return envCodexPath;
     return (await findCodexCliPath()) ?? "codex";
   }
 
@@ -815,6 +822,16 @@ export class CodexProvider implements AgentProvider {
     env.CODEX_THREAD_ID = undefined;
     env.CODEX_CI = undefined;
     env.CODEX_SHELL = undefined;
+    // The parent Codex sandbox may disable network access or pin its pnpm
+    // install root; neither should apply to a nested Codex runtime session.
+    env.CODEX_SANDBOX_NETWORK_DISABLED = undefined;
+    env.CODEX_MANAGED_BY_PNPM = undefined;
+    env.CODEX_MANAGED_PACKAGE_ROOT = undefined;
+
+    const codexHome = this.config.codexHome ?? process.env.YEP_CODEX_HOME;
+    if (codexHome) {
+      env.CODEX_HOME = codexHome;
+    }
 
     if (this.config.baseUrl) {
       env.OPENAI_BASE_URL = this.config.baseUrl;
@@ -823,6 +840,25 @@ export class CodexProvider implements AgentProvider {
       env.OPENAI_API_KEY = this.config.apiKey;
     }
     return env;
+  }
+
+  private getAppServerExtraArgs(): string[] {
+    const envArgs = process.env.YEP_CODEX_APP_SERVER_ARGS;
+    if (!envArgs) {
+      return this.config.appServerArgs ?? [];
+    }
+    try {
+      const parsed = JSON.parse(envArgs) as unknown;
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((arg) => typeof arg === "string")
+      ) {
+        return [...(this.config.appServerArgs ?? []), ...parsed];
+      }
+    } catch {
+      // Invalid env args are ignored; the provider keeps default behavior.
+    }
+    return this.config.appServerArgs ?? [];
   }
 
   /**
@@ -891,7 +927,7 @@ export class CodexProvider implements AgentProvider {
     return new Promise((resolve, reject) => {
       const child = spawn(
         codexCommand,
-        ["app-server", "--listen", "stdio://"],
+        [...this.getAppServerExtraArgs(), "app-server", "--listen", "stdio://"],
         {
           detached: process.platform !== "win32",
           stdio: ["pipe", "pipe", "pipe"],
@@ -1120,14 +1156,30 @@ export class CodexProvider implements AgentProvider {
 
     // loop 策略投影 (06 #39): 策略钩子已接线时, 一切变更都经审批反向
     // 请求到达 loop/policy 裁决 —— 不再映射为 never + danger-full-access
-    // (那会让 app-server 不发审批请求, 硬闸门静默失效, 06 #24)。沙盒取
-    // read-only: 写操作与非只读命令都会触发 requestApproval → 策略钩子
-    // (硬闸门/bypass 审计/拒绝), 与 Claude 桥的 canUseTool 语义对齐。
+    // (那会让 app-server 不发审批请求, 硬闸门静默失效, 06 #24)。
+    // approvalPolicy 取 untrusted: 即使原生 sandbox 允许 workspace 写入
+    // 或 full access, file/command 也会发 requestApproval → 策略钩子
+    // (硬闸门/bypass 审计/拒绝)。sandbox 仍按合约安全等级保留原生边界:
+    // plan→read-only、default(workspace_write)→workspace-write、
+    // bypassPermissions(full_access)→danger-full-access。
     if (policyHookWired) {
-      return applyOverrides({
-        approvalPolicy: "on-request",
-        sandbox: "read-only",
-      });
+      switch (permissionMode) {
+        case "plan":
+          return applyOverrides({
+            approvalPolicy: "untrusted",
+            sandbox: "read-only",
+          });
+        case "bypassPermissions":
+          return applyOverrides({
+            approvalPolicy: "untrusted",
+            sandbox: "danger-full-access",
+          });
+        default:
+          return applyOverrides({
+            approvalPolicy: "untrusted",
+            sandbox: "workspace-write",
+          });
+      }
     }
 
     if (permissionMode === "bypassPermissions") {
@@ -1240,11 +1292,13 @@ export class CodexProvider implements AgentProvider {
       options.cwd,
       env,
       resolveRequestTimeoutMs(this.config.requestTimeoutMs),
+      this.getAppServerExtraArgs(),
     );
     setActiveClient(appServer);
 
     let sessionId = options.resumeSessionId ?? "";
     const usageByTurnId = new Map<string, TokenUsageSnapshot>();
+    let lastAssistantText = "";
     const logMessage = (message: SDKMessage): SDKMessage => {
       const messageSessionId =
         typeof (message as { session_id?: unknown }).session_id === "string"
@@ -1399,6 +1453,10 @@ export class CodexProvider implements AgentProvider {
             usageByTurnId,
           );
           for (const msg of messages) {
+            const assistantText = this.extractAssistantText(msg);
+            if (assistantText) {
+              lastAssistantText = assistantText;
+            }
             yield logMessage(msg);
           }
 
@@ -1427,6 +1485,7 @@ export class CodexProvider implements AgentProvider {
         yield logMessage({
           type: "result",
           session_id: sessionId,
+          result: lastAssistantText,
         } as SDKMessage);
       }
     } catch (error) {
@@ -1446,7 +1505,31 @@ export class CodexProvider implements AgentProvider {
     yield logMessage({
       type: "result",
       session_id: sessionId,
+      result: lastAssistantText,
     } as SDKMessage);
+  }
+
+  private extractAssistantText(message: SDKMessage): string {
+    if (message.type !== "assistant") {
+      return "";
+    }
+    const content = (message.message as { content?: unknown })?.content;
+    if (typeof content === "string") {
+      return content;
+    }
+    if (Array.isArray(content)) {
+      return content
+        .filter(
+          (block): block is { type: "text"; text?: string } =>
+            typeof block === "object" &&
+            block !== null &&
+            (block as { type?: unknown }).type === "text" &&
+            typeof (block as { text?: unknown }).text === "string",
+        )
+        .map((block) => block.text ?? "")
+        .join("\n");
+    }
+    return "";
   }
 
   private isTurnTerminalNotification(
@@ -1589,8 +1672,13 @@ export class CodexProvider implements AgentProvider {
           },
           "Handling Codex file-change approval request",
         );
+        // Codex's unstable file-change approval params do not always carry
+        // the concrete paths; fall back to the session cwd so the loop
+        // policy can still treat it as a workspace write. Managed GitHub
+        // workspaces own the whole cwd; direct allowlists still fail closed
+        // because cwd is not inside their target files unless they allow ".".
         const toolInput = {
-          file_path: grantRoot ?? undefined,
+          file_path: grantRoot ?? options.cwd,
           reason: fileParams.reason ?? null,
           grantRoot,
           threadId: fileParams.threadId,

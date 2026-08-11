@@ -152,4 +152,19 @@ export const loopsApi = {
     fetchJSON<{ content: string }>(
       `/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(name)}`,
     ),
+
+  /** Discard one run and optionally revert/clean up its workspace changes. */
+  discardRun: (
+    runId: string,
+    body: {
+      reason: string;
+      revert_files?: boolean;
+      cleanup_worktree?: boolean;
+      force?: boolean;
+    },
+  ) =>
+    fetchJSON<{ run_state: unknown; discard_result_ref: string }>(
+      `/runs/${encodeURIComponent(runId)}/discard`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
 };

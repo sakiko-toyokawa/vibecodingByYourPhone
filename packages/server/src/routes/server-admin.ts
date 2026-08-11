@@ -5,6 +5,10 @@ import type { Supervisor } from "../supervisor/Supervisor.js";
 export interface ServerAdminDeps {
   supervisor: Supervisor;
   notificationService?: NotificationService;
+  /** Returns active/retry loop runs that would be interrupted by restart. */
+  activeLoopRuns?: () => Promise<
+    Array<{ loop_id: string; run_id: string; state: string }>
+  >;
 }
 
 /**
@@ -16,6 +20,18 @@ export function createServerAdminRoutes(deps: ServerAdminDeps): Hono {
 
   // POST /api/server/restart - Trigger graceful server restart
   routes.post("/restart", async (c) => {
+    const active = (await deps.activeLoopRuns?.()) ?? [];
+    if (active.length > 0 && c.req.query("force") !== "true") {
+      return c.json(
+        {
+          error: "active_loop_runs",
+          message:
+            "Active loop runs would be interrupted by a server restart; pause them first or use ?force=true",
+          active_loop_runs: active,
+        },
+        409,
+      );
+    }
     console.log("[ServerAdmin] Restart requested via API");
 
     await deps.notificationService?.flush();

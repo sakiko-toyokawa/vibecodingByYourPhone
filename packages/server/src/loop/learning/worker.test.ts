@@ -573,7 +573,7 @@ test("worktree 清理接线: tick 顺带 prune, 活跃 run 的 worktree 受保�
     await runStateStore.save("loop-a", makeState("run-active", "active"));
     await runStateStore.save("loop-b", makeState("run-done", "complete"));
     await writeFile(
-      join(dataDir, "loops", "state", "broken.json"),
+      join(dataDir, "loops", "state", "broken.jsonl"),
       "{not json",
     );
 

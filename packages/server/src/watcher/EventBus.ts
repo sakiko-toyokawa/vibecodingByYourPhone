@@ -278,8 +278,10 @@ export interface LoopBudgetWarningEvent {
   max_turns: number;
   retries_used: number;
   max_retries: number;
+  tokens_used?: number;
+  max_tokens?: number;
   /** Which budget is approaching exhaustion first */
-  near_limit: "max_turns" | "max_retries";
+  near_limit: "max_turns" | "max_retries" | "max_tokens";
   timestamp: string;
 }
 

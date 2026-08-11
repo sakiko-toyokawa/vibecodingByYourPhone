@@ -136,6 +136,44 @@ export async function worktreeHasChanges(
 }
 
 /**
+ * Remove one run's worktree and its loop branch. Used by the discard flow;
+ * unlike pruneStaleWorktrees this is an immediate, targeted cleanup.
+ */
+export async function discardRunWorktree(opts: {
+  dataDir: string;
+  loopId: string;
+  runId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const dir = runWorktreeDir(opts.dataDir, opts.loopId, opts.runId);
+  if (!(await exists(dir))) {
+    return { ok: true };
+  }
+  try {
+    const commonDir = await git([
+      "-C",
+      dir,
+      "rev-parse",
+      "--git-common-dir",
+    ]).catch(() => null);
+    if (!commonDir) {
+      await fs.rm(dir, { recursive: true, force: true });
+      return { ok: true };
+    }
+    const repoPath = path.dirname(path.resolve(dir, commonDir));
+    await git(["-C", repoPath, "worktree", "remove", "--force", dir]);
+    await git(["-C", repoPath, "branch", "-D", `loop/${opts.runId}`]).catch(
+      () => {},
+    );
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
  * 合并闸门批准后执行合并：worktree 的未提交改动先落到 loop 分支
  * （executor 只写文件不提交是常态；commit 身份用 loop 专用，不依赖
  * 仓库的 user 配置），然后在原仓库 merge --no-ff。冲突时 abort 并抛

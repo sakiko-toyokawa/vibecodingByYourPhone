@@ -61,14 +61,18 @@ import type { PlannerService } from "./contract/planner.js";
 import {
   type ControlPlane,
   ControlPlaneError,
+  type PauseSeed,
   type ResumeSignal,
 } from "./control-plane/control-plane.js";
 import { retryBackoffMs } from "./control-plane/retry-backoff.js";
+import type { RunStateStore } from "./control-plane/run-state-store.js";
 import {
   type PermissionEvent,
   type PolicyEscalation,
   createLoopToolApprovalHook,
 } from "./policy/approval-hook.js";
+import { resolvePolicyProfile } from "./policy/profiles.js";
+import type { RelationStore } from "./relation/relation-store.js";
 import {
   buildHumanFeedbackRefs,
   captureGitDiff,
@@ -77,6 +81,7 @@ import {
   runCollector,
   writeTurnHandoff,
 } from "./run/artifacts.js";
+import { rollbackDirectRun, writeDiscardResult } from "./run/discard.js";
 import { buildLedgerSummary } from "./run/ledger-summary.js";
 import {
   type TurnLoopState,
@@ -117,7 +122,11 @@ import {
   captureWorkspaceSnapshot,
   workspaceSnapshotChanged,
 } from "./verification/workspace-stability.js";
-import { mergeRunWorktree, worktreeHasChanges } from "./worktree/worktree.js";
+import {
+  discardRunWorktree,
+  mergeRunWorktree,
+  worktreeHasChanges,
+} from "./worktree/worktree.js";
 
 export type LoopRunErrorCode =
   | "loop_not_found"
@@ -150,6 +159,8 @@ export interface LoopRunServiceDeps {
   supervisor: Supervisor;
   loopCardStore: LoopCardStore;
   runLedgerStore: RunLedgerStore;
+  /** Phase 6 checkpoint writing / restart recovery. */
+  runStateStore?: RunStateStore;
   /** Phase-2 control-plane; absent in tests that only exercise phase-0
    *  orchestration (single-turn, verdicts map straight to complete/failed,
    *  no budget enforcement). */
@@ -173,6 +184,8 @@ export interface LoopRunServiceDeps {
   githubToolProvisioner?: GithubToolProvisioner;
   /** Server data directory; used for managed github_prompt workspaces. */
   dataDir?: string;
+  /** Durable external relationship store used by relation-aware runs. */
+  relationStore?: RelationStore;
   /** Planner Agent for multi-turn task decomposition (optional). */
   planner?: PlannerService;
   /** Watchdog / stagnation settings. */
@@ -247,7 +260,8 @@ export class LoopRunService {
    * PATCH pause 的实现（03-API契约.md: 主动暂停，不走审批管线 — 审批队列
    * 无新增排队项）. Drives active → paused through the control-plane, then
    * kills the executing process (选项 A, 见文件头): the partial turn result
-   * is dropped, the session_ref survives for resume.
+   * is dropped, and the session_ref stays for audit/recovery reference. A
+   * later resume starts a fresh provider session from the AU2 handoff.
    *
    * Returns the updated run_state, or null when the loop has no active run
    * (the route then only sets the loop-level pause flag — 仅阻止后续触发).
@@ -287,7 +301,7 @@ export class LoopRunService {
         budget: ctx?.contract?.budget ?? null,
         createdAt: active?.createdAt ?? record.created_at,
         // ctx.sessionRef 要等 turn 结束才赋值; 在飞 turn 的 session 从
-        // 执行中的 Process 取, 供重启后 resume 续上同一 session。
+        // 执行中的 Process 取, 供 audit / run_state 记录最新 session。
         sessionRef:
           this.state.executingProcesses.get(record.run_id)?.sessionId ??
           ctx?.sessionRef ??
@@ -349,6 +363,7 @@ export class LoopRunService {
     loopId: string,
     source: ContractSource,
     intentOverrides?: IntentOverrides,
+    options: { relationId?: string } = {},
   ): Promise<RunSummary> {
     const stored = this.deps.loopCardStore.getLoop(loopId);
     if (!stored) {
@@ -389,6 +404,18 @@ export class LoopRunService {
         }
       : stored.card;
 
+    const policyProfile = resolvePolicyProfile(card);
+    if (
+      card.loop.workspace.strategy === "direct" &&
+      policyProfile &&
+      !policyProfile.allow_direct_mutations
+    ) {
+      throw new LoopRunError(
+        "loop_not_runnable",
+        `Loop '${loopId}' uses direct workspace with policy '${policyProfile.policy_profile}', but that profile does not opt into allow_direct_mutations (use workspace_local_fix for dedicated direct workspaces)`,
+      );
+    }
+
     const createdAt = new Date();
     const runId = makeRunId(createdAt);
     const active: ActiveRun = {
@@ -396,6 +423,7 @@ export class LoopRunService {
       loopId,
       source,
       createdAt: createdAt.toISOString(),
+      relationId: options.relationId,
     };
     this.state.activeByLoop.set(loopId, active);
     this.state.activeByRunId.set(runId, active);
@@ -550,5 +578,115 @@ export class LoopRunService {
    */
   async resumeAfterRestart(loopId: string): Promise<void> {
     return resumeAfterRestart(loopId, this.deps, this.state);
+  }
+
+  /**
+   * Discard one run: transition to `discarded`, optionally revert direct
+   * workspace changes and/or remove a worktree, then write discard evidence.
+   */
+  async discardRun(
+    runId: string,
+    input: {
+      reason: string;
+      revertFiles?: boolean;
+      cleanupWorktree?: boolean;
+      force?: boolean;
+    },
+  ): Promise<{
+    run_state: RunStateRecord;
+    discard_result_ref: string;
+  }> {
+    const detail = await this.getRun(runId);
+    if (!detail) {
+      throw new ControlPlaneError("run_not_found", `Run '${runId}' not found`);
+    }
+    const controlPlane = this.deps.controlPlane;
+    if (!controlPlane) {
+      throw new ControlPlaneError(
+        "invalid_state",
+        "Control plane not wired; discard is unavailable",
+      );
+    }
+    const { run } = detail;
+    const loopId = run.loop_id;
+    if ((run.state === "active" || run.state === "retry") && !input.force) {
+      throw new ControlPlaneError(
+        "invalid_state",
+        `Run '${runId}' is '${run.state}'; discard requires force=true so the executing process can be terminated first`,
+      );
+    }
+    if (input.force) {
+      this.terminateExecuting(runId);
+    }
+    const active = this.state.activeByRunId.get(runId);
+    const ctx =
+      this.state.executingContexts.get(runId) ??
+      this.state.suspended.get(runId);
+    const seed: PauseSeed = {
+      runId,
+      turn: ctx?.turn ?? (active ? 1 : 0),
+      goalId: ctx?.contract?.intent_id ?? "unknown",
+      workspaceRef: `workspace://${loopId}/${runId}`,
+      budget: ctx?.contract?.budget ?? null,
+      createdAt: active?.createdAt ?? run.created_at,
+      sessionRef:
+        this.state.executingProcesses.get(runId)?.sessionId ??
+        ctx?.sessionRef ??
+        null,
+    };
+    const runState = await controlPlane.discardRun(runId, input.reason, {
+      force: input.force,
+      loopId,
+      seed,
+      evidenceRefs: [],
+    });
+    releaseRun(runId, this.state);
+
+    const stored = this.deps.loopCardStore.getLoop(loopId);
+    const card = stored?.card;
+    let rollback: Awaited<ReturnType<typeof rollbackDirectRun>> | null = null;
+    let worktreeCleanup: { ok: boolean; error?: string } | null = null;
+    if (card?.loop.workspace.strategy === "direct") {
+      const declaredPath = card.loop.workspace.path;
+      const workspacePath =
+        declaredPath?.startsWith("managed://github-workspaces/prompt-loops/") &&
+        this.deps.dataDir
+          ? githubPromptWorkspacePath(this.deps.dataDir, loopId)
+          : declaredPath;
+      rollback =
+        input.revertFiles === false
+          ? { ok: true, revertedTrackedFiles: false }
+          : workspacePath
+            ? await rollbackDirectRun(
+                this.deps.runLedgerStore,
+                workspacePath,
+                runId,
+              )
+            : {
+                ok: false,
+                revertedTrackedFiles: false,
+                error: "direct workspace path is missing",
+              };
+    } else if (
+      card?.loop.workspace.strategy === "worktree" &&
+      this.deps.dataDir &&
+      input.cleanupWorktree !== false
+    ) {
+      worktreeCleanup = await discardRunWorktree({
+        dataDir: this.deps.dataDir,
+        loopId,
+        runId,
+      });
+    }
+    const discardResultRef = await writeDiscardResult(
+      this.deps.runLedgerStore,
+      runId,
+      {
+        reason: input.reason,
+        rollback,
+        worktreeCleanup,
+      },
+    );
+    return { run_state: runState, discard_result_ref: discardResultRef };
   }
 }

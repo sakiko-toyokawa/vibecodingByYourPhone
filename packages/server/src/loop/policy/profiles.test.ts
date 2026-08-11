@@ -75,3 +75,10 @@ test("required_for merge survives a named profile override", () => {
   assert.equal(profile.policy_profile, "loop_strict_review");
   assert.ok((profile.hard_gates as string[]).includes("wipe_cluster"));
 });
+
+test("allow_direct_mutations: explicit direct-worktree profiles opt in; loop_bypass does not", () => {
+  const bypass = resolvePolicyProfile(cardWith(), "loop_bypass");
+  assert.equal(bypass?.allow_direct_mutations, false);
+  const localFix = resolvePolicyProfile(cardWith(), "workspace_local_fix");
+  assert.equal(localFix?.allow_direct_mutations, true);
+});

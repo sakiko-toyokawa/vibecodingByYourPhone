@@ -29,7 +29,7 @@ test("single passed report → passed / complete / not retryable", () => {
   assert.equal(judgment.requires_human, false);
 });
 
-test("multiple reports → worst status wins (failed > inconclusive > passed)", () => {
+test("multiple reports → worst status wins (failed > unverified > inconclusive > passed)", () => {
   const inconclusive = aggregateVerifierReports(
     [
       makeReport(),
@@ -55,6 +55,23 @@ test("multiple reports → worst status wins (failed > inconclusive > passed)", 
     RETRY_POLICY,
   );
   assert.equal(failed.overall, "failed");
+});
+
+test("unverified status fails closed and is not retryable", () => {
+  const judgment = aggregateVerifierReports(
+    [
+      makeReport(),
+      makeReport({
+        verifier_phase: "runtime",
+        status: "unverified",
+        recommendation: "escalate",
+      }),
+    ],
+    RETRY_POLICY,
+  );
+  assert.equal(judgment.overall, "unverified");
+  assert.equal(judgment.next_action, "escalate");
+  assert.equal(judgment.retryable, false);
 });
 
 test("requires_human passthrough: top priority, never overridden by passes", () => {

@@ -8,6 +8,7 @@
  */
 
 import assert from "node:assert/strict";
+import { tmpdir } from "node:os";
 import { test } from "node:test";
 import { classifyToolCall, isInsideWorkspace } from "./classify.js";
 
@@ -58,6 +59,35 @@ test("file writes: inside workspace = medium/rollbackable, outside = high", () =
   // 无 workspace 上下文时写操作保守为 high
   const noCtx = classifyToolCall("Write", { file_path: "src/foo.ts" });
   assert.equal(noCtx.risk, "high");
+});
+
+test("edit tools extract Codex applyPatch/fileChange paths", () => {
+  const inside = classifyToolCall(
+    "Edit",
+    {
+      changes: [
+        { path: "src/a.ts", kind: { type: "update", move_path: null } },
+        { path: "src/b.ts", kind: { type: "add" } },
+      ],
+      grantRoot: WS,
+    },
+    { workspacePath: WS },
+  );
+  assert.equal(inside.risk, "medium");
+  assert.equal(inside.locallyRollbackable, true);
+  assert.deepEqual(inside.writeTargets, [WS, "src/a.ts", "src/b.ts"]);
+
+  const escaping = classifyToolCall(
+    "Edit",
+    {
+      changes: [
+        { path: "../outside.ts", kind: { type: "update", move_path: null } },
+      ],
+    },
+    { workspacePath: WS },
+  );
+  assert.equal(escaping.risk, "high");
+  assert.equal(escaping.locallyRollbackable, false);
 });
 
 test("interactive tools classify as high (unattended runs cannot answer)", () => {
@@ -136,7 +166,7 @@ test("delete: rm -rf (any flag order) always hits, plain rm does not", () => {
   assert.equal(plain.risk, "high");
 
   assert.equal(bash("git push origin --delete feature").hardGate, "delete");
-  assert.equal(bash("git branch -D feature").hardGate, "delete");
+  assert.equal(bash("git branch -D feature").hardGate, null);
 });
 
 test("notify: curl / wget / mail / gh comment", () => {
@@ -163,7 +193,7 @@ test("bill: payment providers / refund / payout", () => {
 
 // --- 风险分级（非硬闸门） ---
 
-test("bash risk tiers: read-only low, local rollbackable medium, unknown high", () => {
+test("bash risk tiers: read-only low, local/unknown default medium, blacklist high", () => {
   assert.equal(bash("ls -la").risk, "low");
   assert.equal(bash("git status").risk, "low");
   assert.equal(bash("git log --oneline | head -5").risk, "low");
@@ -174,12 +204,105 @@ test("bash risk tiers: read-only low, local rollbackable medium, unknown high", 
   assert.equal(bash("git add . && git commit -m 'wip'").risk, "medium");
   // 本地可回滚组合（测试 + 提交）
   assert.equal(bash("pnpm test && git commit -m 'x'").risk, "medium");
+  // managed workspace 内清理本地分支不是外部 delete
+  assert.equal(bash("git branch -D local-fix").hardGate, null);
+  assert.equal(bash("git branch -D local-fix").risk, "medium");
+  assert.equal(bash("git branch -D local-fix").locallyRollbackable, true);
 
-  assert.equal(bash("some-unknown-cli do-thing").risk, "high");
-  // 空命令保守为 high
-  assert.equal(bash("").risk, "high");
-  // 只读 + 未知混合 → 保守 high
-  assert.equal(bash("ls && some-unknown-cli x").risk, "high");
+  // 黑名单口径：未知命令默认 medium，不再因未识别升级
+  assert.equal(bash("some-unknown-cli do-thing").risk, "medium");
+  assert.equal(bash("").risk, "medium");
+  assert.equal(bash("ls && some-unknown-cli x").risk, "medium");
+
+  // 黑名单仍保留明确高风险
+  assert.equal(bash("git push origin main").risk, "high");
+  assert.equal(bash("rm src/foo.ts").risk, "high");
+  // PowerShell Format-Table 不是磁碟 format
+  assert.equal(
+    bash(
+      'powershell.exe -Command "Get-ChildItem -Force | Format-Table -AutoSize"',
+    ).risk,
+    "medium",
+  );
+  assert.equal(bash("format C:").risk, "high");
+});
+
+test("powershell wrappers are unwrapped before classification", () => {
+  const repro = bash(
+    `powershell.exe -Command "$reproDir = Join-Path (Get-Location) '.loop\\repro'; New-Item -ItemType Directory -Force -Path $reproDir | Out-Null"`,
+  );
+  assert.equal(repro.risk, "medium");
+  assert.equal(repro.locallyRollbackable, true);
+  assert.equal(repro.hardGate, null);
+
+  const destructive = bash(
+    `pwsh -Command "Remove-Item -Recurse -Force .loop\\repro"`,
+  );
+  assert.equal(destructive.risk, "high");
+  assert.equal(destructive.hardGate, null);
+
+  const push = bash(`powershell -Command "git push origin main"`);
+  assert.equal(push.risk, "high");
+});
+
+test("powershell semicolons inside blocks are not top-level separators", () => {
+  const diagnostic = bash(
+    `powershell.exe -Command "$tempRoot = Join-Path $env:TEMP 'aihub-import-diag'; New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null; $p = Start-Process -FilePath 'python' -ArgumentList @('-u','-c','print(1)') -PassThru -WindowStyle Hidden; if (-not $p.WaitForExit(15000)) { 'STATUS=TIMEOUT'; Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } else { 'STATUS=EXIT' }"`,
+  );
+  assert.equal(diagnostic.action, "execute");
+  assert.equal(diagnostic.risk, "medium");
+  assert.equal(diagnostic.locallyRollbackable, true);
+
+  const topLevelStop = bash("Stop-Process -Id 123 -Force");
+  assert.equal(topLevelStop.risk, "high");
+});
+
+test("Codex commandActions only downgrade after deterministic checks", () => {
+  const structuredRead = classifyToolCall(
+    "Bash",
+    {
+      command: "some-unknown-cli do-thing",
+      commandActions: [
+        {
+          type: "read",
+          command: "some-unknown-cli do-thing",
+          name: "thing",
+          path: `${WS}/thing.txt`,
+        },
+      ],
+    },
+    { workspacePath: WS },
+  );
+  assert.equal(structuredRead.risk, "low");
+
+  const structuredUnknown = classifyToolCall(
+    "Bash",
+    {
+      command: "some-unknown-cli do-thing",
+      commandActions: [
+        { type: "unknown", command: "some-unknown-cli do-thing" },
+      ],
+    },
+    { workspacePath: WS },
+  );
+  assert.equal(structuredUnknown.risk, "medium");
+
+  const pushStillHigh = classifyToolCall(
+    "Bash",
+    {
+      command: "git push origin main",
+      commandActions: [
+        {
+          type: "read",
+          command: "git push origin main",
+          name: "push",
+          path: `${WS}/repo`,
+        },
+      ],
+    },
+    { workspacePath: WS },
+  );
+  assert.equal(pushStillHigh.risk, "high");
 });
 
 test("compound commands: any segment hitting a hard gate gates the whole call", () => {
@@ -192,6 +315,7 @@ test("compound commands: any segment hitting a hard gate gates the whole call", 
 });
 
 test("isInsideWorkspace path containment", () => {
+  assert.equal(isInsideWorkspace(WS, WS), true);
   assert.equal(isInsideWorkspace(`${WS}/a/b.ts`, WS), true);
   assert.equal(isInsideWorkspace("a/b.ts", WS), true);
   assert.equal(isInsideWorkspace(`${WS}/../outside.ts`, WS), false);
@@ -227,15 +351,23 @@ test("bash workspace boundary: inside-workspace writes keep their original grade
   // echo 是只读命令, workspace 内重定向不改变既有分级 (既有语义)
   assert.equal(bash("echo hi > out.txt").risk, "low");
   assert.equal(bash("pnpm test > result.log").risk, "medium");
-  // cp/sed 本就不在本地可回滚清单, 默认 high (与边界检查无关, 不因
-  // 目标在内而降低, 也不因目标在内而误报为 write)
+  // workspace 内 cp 属于本地可回滚动作，默认 medium
   const cpInside = bash("cp a.txt b.txt");
-  assert.equal(cpInside.risk, "high");
+  assert.equal(cpInside.risk, "medium");
   assert.equal(cpInside.action, "execute");
   // 只读命令不扫参数路径
   assert.equal(bash("cat /etc/hosts").risk, "low");
   // 内联脚本无越界路径
   assert.equal(bash('node -e "console.log(1+1)"').risk, "medium");
+});
+
+test("bash workspace boundary: OS temp is an allowed scratch write root", () => {
+  const scratch = tmpdir().replace(/\\/g, "/");
+  const tempWrite = bash(
+    `node -e "require('fs').writeFileSync('${scratch}/scratch.txt','')"`,
+  );
+  assert.equal(tempWrite.risk, "medium");
+  assert.equal(tempWrite.locallyRollbackable, true);
 });
 
 test("bash workspace boundary: no workspace context = no boundary check (不误报)", () => {

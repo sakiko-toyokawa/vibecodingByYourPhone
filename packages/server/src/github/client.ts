@@ -14,6 +14,8 @@ export interface PublishDraftPrInput {
   title: string;
   body: string;
   cwd: string;
+  /** False opens a normal PR. Defaults to true for backward compatibility. */
+  draft?: boolean;
 }
 
 export interface CloneAndCheckoutBranchInput {
@@ -110,23 +112,35 @@ export class GitHubClient {
     if (!viewerLogin) {
       throw new Error("Unable to determine GitHub viewer login");
     }
-    await this.runChecked(["git", "push", "fork", input.branch], input.cwd);
-    const stdout = await this.runChecked(
+    await this.runChecked(
       [
-        "pr",
-        "create",
-        "--repo",
-        input.repository,
-        "--head",
-        `${viewerLogin}:${input.branch}`,
-        "--title",
-        input.title,
-        "--body",
-        input.body,
-        "--draft",
+        "git",
+        "-c",
+        "http.proxy=",
+        "-c",
+        "https.proxy=",
+        "push",
+        "fork",
+        input.branch,
       ],
       input.cwd,
     );
+    const prArgs = [
+      "pr",
+      "create",
+      "--repo",
+      input.repository,
+      "--head",
+      `${viewerLogin}:${input.branch}`,
+      "--title",
+      input.title,
+      "--body",
+      input.body,
+    ];
+    if (input.draft !== false) {
+      prArgs.push("--draft");
+    }
+    const stdout = await this.runChecked(prArgs, input.cwd);
     return stdout.trim();
   }
 
@@ -134,7 +148,11 @@ export class GitHubClient {
     input: CloneAndCheckoutBranchInput,
   ): Promise<void> {
     await this.runChecked([
-      "repo",
+      "git",
+      "-c",
+      "http.proxy=",
+      "-c",
+      "https.proxy=",
       "clone",
       input.repository,
       input.destination,

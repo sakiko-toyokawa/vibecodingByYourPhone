@@ -6,8 +6,8 @@
  *    partial result dropped, session_ref kept), and the approval pipeline
  *    gets NO new queued item (主动暂停不走审批管线 — no
  *    run-decision-required event, pending_approval stays null);
- *  - resume: paused → active, the run continues from the NEXT turn on the
- *    SAME session (Supervisor.resumeSession, session_ref 一致);
+ *  - resume: paused → active, the run continues from the NEXT turn in a
+ *    fresh session (Loop Engineering: per-turn startSession + AU2 handoff);
  *  - error codes per 03: 400 invalid_action, 404 loop_not_found,
  *    409 invalid_state (pause on a non-active run, resume on a non-paused
  *    run, operations on an archived loop, archive with an active run);
@@ -36,7 +36,7 @@ import { LoopCardStore } from "./state/loop-card-store.js";
 import { RunLedgerStore } from "./state/run-ledger-store.js";
 import type { VerifyRunResult } from "./verification/verify-run.js";
 
-const SESSION_ID = "session-pause-1";
+let sessionCounter = 0;
 
 interface SupervisorCall {
   method: "start" | "resume";
@@ -57,15 +57,16 @@ class FakeSupervisor {
     _cwd: string,
     message: { text: string },
   ): Promise<Process> {
+    const sessionId = `session-pause-${++sessionCounter}`;
     this.calls.push({
       method: "start",
       role: message.text.includes("Collector input bundle")
         ? "collector"
         : "executor",
-      sessionId: null,
+      sessionId,
       text: message.text,
     });
-    return this.makeProcess(SESSION_ID);
+    return this.makeProcess(sessionId);
   }
 
   async resumeSession(
@@ -273,7 +274,7 @@ async function waitFor(cond: () => boolean, what: string, timeoutMs = 5000) {
   }
 }
 
-test("pause mid-turn: run → paused, process killed, 审批管线无新增排队项; resume: 下一轮 resumeSession 同 session 继续", async () => {
+test("pause mid-turn: run → paused, process killed, 审批管线无新增排队项; resume: fresh session continues", async () => {
   await withFixture(
     async ({
       app,
@@ -345,8 +346,8 @@ test("pause mid-turn: run → paused, process killed, 审批管线无新增排�
       assert.equal(detail?.run.state, "paused");
       assert.equal(
         detail?.session_ref,
-        SESSION_ID,
-        "session_ref survives for resume",
+        supervisor.calls[0]?.sessionId,
+        "session_ref records the interrupted fresh session",
       );
       assert.equal(detail?.ledger_summary.max_turns, 3);
       assert.equal(detail?.ledger_summary.max_retries, 2);
@@ -365,7 +366,7 @@ test("pause mid-turn: run → paused, process killed, 审批管线无新增排�
       };
       assert.equal(resumeBody.current_run_state, "active");
 
-      // 从下一轮继续：turn 2 goes through resumeSession on the SAME session.
+      // 从下一轮继续：turn 2 opens a fresh session.
       const finalState = await waitForState(controlPlane, runId, ["complete"]);
       assert.equal(finalState, "complete");
       const executorCalls = supervisor.calls.filter(
@@ -373,8 +374,9 @@ test("pause mid-turn: run → paused, process killed, 审批管线无新增排�
       );
       assert.equal(executorCalls.length, 2);
       const second = executorCalls[1];
-      assert.equal(second?.method, "resume");
-      assert.equal(second?.sessionId, SESSION_ID, "session_ref 一致");
+      assert.equal(second?.method, "start");
+      assert.ok(second?.sessionId);
+      assert.notEqual(second?.sessionId, executorCalls[0]?.sessionId);
       assert.match(second?.text ?? "", /resumed after a pause/);
 
       const completedRecord = await stateStore.load("loop-it");
@@ -606,7 +608,7 @@ test("archive with no run → 200; trigger on archived loop → 409 loop_archive
   });
 });
 
-test("restart recovery: pause mid-turn-1 → 重启后 resume 重建上下文, 同 session 续跑至 complete", async () => {
+test("restart recovery: pause mid-turn-1 → 重启后 resume 重建上下文, fresh session 续跑至 complete", async () => {
   const dataDir = await mkdtemp(join(tmpdir(), "yep-loop-restart-"));
   try {
     // --- generation 1: start a run, pause it mid-turn-1, then "die" ---
@@ -647,12 +649,12 @@ test("restart recovery: pause mid-turn-1 → 重启后 resume 重建上下文, �
     const pause = await patchLoop(app1, "loop-it", { action: "pause" });
     assert.equal(pause.status, 200);
 
-    // The paused run_state keeps the killed turn's session for a
-    // post-restart resume (06 #32), and the setup-time contract snapshot
-    // is already on disk for context rebuild.
+    // The paused run_state keeps the killed turn's session for audit/recovery
+    // reference (06 #32), and the setup-time contract snapshot is already on
+    // disk for context rebuild.
     const pausedRecord = await stateStore.load("loop-it");
     assert.equal(pausedRecord?.state, "paused");
-    assert.equal(pausedRecord?.session_ref, SESSION_ID);
+    assert.ok(pausedRecord?.session_ref);
     assert.ok(
       await ledgerStore.readArtifact(runId, "intent-contract.json"),
       "contract snapshot persisted at assembly time",
@@ -691,10 +693,15 @@ test("restart recovery: pause mid-turn-1 → 重启后 resume 重建上下文, �
     assert.equal(executorCalls.length, 1);
     assert.equal(
       executorCalls[0]?.method,
-      "resume",
-      "rebuilt run resumes the same session after restart",
+      "start",
+      "rebuilt run opens a fresh session after restart",
     );
-    assert.equal(executorCalls[0]?.sessionId, SESSION_ID);
+    assert.ok(executorCalls[0]?.sessionId);
+    assert.notEqual(
+      executorCalls[0]?.sessionId,
+      pausedRecord?.session_ref,
+      "restart does not reuse the interrupted session",
+    );
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }

@@ -3,7 +3,8 @@
 > 基於 `verifier_system_design.md`、`loop_state_system_improvement_plan.md` 與 `docs/design/layered-verifier-design.md` 的落地路線圖。
 > 版本：v1.6 | 日期：2026-08-05
 >
-> **進度：Phase 0–5 已完成（2026-08-05）。**
+> **進度：Phase 0–6 已完成；Phase 7 已實作，且本機 Codex runtime
+> full-chain 已跑通 `read-only-todo-scan`（2026-08-08）。**
 
 ---
 
@@ -227,6 +228,52 @@ server verification / run-service 相關測試、`biome check`）：
 
 ---
 
+## Phase 6 完成紀錄
+
+以下任務已落地（`pnpm typecheck`、`pnpm --filter @yep-anywhere/server test`、
+`pnpm lint` 乾淨）：
+
+- [x] **State append-only log**：`state/<loop_id>.json` 直接切換為
+  `state/<loop_id>.jsonl`；`state_snapshot` / `checkpoint` event append-only，
+  寫入走 per-loop chain + `proper-lockfile`；壞行跳過、checksum 不符回滾到
+  前一個有效 event（`run-state-store.ts`）。
+- [x] **Checkpoint 機制**：每輪完成後寫 checkpoint，內容含 run/state/turn、
+  workspace snapshot、artifact manifest hash；重啟時乾淨 checkpoint 自動
+  恢復，缺 checkpoint 或外部檔案不一致時轉 `needs_human` 沿用既有
+  `POST /api/runs/:id/decision` 閘門（`turn-loop.ts`、`control-plane.ts`）。
+- [x] **雙軌 Handoff**：每次 run session 結束寫 `human-report.md`（AU2
+  八段式）與 `machine-state.json`；既有 `turn-handoff.json` 保留相容，
+  ledger summary 優先指向 machine state（`state/handoff.ts`）。
+- [x] **外部狀態同步**：`writeArtifact` 記錄 `manifest.jsonl` 的
+  `idempotency_key` + `expected_hash`，新增 `verifyArtifactIntegrity`；
+  checkpoint 比較 workspace snapshot，外部檔案被改動時恢復流程能偵測。
+- [x] **儲存分層**：新增 `cold-storage.ts`，過期 run 的 ledger gzip 到
+  `cold/<run_id>.jsonl.gz`、artifacts 移入 `cold/<run_id>/`，再由
+  `cleanup.ts` 移除 hot 儲存。
+- [x] **Schema 版本化 + checksum**：state event、run ledger、decision
+  ledger 新寫入帶 `schema_version: 2` + checksum；舊資料缺省視為 v1 仍可讀，
+  不破壞性遷移。
+- [x] **敏感資料脫敏**：`redact.ts` 在 STATE.md / human report 投影邊界
+  取代絕對路徑、API key/token/password，大型內容改存 `sha256:<hash>`。
+- [x] 測試：`run-state-store`、`handoff`、`redact`、`cold-storage`、
+  `run-service-checkpoint-gate` 與既有 ledger/cleanup/worker 更新。
+
+**實作偏差（與原計畫表格的差異）：**
+
+1. **直接切換 JSONL，不自動遷移舊 `.json`。** 舊 `state/<loop_id>.json`
+   保留原檔但不再讀取，避免啟動時隱式遷移造成資料遺失。
+2. **恢復「異常才詢問」。** 有完整 checkpoint 且 artifact/workspace 未變時
+   自動恢復；只有 checkpoint 不完整或外部狀態被改動時才停到 `needs_human`。
+3. **AU2 八段以搜尋到的 Codexis / Xiaohongshu 報告導向版本為準**：背景
+   上下文、關鍵決策、工具使用記錄、用戶意圖演進、執行結果匯總、錯誤與
+   解決、未解決問題、後續計劃；目前沒有 Anthropic 官方公開文件提供唯一
+   模板。
+4. **tool call 的外部一致性以 permission events + artifact manifest
+   承載**：工具使用記錄寫入 AU2 報告並帶 `idempotency_key` / `expected_hash`；
+   不另建逐 session call 的獨立索引。
+5. **冷歸檔改為整份 gzip 歸檔**，舊的「決策明細剔除壓縮」保留為歸檔失敗
+   時的 fallback，不再作為主要清理路徑。
+
 ## 一、背景與目標
 
 ### 1.1 現狀
@@ -401,6 +448,17 @@ server verification / run-service 相關測試、`biome check`）：
 | 性能基準 | 測量 LSP 啟動時間、Agent token 消耗、state log 讀取時間 | `benchmarks/loop-runtime-eval/` | 平均驗證成本 < Maker 成本 30% |
 | 文件更新 | 更新 `CLAUDE.md` / `AGENTS.md` 與 API 文件 | `CLAUDE.md`、相關 `README` | 文件與實作一致 |
 
+> Phase 7 詳細執行計劃：`docs/plans/phase7-integration-testing-and-benchmark-plan.md`
+
+**Phase 7 落地摘要：**
+- 新增 `benchmarks/loop-runtime-eval/run-full-chain.ts` 與 `benchmark.ts`。
+- 新增 `failure-tags.ts`，把 L3/L4 訊號映射到既有 `FailureTag`。
+- 新增 `pnpm test:phase7:full-chain` / `pnpm benchmark:phase7`。
+- 既有 31 個 loop-modules tasks、server tests、typecheck、lint 均通過。
+- 真實 runtime full-chain 需 `PHASE7_PROVIDER` / API key 或 CLI auth；
+  本機 Codex 案例需 `PHASE7_CODEX_PROFILE` / `PHASE7_CODEX_HOME` /
+  `PHASE7_CODEX_PATH`。
+
 ---
 
 ## 四、時間線總覽
@@ -428,7 +486,7 @@ server verification / run-service 相關測試、`biome check`）：
 |---|---|---|
 | LSP 啟動慢 | L3 驗證時間長 | 先用 `tsc --noEmit` 等一次性命令；快取啟動結果 |
 | Verifier Agent 誤殺 | 無效 retry | 初期只做 warning，累積樣本後再設為 hard fail |
-| State log 遷移 | 舊 `state/<loop_id>.json` 需相容 | 啟動時自動把舊 json 轉為首條 event |
+| State log 遷移 | 舊 `state/<loop_id>.json` 需相容 | 直接切換 JSONL；舊 json 保留原檔但不讀取 |
 | 意圖 Agent 幻覺 | 產生錯誤 contract | 人工確認閘門；匹配範本優先 |
 | Token 成本暴增 | L4 + intent agent 雙 LLM | 只在 L1-L3 全過後跑 L4；intent agent 可選 |
 

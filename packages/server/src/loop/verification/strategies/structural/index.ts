@@ -3,6 +3,9 @@ import type {
   VerificationInput,
   VerificationStrategy,
 } from "../../strategy.js";
+import { PythonChecker } from "./checkers/python.js";
+import { RustChecker } from "./checkers/rust.js";
+import type { StructuralPlugin } from "./plugin.js";
 import { SchemaChecker } from "./schema.js";
 import { TypeScriptChecker } from "./typescript.js";
 
@@ -11,6 +14,8 @@ import { TypeScriptChecker } from "./typescript.js";
  *
  * 聚合各語言/格式的結構 checker：
  * - TypeScriptChecker：tsc --noEmit diagnostics + regex import graph 循環依賴
+ * - PythonChecker：pyright diagnostics
+ * - RustChecker：cargo check --message-format=short diagnostics
  * - SchemaChecker：<name>.schema.json ↔ <name>.json 最小子集驗證
  *
  * 誠實口徑：
@@ -30,17 +35,21 @@ export class StructuralStrategy implements VerificationStrategy {
     typescript: TypeScriptChecker;
     schema: SchemaChecker;
   };
+  private readonly plugins: StructuralPlugin[];
 
   constructor(
     checkers: {
       typescript?: TypeScriptChecker;
       schema?: SchemaChecker;
     } = {},
+    plugins: StructuralPlugin[] = [],
   ) {
     this.checkers = {
       typescript: checkers.typescript ?? new TypeScriptChecker(),
       schema: checkers.schema ?? new SchemaChecker(),
     };
+    this.plugins =
+      plugins.length > 0 ? plugins : [new PythonChecker(), new RustChecker()];
   }
 
   async verify(input: VerificationInput): Promise<VerifierReport> {
@@ -80,13 +89,35 @@ export class StructuralStrategy implements VerificationStrategy {
       risks.push(...schema.risks);
     }
 
+    for (const plugin of this.plugins) {
+      const outcome = await plugin.run({
+        workspacePath: input.workspacePath,
+        phase: input.phase,
+        timeoutMs: input.timeoutMs,
+      });
+      if (outcome.applicable) {
+        anyApplicable = true;
+        anyInconclusive ||= outcome.inconclusive ?? false;
+        issues.push(...outcome.issues);
+        risks.push(...outcome.risks);
+        if (outcome.rawLog) {
+          evidenceRefs.push(
+            await input.writeEvidence(
+              `structural-${plugin.name}-turn${input.turn}.log`,
+              outcome.rawLog,
+            ),
+          );
+        }
+      }
+    }
+
     if (!anyApplicable) {
       return {
         verifier_phase: input.phase,
-        status: "inconclusive",
+        status: "unverified",
         evidence_refs: [],
         unresolved_risks: [
-          "structural phase 已宣告但無適用 checker：Phase 3 MVP 僅支援 TypeScript 專案（tsconfig.json / *.ts）與 *.schema.json 配對驗證",
+          "structural phase 已宣告但無適用 checker：目前支援 TypeScript、Python、Rust 與 *.schema.json 配對驗證；此 workspace 的語言/結構未驗證",
         ],
         recommendation: "escalate",
         confidence: 0.3,

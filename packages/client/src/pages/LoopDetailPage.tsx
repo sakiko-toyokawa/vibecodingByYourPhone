@@ -58,6 +58,7 @@ export function LoopDetailPage() {
   const [interactionDepsMessage, setInteractionDepsMessage] = useState<
     string | null
   >(null);
+  const [discarding, setDiscarding] = useState(false);
   const selectedRunIdRef = useRef<string | null>(null);
   selectedRunIdRef.current = selectedRunId;
 
@@ -116,7 +117,9 @@ export function LoopDetailPage() {
       setInteractionDeps(await loopsApi.getInteractionDeps(loopId));
     } catch (err) {
       setInteractionDeps(null);
-      setInteractionDepsMessage(err instanceof Error ? err.message : String(err));
+      setInteractionDepsMessage(
+        err instanceof Error ? err.message : String(err),
+      );
     } finally {
       setInteractionDepsLoading(false);
     }
@@ -186,6 +189,33 @@ export function LoopDetailPage() {
     },
     [selectedRunId],
   );
+
+  const handleDiscardRun = useCallback(async () => {
+    if (!selectedRunId || !runDetail) return;
+    const isActive =
+      runDetail.run.state === "active" || runDetail.run.state === "retry";
+    const confirmed = window.confirm(
+      isActive
+        ? "Discard this run? The executing process will be terminated, then direct changes will be reverted or the worktree removed."
+        : "Discard this run? This marks it discarded, reverts direct tracked changes by default, and removes the run worktree by default.",
+    );
+    if (!confirmed) return;
+    setDiscarding(true);
+    setActionError(null);
+    try {
+      await loopsApi.discardRun(selectedRunId, {
+        reason: "Discarded by user from loop detail page",
+        revert_files: true,
+        cleanup_worktree: true,
+        force: isActive,
+      });
+      await load();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDiscarding(false);
+    }
+  }, [load, runDetail, selectedRunId]);
 
   const handleRunNow = useCallback(async () => {
     if (!loopId) return;
@@ -353,7 +383,9 @@ export function LoopDetailPage() {
                       {interactionDepsLoading
                         ? t("loopsInteractionDepsChecking")
                         : interactionDeps
-                          ? t(`loopsInteractionDepsStatus_${interactionDeps.status}` as never)
+                          ? t(
+                              `loopsInteractionDepsStatus_${interactionDeps.status}` as never,
+                            )
                           : t("loopsInteractionDepsUnknown")}
                     </p>
                     {interactionDepsMessage && (
@@ -460,6 +492,16 @@ export function LoopDetailPage() {
                                   ?.reason ?? "—",
                             })}
                           </p>
+                        )}
+                        {runDetail.run.state !== "discarded" && (
+                          <button
+                            type="button"
+                            className="self-end rounded-md border border-[var(--error-color)]/50 bg-[var(--error-color)]/10 px-4 py-2 text-sm font-medium text-[var(--error-color)] transition-opacity hover:opacity-90 disabled:opacity-50"
+                            onClick={() => void handleDiscardRun()}
+                            disabled={discarding}
+                          >
+                            {discarding ? "Discarding..." : "Discard run"}
+                          </button>
                         )}
                         <div className="flex items-start justify-between gap-[var(--space-3)]">
                           <span className="shrink-0 text-[var(--text-muted)]">

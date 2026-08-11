@@ -1,10 +1,16 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ControlPlane } from "../../packages/server/src/loop/control-plane/control-plane.js";
 import { RunStateStore } from "../../packages/server/src/loop/control-plane/run-state-store.js";
 import { LoopRunService } from "../../packages/server/src/loop/run-service.js";
 import { LoopCardStore } from "../../packages/server/src/loop/state/loop-card-store.js";
 import { RunLedgerStore } from "../../packages/server/src/loop/state/run-ledger-store.js";
+import type { AgentProvider } from "../../packages/server/src/sdk/providers/types.js";
+import { Supervisor } from "../../packages/server/src/supervisor/Supervisor.js";
+import type {
+  DecisionEntry,
+  FailureTag,
+  VerificationPhase,
+} from "../../packages/shared/src/index.js";
 import type { LoopCard } from "../../packages/shared/src/loop-schema/loop-card.js";
 import type { RunState } from "../../packages/shared/src/loop-schema/run-ledger.js";
 import { createFakeEventBus } from "../loop-modules/fixtures/fake-event-bus.js";
@@ -27,6 +33,20 @@ export interface RuntimeEvalOptions {
   maxTimeMinutes?: number;
   /** Polling timeout in ms. */
   timeoutMs?: number;
+  /** Real provider for Phase 7 full-chain runs. */
+  provider?: AgentProvider;
+  /** Model override from PHASE7_MODEL. */
+  model?: string;
+  /** Verifier chain used by the generated card. */
+  verificationRequired?: VerificationPhase[];
+  /** Enable intent understanding agent gate. */
+  useIntentAgent?: boolean;
+  /** Task type projected into the card handoff. */
+  taskType?: string;
+  /** Artifacts that must be present for a full-chain case to pass. */
+  expectedArtifacts?: string[];
+  /** Failure tags that must appear when the case intentionally fails. */
+  expectedFailureTags?: FailureTag[];
   /**
    * Multi-turn script for the fake executor.
    * Each entry drives one executor turn; the collector will recommend
@@ -63,6 +83,14 @@ export interface RuntimeEvalResult {
   stateTrace: { at: string; state: RunState; turn: number }[];
   stages: StageCheck[];
   artifacts: Record<string, string | undefined>;
+  failureTags: FailureTag[];
+  metrics: {
+    makerTokens: number;
+    verifierTokens: number;
+    stateLogReadMs: number;
+    checkpointCount: number;
+    handoffCount: number;
+  };
   ledgerSummary: {
     decisions: number;
     runEntries: number;
@@ -79,7 +107,7 @@ function makeLoopCard(
       id,
       trigger: { type: "manual" },
       handoff: {
-        default_task_type: "maintenance",
+        default_task_type: options.taskType ?? "maintenance",
         task: options.prompt,
       },
       workspace: {
@@ -87,8 +115,17 @@ function makeLoopCard(
         path: workspacePath,
       },
       verification: {
-        required: ["static", "runtime"],
+        required: options.verificationRequired ?? ["static", "runtime"],
       },
+      runtime: options.provider
+        ? {
+            provider: options.provider.name,
+            model: options.model,
+          }
+        : undefined,
+      intent_understanding: options.useIntentAgent
+        ? { use_agent: true }
+        : undefined,
       persistence: {
         state_file: `state/${id}.json`,
       },
@@ -102,7 +139,9 @@ function makeLoopCard(
 }
 
 function isTerminal(state: RunState): boolean {
-  return ["complete", "failed", "budget_limited"].includes(state);
+  return ["complete", "failed", "budget_limited", "needs_human"].includes(
+    state,
+  );
 }
 
 export async function runRuntimeEvaluation(
@@ -129,13 +168,16 @@ export async function runRuntimeEvaluation(
       eventBus,
     });
 
-    const supervisor = options.turns
-      ? new FakeSupervisor({ turns: options.turns })
-      : new FakeSupervisor({ autoSucceed: true });
+    const supervisor = options.provider
+      ? new Supervisor({ provider: options.provider, eventBus })
+      : options.turns
+        ? new FakeSupervisor({ turns: options.turns })
+        : new FakeSupervisor({ autoSucceed: true });
     const runService = new LoopRunService({
       supervisor: supervisor as never,
       loopCardStore,
       runLedgerStore,
+      runStateStore,
       controlPlane,
       sleep: async () => {},
     });
@@ -147,6 +189,7 @@ export async function runRuntimeEvaluation(
     const run = await runService.startRun(card.loop.id, "manual");
     const runId = run.run_id;
     const loopId = card.loop.id;
+    console.error(`[phase7] run started: ${runId} loop=${loopId}`);
 
     const stateTrace: RuntimeEvalResult["stateTrace"] = [];
     const deadline = start + (options.timeoutMs ?? 60_000);
@@ -160,12 +203,26 @@ export async function runRuntimeEvaluation(
           state,
           turn: record?.turn ?? 0,
         });
+        if (
+          stateTrace.length === 1 ||
+          stateTrace.at(-2)?.state !== stateTrace.at(-1)?.state
+        ) {
+          console.error(
+            `[phase7] state=${state} turn=${record?.turn ?? 0} elapsedMs=${Date.now() - start}`,
+          );
+        }
         if (isTerminal(state)) break;
       }
       await new Promise((r) => setTimeout(r, 200));
     }
 
     const finalState = controlPlane.currentStateOf(runId) ?? null;
+    await waitForRunArtifacts(
+      runLedgerStore,
+      runId,
+      options.expectedArtifacts ?? [],
+      10_000,
+    );
     const elapsedMs = Date.now() - start;
 
     // Read ledger and artifacts.
@@ -180,6 +237,16 @@ export async function runRuntimeEvaluation(
     for (const name of artifactNames) {
       artifacts[name] = await runLedgerStore.readArtifact(runId, name);
     }
+
+    const stateLogStart = performance.now();
+    const stateEvents = await runStateStore.readEvents(loopId);
+    const stateLogReadMs = performance.now() - stateLogStart;
+    const { makerTokens, verifierTokens } = sumTokenUsage(artifacts);
+    const failureTags = [
+      ...new Set<FailureTag>(
+        decisionEntries.flatMap((entry) => entry.failure_tags ?? []),
+      ),
+    ];
 
     const stages = evaluateStages({
       finalState,
@@ -201,12 +268,44 @@ export async function runRuntimeEvaluation(
       stateTrace,
       stages,
       artifacts,
+      failureTags,
+      metrics: {
+        makerTokens,
+        verifierTokens,
+        stateLogReadMs,
+        checkpointCount: stateEvents.filter(
+          (event) => event.type === "checkpoint",
+        ).length,
+        handoffCount: artifactNames.filter(
+          (name) => name === "human-report.md" || name === "machine-state.json",
+        ).length,
+      },
       ledgerSummary: {
         decisions: decisionEntries.length,
         runEntries: runEntryCount,
       },
     };
   });
+}
+
+/** Wait for ledger/handoff writes that complete after the terminal state. */
+async function waitForRunArtifacts(
+  store: RunLedgerStore,
+  runId: string,
+  expectedArtifacts: string[],
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const entry = await store.readEntry(runId);
+    const names = await store.listArtifacts(runId);
+    const complete =
+      entry !== null && expectedArtifacts.every((name) => names.includes(name));
+    if (complete || Date.now() >= deadline) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 }
 
 function safeJsonParse(text: string | undefined): unknown {
@@ -223,7 +322,7 @@ function evaluateStages(ctx: {
   runId: string;
   loopId: string;
   artifacts: Record<string, string | undefined>;
-  decisionEntries: { decision: string; created_at: string }[];
+  decisionEntries: DecisionEntry[];
   events: { type: string; data?: unknown }[];
   stateTrace: RuntimeEvalResult["stateTrace"];
   options: RuntimeEvalOptions;
@@ -290,17 +389,20 @@ function evaluateStages(ctx: {
     ],
   ) as Array<{ status: string }> | undefined;
   const anyHardFailed = latestVerifiers?.some((r) => r.status === "failed");
+  const anyUnverified = latestVerifiers?.some((r) => r.status === "unverified");
   const allPassed = latestVerifiers?.every((r) => r.status === "passed");
   const hasVerifierReports = verifierReportKeys.length > 0;
   stages.push({
     stage: "verification",
-    passed: hasVerifierReports && !anyHardFailed,
+    passed: hasVerifierReports && !anyHardFailed && !anyUnverified,
     score: !hasVerifierReports ? 0 : allPassed ? 1 : 0.5,
     reason: !hasVerifierReports
       ? "No verifier reports found"
       : allPassed
         ? "All verifier reports passed"
-        : "Verifier reports produced but some phases failed",
+        : anyUnverified
+          ? "Verifier reports produced but some phases could not be verified"
+          : "Verifier reports produced but some phases failed",
     evidence: { verifierStatuses: latestVerifiers?.map((r) => r.status) },
   });
 
@@ -361,4 +463,66 @@ function evaluateStages(ctx: {
   });
 
   return stages;
+}
+
+function sumTokenUsage(artifacts: Record<string, string | undefined>): {
+  makerTokens: number;
+  verifierTokens: number;
+} {
+  let makerTokens = 0;
+  let verifierTokens = 0;
+  for (const [name, content] of Object.entries(artifacts)) {
+    if (!content) {
+      continue;
+    }
+    if (name.startsWith("runtime-events")) {
+      makerTokens += sumRuntimeEventTokens(content);
+    } else if (
+      /(collector|verifier-agent|interaction-agent)-usage/.test(name)
+    ) {
+      verifierTokens += sumUsageJson(content);
+    }
+  }
+  return { makerTokens, verifierTokens };
+}
+
+function sumRuntimeEventTokens(content: string): number {
+  let total = 0;
+  for (const line of content.split("\n")) {
+    if (!line.trim()) {
+      continue;
+    }
+    try {
+      const event = JSON.parse(line) as {
+        message?: {
+          type?: string;
+          usage?: { input_tokens?: number; output_tokens?: number };
+        };
+      };
+      const usage = event.message?.usage;
+      if (usage) {
+        total += (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
+      }
+    } catch {
+      // Corrupt benchmark artifact lines are ignored.
+    }
+  }
+  return total;
+}
+
+function sumUsageJson(content: string): number {
+  try {
+    const usage = JSON.parse(content) as {
+      input_tokens?: number;
+      output_tokens?: number;
+      tokens?: number;
+    };
+    return (
+      (usage.tokens ?? 0) +
+      (usage.input_tokens ?? 0) +
+      (usage.output_tokens ?? 0)
+    );
+  } catch {
+    return 0;
+  }
 }

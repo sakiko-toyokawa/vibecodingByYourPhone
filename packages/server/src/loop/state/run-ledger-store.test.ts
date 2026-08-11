@@ -182,3 +182,63 @@ test("unsafe names (path traversal) are rejected", async () => {
     await assert.rejects(() => store.writeArtifact("run-1", "../x", "y"));
   });
 });
+
+test("ledger appends carry Phase 6 schema_version + checksum", async () => {
+  await withTempDir(async (dataDir) => {
+    const store = new RunLedgerStore({ dataDir });
+    await store.appendEntry("run-meta", makeEntry("run-meta"));
+    const raw = await readFile(
+      join(dataDir, "loops", "runs", "run-meta.jsonl"),
+      "utf-8",
+    );
+    const line = JSON.parse(raw.trim()) as Record<string, unknown>;
+    assert.equal(line.schema_version, 2);
+    assert.equal(typeof line.checksum, "string");
+    assert.ok((line.checksum as string).length > 0);
+  });
+});
+
+test("legacy ledger lines without metadata are still readable", async () => {
+  await withTempDir(async (dataDir) => {
+    const store = new RunLedgerStore({ dataDir });
+    const runsDir = join(dataDir, "loops", "runs");
+    await import("node:fs/promises").then((fs) =>
+      fs.mkdir(runsDir, { recursive: true }),
+    );
+    await writeFile(
+      join(runsDir, "run-legacy.jsonl"),
+      `${JSON.stringify({ type: "run_ledger_entry", ...makeEntry("run-legacy") })}\n`,
+    );
+    assert.equal((await store.readEntry("run-legacy"))?.run_id, "run-legacy");
+  });
+});
+
+test("artifact manifest is idempotent and detects external tampering", async () => {
+  await withTempDir(async (dataDir) => {
+    const store = new RunLedgerStore({ dataDir });
+    await store.writeArtifact("run-1", "a.txt", "one");
+    await store.writeArtifact("run-1", "a.txt", "one");
+    const manifest = await readFile(
+      join(dataDir, "loops", "artifacts", "run-1", "manifest.jsonl"),
+      "utf-8",
+    );
+    assert.equal(manifest.trim().split("\n").length, 1);
+    assert.equal((await store.readArtifactManifest("run-1")).length, 1);
+    assert.equal((await store.verifyArtifactIntegrity("run-1")).ok, true);
+    await writeFile(
+      join(dataDir, "loops", "artifacts", "run-1", "a.txt"),
+      "tampered",
+      "utf-8",
+    );
+    const integrity = await store.verifyArtifactIntegrity("run-1");
+    assert.equal(integrity.ok, false);
+    assert.deepEqual(
+      integrity.mismatches.map((item) => item.name),
+      ["a.txt"],
+    );
+    assert.equal(
+      (await store.listArtifacts("run-1")).includes("manifest.jsonl"),
+      false,
+    );
+  });
+});
