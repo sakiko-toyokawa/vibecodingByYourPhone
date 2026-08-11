@@ -417,6 +417,14 @@ export function Sidebar({
               collapsed={isCollapsed}
             />
             <SidebarNavItem
+              to="/github"
+              icon={SidebarIcons.loops}
+              label="GitHub"
+              onClick={onNavigate}
+              basePath={basePath}
+              collapsed={isCollapsed}
+            />
+            <SidebarNavItem
               to="/settings"
               icon={SidebarIcons.settings}
               label={t("sidebarSettings")}

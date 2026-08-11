@@ -37,6 +37,7 @@ import { CodeEditorPage } from "./pages/CodeEditorPage";
 import { DirectLoginPage } from "./pages/DirectLoginPage";
 import { EmulatorPage } from "./pages/EmulatorPage";
 import { FilePage } from "./pages/FilePage";
+import { GitHubModePage } from "./pages/GitHubModePage";
 import { GitStatusPage } from "./pages/GitStatusPage";
 import { GlobalSessionsPage } from "./pages/GlobalSessionsPage";
 import { HostPickerPage } from "./pages/HostPickerPage";
@@ -102,6 +103,7 @@ const APP_ROUTES = (
       <Route path="inbox" element={<InboxPage />} />
       <Route path="loops" element={<LoopsPage />} />
       <Route path="loops/:loopId" element={<LoopDetailPage />} />
+      <Route path="github" element={<GitHubModePage />} />
       <Route path="git-status" element={<GitStatusPage />} />
       <Route path="devices" element={<EmulatorPage />} />
       <Route path="devices/:deviceId" element={<EmulatorPage />} />

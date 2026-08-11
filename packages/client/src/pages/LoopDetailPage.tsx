@@ -265,7 +265,10 @@ export function LoopDetailPage() {
     [loopId, load],
   );
 
-  const currentRunState = runs[0]?.state ?? null;
+  const sortedRuns = [...runs].sort((a, b) =>
+    b.created_at.localeCompare(a.created_at),
+  );
+  const currentRunState = sortedRuns[0]?.state ?? null;
 
   const judgment = runDetail?.ledger_summary.judgment_summary ?? null;
   const failureTags = runDetail?.ledger_summary.failure_tags ?? [];
@@ -472,13 +475,13 @@ export function LoopDetailPage() {
                 >
                   {t("loopsRunsTitle")}
                 </h2>
-                {runs.length === 0 ? (
+                {sortedRuns.length === 0 ? (
                   <p className="p-[var(--space-3)] italic text-[var(--text-muted)]">
                     {t("loopsNoRuns")}
                   </p>
                 ) : (
                   <div className="flex flex-col gap-[var(--space-2)]">
-                    {runs.map((run) => (
+                    {sortedRuns.map((run) => (
                       <button
                         key={run.run_id}
                         type="button"

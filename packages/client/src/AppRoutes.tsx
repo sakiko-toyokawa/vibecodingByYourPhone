@@ -5,6 +5,7 @@ import { AgentsPage } from "./pages/AgentsPage";
 import { CodeEditorPage } from "./pages/CodeEditorPage";
 import { EmulatorPage } from "./pages/EmulatorPage";
 import { FilePage } from "./pages/FilePage";
+import { GitHubModePage } from "./pages/GitHubModePage";
 import { GitStatusPage } from "./pages/GitStatusPage";
 import { GlobalSessionsPage } from "./pages/GlobalSessionsPage";
 import { InboxPage } from "./pages/InboxPage";
@@ -38,6 +39,7 @@ export function AppRoutes() {
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/loops" element={<LoopsPage />} />
         <Route path="/loops/:loopId" element={<LoopDetailPage />} />
+        <Route path="/github" element={<GitHubModePage />} />
         <Route path="/settings" element={<SettingsLayout />} />
         <Route path="/settings/:category" element={<SettingsLayout />} />
         {/* Project-scoped pages */}

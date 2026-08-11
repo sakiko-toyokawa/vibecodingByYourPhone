@@ -26,6 +26,10 @@ interface LoopListEntry {
   lastRun?: LoopRunSummary;
 }
 
+function isGithubLoop(loop: StoredLoop): boolean {
+  return loop.card.loop.discovery?.source === "github_prompt";
+}
+
 function formatTrigger(loop: StoredLoop): string {
   const trigger = loop.card.loop.trigger;
   if (trigger.type === "schedule" && trigger.cron) {
@@ -44,11 +48,12 @@ function formatTime(iso: string): string {
  * Loops list page: registered loops with trigger type, latest run state,
  * and creation time. Click a loop to open its detail page.
  */
-export function LoopsPage() {
+export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
   const { t } = useI18n();
   const { openSidebar, isWideScreen } = useNavigationLayout();
   const basePath = useRemoteBasePath();
   const navigate = useNavigate();
+  const githubMode = mode === "github";
   const [entries, setEntries] = useState<LoopListEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -73,7 +78,11 @@ export function LoopsPage() {
   const load = useCallback(async () => {
     try {
       const { loops } = await loopsApi.listLoops();
-      const visible = loops.filter((loop) => !loop.archived);
+      const visible = loops.filter(
+        (loop) =>
+          !loop.archived &&
+          (mode === "github" ? isGithubLoop(loop) : !isGithubLoop(loop)),
+      );
       // Latest run state per loop; a failing runs call must not hide the loop
       const withRuns = await Promise.all(
         visible.map(async (loop): Promise<LoopListEntry> => {
@@ -92,7 +101,7 @@ export function LoopsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     void load();
@@ -249,7 +258,7 @@ export function LoopsPage() {
         }
       >
         <PageHeader
-          title={t("loopsTitle")}
+          title={githubMode ? "GitHub" : t("loopsTitle")}
           onOpenSidebar={openSidebar}
           rightContent={
             <button
@@ -258,6 +267,10 @@ export function LoopsPage() {
               aria-expanded={createOpen}
               onClick={() => {
                 setCreateError(null);
+                setCreateForm((current) => ({
+                  ...current,
+                  kind: githubMode ? "github_prompt" : "workspace",
+                }));
                 setCreateOpen((open) => !open);
               }}
             >
@@ -268,156 +281,160 @@ export function LoopsPage() {
 
         <main className="flex-1 min-h-0 min-w-0 w-full overflow-x-hidden overflow-y-auto [-webkit-overflow-scrolling:touch]">
           <div className="box-border min-w-0 w-full px-6 py-8 md:px-10 md:py-10">
-            <section className="mb-6 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-secondary)] p-6">
-              <div className="mb-5 flex flex-col gap-1">
-                <h2
-                  className="m-0 text-lg text-[var(--text-primary)]"
-                  style={{ fontFamily: "var(--font-display)" }}
-                >
-                  {t("githubLoopSetupTitle")}
-                </h2>
-                <p className="m-0 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
-                  {t("githubLoopSetupDescription")}
-                </p>
-              </div>
+            {githubMode && (
+              <section className="mb-6 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-secondary)] p-6">
+                <div className="mb-5 flex flex-col gap-1">
+                  <h2
+                    className="m-0 text-lg text-[var(--text-primary)]"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {t("githubLoopSetupTitle")}
+                  </h2>
+                  <p className="m-0 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                    {t("githubLoopSetupDescription")}
+                  </p>
+                </div>
 
-              {githubError && (
-                <p className="mb-4 rounded-[var(--radius-sm)] border border-[var(--error-color)]/40 bg-[var(--error-color)]/10 p-3 [font-size:var(--font-size-sm)] text-[var(--error-color)]">
-                  {githubError}
-                </p>
-              )}
-              {githubMessage && (
-                <p className="mb-4 rounded-[var(--radius-sm)] border border-[var(--success-color)]/40 bg-[var(--success-color)]/10 p-3 [font-size:var(--font-size-sm)] text-[var(--success-color)]">
-                  {githubMessage}
-                </p>
-              )}
+                {githubError && (
+                  <p className="mb-4 rounded-[var(--radius-sm)] border border-[var(--error-color)]/40 bg-[var(--error-color)]/10 p-3 [font-size:var(--font-size-sm)] text-[var(--error-color)]">
+                    {githubError}
+                  </p>
+                )}
+                {githubMessage && (
+                  <p className="mb-4 rounded-[var(--radius-sm)] border border-[var(--success-color)]/40 bg-[var(--success-color)]/10 p-3 [font-size:var(--font-size-sm)] text-[var(--success-color)]">
+                    {githubMessage}
+                  </p>
+                )}
 
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-4">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h3 className="m-0 [font-size:var(--font-size-sm)] font-semibold text-[var(--text-primary)]">
-                        {t("githubLoopCredentialTitle")}
-                      </h3>
-                      <p className="m-0 mt-1 [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
-                        {githubCredential?.configured
-                          ? t("githubLoopCredentialConfigured", {
-                              preview:
-                                githubCredential.tokenPreview ??
-                                t("githubLoopCredentialMasked"),
-                            })
-                          : t("githubLoopCredentialMissing")}
-                      </p>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-4">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="m-0 [font-size:var(--font-size-sm)] font-semibold text-[var(--text-primary)]">
+                          {t("githubLoopCredentialTitle")}
+                        </h3>
+                        <p className="m-0 mt-1 [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
+                          {githubCredential?.configured
+                            ? t("githubLoopCredentialConfigured", {
+                                preview:
+                                  githubCredential.tokenPreview ??
+                                  t("githubLoopCredentialMasked"),
+                              })
+                            : t("githubLoopCredentialMissing")}
+                        </p>
+                      </div>
+                      {githubCredential?.configured && (
+                        <button
+                          type="button"
+                          className="rounded-md border border-[var(--border-color)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] disabled:opacity-50"
+                          disabled={githubBusy === "credential"}
+                          onClick={() => void handleClearGitHubToken()}
+                        >
+                          {t("githubLoopTokenClear")}
+                        </button>
+                      )}
                     </div>
-                    {githubCredential?.configured && (
+                    <form
+                      className="flex flex-col gap-2 sm:flex-row"
+                      onSubmit={(event) => void handleSaveGitHubToken(event)}
+                    >
+                      <input
+                        type="password"
+                        className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-border)]"
+                        value={githubToken}
+                        onChange={(event) => setGithubToken(event.target.value)}
+                        placeholder={t("githubLoopTokenPlaceholder")}
+                        autoComplete="off"
+                      />
+                      <button
+                        type="submit"
+                        className="rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] disabled:opacity-50"
+                        disabled={githubBusy === "credential"}
+                      >
+                        {githubBusy === "credential"
+                          ? t("githubLoopSaving")
+                          : t("githubLoopTokenSave")}
+                      </button>
+                    </form>
+                  </div>
+
+                  <div className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="m-0 [font-size:var(--font-size-sm)] font-semibold text-[var(--text-primary)]">
+                          {t("githubLoopToolTitle")}
+                        </h3>
+                        <p className="m-0 mt-1 break-all [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
+                          {githubTool
+                            ? t("githubLoopToolInstalled", {
+                                version: githubTool.version,
+                                path: githubTool.path,
+                              })
+                            : t("githubLoopToolMissing")}
+                        </p>
+                      </div>
                       <button
                         type="button"
-                        className="rounded-md border border-[var(--border-color)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] disabled:opacity-50"
-                        disabled={githubBusy === "credential"}
-                        onClick={() => void handleClearGitHubToken()}
+                        className="rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] disabled:opacity-50"
+                        disabled={githubBusy === "tool"}
+                        onClick={() => void handleEnsureGh()}
                       >
-                        {t("githubLoopTokenClear")}
+                        {githubBusy === "tool"
+                          ? t("githubLoopChecking")
+                          : t("githubLoopToolEnsure")}
                       </button>
-                    )}
+                    </div>
                   </div>
-                  <form
-                    className="flex flex-col gap-2 sm:flex-row"
-                    onSubmit={(event) => void handleSaveGitHubToken(event)}
+                </div>
+              </section>
+            )}
+
+            {githubMode && (
+              <section className="mb-6 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-secondary)] p-6">
+                <div className="mb-4">
+                  <h2
+                    className="m-0 text-lg text-[var(--text-primary)]"
+                    style={{ fontFamily: "var(--font-display)" }}
                   >
-                    <input
-                      type="password"
-                      className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-border)]"
-                      value={githubToken}
-                      onChange={(event) => setGithubToken(event.target.value)}
-                      placeholder={t("githubLoopTokenPlaceholder")}
-                      autoComplete="off"
-                    />
-                    <button
-                      type="submit"
-                      className="rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] disabled:opacity-50"
-                      disabled={githubBusy === "credential"}
-                    >
-                      {githubBusy === "credential"
-                        ? t("githubLoopSaving")
-                        : t("githubLoopTokenSave")}
-                    </button>
-                  </form>
+                    GitHub Relations
+                  </h2>
+                  <p className="m-0 mt-1 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                    PRs currently tracked and maintained by GitHub loops.
+                  </p>
                 </div>
-
-                <div className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h3 className="m-0 [font-size:var(--font-size-sm)] font-semibold text-[var(--text-primary)]">
-                        {t("githubLoopToolTitle")}
-                      </h3>
-                      <p className="m-0 mt-1 break-all [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
-                        {githubTool
-                          ? t("githubLoopToolInstalled", {
-                              version: githubTool.version,
-                              path: githubTool.path,
-                            })
-                          : t("githubLoopToolMissing")}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] disabled:opacity-50"
-                      disabled={githubBusy === "tool"}
-                      onClick={() => void handleEnsureGh()}
-                    >
-                      {githubBusy === "tool"
-                        ? t("githubLoopChecking")
-                        : t("githubLoopToolEnsure")}
-                    </button>
+                {relations.length === 0 ? (
+                  <p className="m-0 [font-size:var(--font-size-sm)] italic text-[var(--text-muted)]">
+                    No relations yet.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {relations.map((relation) => (
+                      <div
+                        key={relation.relation_id}
+                        className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-4"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
+                            {relation.subject.repository}#
+                            {relation.subject.pr_number ?? "?"}
+                          </span>
+                          <span className="rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
+                            {relation.state}
+                          </span>
+                          <span className="text-xs text-[var(--text-muted)]">
+                            feedback {relation.feedback_count} · repair{" "}
+                            {relation.repair_count}
+                          </span>
+                        </div>
+                        <div className="mt-1 font-mono text-xs text-[var(--text-dimmed)]">
+                          {relation.relation_id} · {relation.loop_id}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="mb-6 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-secondary)] p-6">
-              <div className="mb-4">
-                <h2
-                  className="m-0 text-lg text-[var(--text-primary)]"
-                  style={{ fontFamily: "var(--font-display)" }}
-                >
-                  GitHub Relations
-                </h2>
-                <p className="m-0 mt-1 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
-                  PRs currently tracked and maintained by GitHub loops.
-                </p>
-              </div>
-              {relations.length === 0 ? (
-                <p className="m-0 [font-size:var(--font-size-sm)] italic text-[var(--text-muted)]">
-                  No relations yet.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {relations.map((relation) => (
-                    <div
-                      key={relation.relation_id}
-                      className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-4"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
-                          {relation.subject.repository}#
-                          {relation.subject.pr_number ?? "?"}
-                        </span>
-                        <span className="rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
-                          {relation.state}
-                        </span>
-                        <span className="text-xs text-[var(--text-muted)]">
-                          feedback {relation.feedback_count} · repair{" "}
-                          {relation.repair_count}
-                        </span>
-                      </div>
-                      <div className="mt-1 font-mono text-xs text-[var(--text-dimmed)]">
-                        {relation.relation_id} · {relation.loop_id}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
+                )}
+              </section>
+            )}
 
             {createOpen && (
               <form
@@ -457,12 +474,16 @@ export function LoopsPage() {
                         )
                       }
                     >
-                      <option value="workspace">
-                        {t("loopsCreateKindWorkspace")}
-                      </option>
-                      <option value="github_prompt">
-                        {t("loopsCreateKindGithubPrompt")}
-                      </option>
+                      {!githubMode && (
+                        <option value="workspace">
+                          {t("loopsCreateKindWorkspace")}
+                        </option>
+                      )}
+                      {githubMode && (
+                        <option value="github_prompt">
+                          {t("loopsCreateKindGithubPrompt")}
+                        </option>
+                      )}
                     </select>
                   </label>
 
@@ -828,47 +849,69 @@ export function LoopsPage() {
 
             {!loading && !error && entries.length > 0 && (
               <div className="flex flex-col gap-[var(--space-2)]">
-                {entries.map(({ loop, lastRun }) => (
-                  <Link
-                    key={loop.id}
-                    to={`${basePath}/loops/${encodeURIComponent(loop.id)}`}
-                    className="block w-full border border-[var(--border-color)] rounded-[var(--radius-md)] bg-[var(--bg-secondary)] p-6 text-left no-underline text-inherit transition-[border-color] duration-150 hover:border-[var(--border-hover)]"
-                  >
-                    <div className="flex flex-col gap-[var(--space-1)]">
-                      <div className="flex min-w-0 items-center gap-[var(--space-2)]">
-                        <span className="overflow-hidden text-ellipsis whitespace-nowrap font-medium text-[var(--text-primary)]">
-                          {loop.id}
-                        </span>
-                        {loop.card.loop.policy ? (
-                          <span className="shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--warning-color)]/15 px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium text-[var(--warning-color)]">
-                            modify
+                {entries.map(({ loop, lastRun }) => {
+                  const relation = relations.find(
+                    (item) => item.loop_id === loop.id,
+                  );
+                  const prompt =
+                    loop.card.loop.handoff?.task ??
+                    loop.card.loop.discovery?.query ??
+                    "";
+                  return (
+                    <Link
+                      key={loop.id}
+                      to={`${basePath}/loops/${encodeURIComponent(loop.id)}`}
+                      className="block w-full border border-[var(--border-color)] rounded-[var(--radius-md)] bg-[var(--bg-secondary)] p-6 text-left no-underline text-inherit transition-[border-color] duration-150 hover:border-[var(--border-hover)]"
+                    >
+                      <div className="flex flex-col gap-[var(--space-1)]">
+                        <div className="flex min-w-0 items-center gap-[var(--space-2)]">
+                          <span className="overflow-hidden text-ellipsis whitespace-nowrap font-medium text-[var(--text-primary)]">
+                            {loop.id}
                           </span>
-                        ) : (
-                          <span className="shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium text-[var(--text-muted)]">
-                            readonly
+                          {loop.card.loop.policy ? (
+                            <span className="shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--warning-color)]/15 px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium text-[var(--warning-color)]">
+                              modify
+                            </span>
+                          ) : (
+                            <span className="shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium text-[var(--text-muted)]">
+                              readonly
+                            </span>
+                          )}
+                          {lastRun && (
+                            <span
+                              className={`shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium ${runStateBadgeClass(lastRun.state)}`}
+                            >
+                              {lastRun.state}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-[var(--space-3)] gap-y-1">
+                          <span className="[font-size:var(--font-size-sm)] font-mono text-[var(--text-muted)]">
+                            {formatTrigger(loop)}
                           </span>
+                          <span className="[font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                            {t("loopsCreated", {
+                              time: formatTime(loop.created_at),
+                            })}
+                          </span>
+                        </div>
+                        {prompt && (
+                          <div className="mt-2 line-clamp-3 overflow-hidden rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-3 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                            {prompt}
+                          </div>
                         )}
-                        {lastRun && (
-                          <span
-                            className={`shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium ${runStateBadgeClass(lastRun.state)}`}
-                          >
-                            {lastRun.state}
-                          </span>
+                        {githubMode && relation && (
+                          <div className="mt-1 [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
+                            {relation.subject.repository}#
+                            {relation.subject.pr_number ?? "?"} ·{" "}
+                            {relation.state} · feedback{" "}
+                            {relation.feedback_count}
+                          </div>
                         )}
                       </div>
-                      <div className="flex flex-wrap items-center gap-x-[var(--space-3)] gap-y-1">
-                        <span className="[font-size:var(--font-size-sm)] font-mono text-[var(--text-muted)]">
-                          {formatTrigger(loop)}
-                        </span>
-                        <span className="[font-size:var(--font-size-sm)] text-[var(--text-muted)]">
-                          {t("loopsCreated", {
-                            time: formatTime(loop.created_at),
-                          })}
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  );
+                })}
               </div>
             )}
           </div>
