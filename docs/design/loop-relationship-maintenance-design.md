@@ -1,6 +1,7 @@
 # Loop Relationship Maintenance Design
 
-> 狀態：v1 foundation、cron poller、relation-scoped policy 已實作
+> 狀態：v1 foundation、cron poller、relation-scoped policy 已實作；
+> webhook relation cursor、缺報告自動 retry、final failure tags 已修復
 
 ## Goal
 
@@ -62,7 +63,7 @@ GitHub webhook
 
 ## Remaining Work
 
-- Feedback cursor 目前由 poller 在 enqueue 時更新；更嚴謹的做法是等 relation
-  run 成功後再更新，避免 run 失敗時丟失 feedback。
+- webhook 與 poller 都會在 enqueue 前更新 relation cursor / feedback_count /
+  repair_count；run 成功後轉回 `awaiting_feedback`。
 - 完整 restart recovery 仍需把 persistent trigger queue 與 relation state 一起
   做統一恢復檢查。

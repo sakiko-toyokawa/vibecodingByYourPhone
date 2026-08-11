@@ -119,9 +119,9 @@ export async function buildLedgerSummary(
     decision_refs:
       decisionEntries.length > 0 ? [`ledger://decision-${runId}`] : [],
     // Failure attribution recorded on decision entries (adapter hard
-    // errors, 02 §4); the learning side (phase 3) aggregates further.
-    failure_tags: [
-      ...new Set(decisionEntries.flatMap((d) => d.failure_tags ?? [])),
-    ],
+    // errors, 02 §4). The final summary reflects the terminal decision,
+    // not every historical retry: a run that eventually completes must not
+    // carry old verification_error tags from earlier attempts.
+    failure_tags: [...new Set(lastDecisionEntry?.failure_tags ?? [])],
   };
 }

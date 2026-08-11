@@ -917,6 +917,34 @@ export async function runTurns(
         );
       }
 
+      // Missing final report guard: a turn that ends with only an interim
+      // sentence or tool output is not a deliverable. Retry automatically
+      // instead of asking a human for a report the agent can still produce.
+      if (
+        outcome.ok &&
+        outcome.finalText &&
+        !extractExecutorSummary(outcome.finalText)
+      ) {
+        judgment = {
+          overall: "failed",
+          next_action: "retry",
+          retryable: true,
+          requires_human: false,
+          evidence: artifactRefs,
+          unresolved_risks: [
+            "executor did not produce the required final report/executor summary; retrying the turn",
+          ],
+        };
+        verificationRan = true;
+        judgmentRef = null;
+        verifierFailureTags = ["verification_error"];
+        await store.writeArtifact(
+          runId,
+          verificationArtifactName("judgment-report.json", ctx.turn),
+          `${JSON.stringify(judgment, null, 2)}\n`,
+        );
+      }
+
       // --- merge gate (worktree 策略 + modify) ---
       const taskPlan = ctx.taskPlan;
       const hasMoreSubtasks =

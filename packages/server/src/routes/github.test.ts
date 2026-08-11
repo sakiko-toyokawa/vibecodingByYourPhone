@@ -178,11 +178,23 @@ test("GitHub webhook enqueues a trigger for a known relation", async () => {
     payload: object;
   }> = [];
   let drainedLoop: string | undefined;
+  const relationUpdates: Array<{
+    id: string;
+    state: string;
+    patch?: object;
+  }> = [];
   const relationStore = {
     findByGitHubPr: () => ({
       relation_id: "rel-1",
       loop_id: "loop-maintainer",
+      feedback_count: 0,
+      repair_count: 0,
+      last_processed: {},
     }),
+    updateState: async (id: string, state: string, patch?: object) => {
+      relationUpdates.push({ id, state, patch });
+      return { relation_id: id, state };
+    },
   } as never;
   const triggerQueueStore = {
     enqueue: async (input: {
@@ -218,6 +230,7 @@ test("GitHub webhook enqueues a trigger for a known relation", async () => {
     body: JSON.stringify({
       repository: { full_name: "owner/repo" },
       pull_request: { number: 12 },
+      comment: { id: 123 },
     }),
   });
 
@@ -233,6 +246,16 @@ test("GitHub webhook enqueues a trigger for a known relation", async () => {
     "rel-1",
   );
   assert.equal(drainedLoop, "loop-maintainer");
+  assert.equal(relationUpdates.length, 1);
+  assert.equal(relationUpdates[0]?.state, "fixing");
+  assert.equal(
+    (
+      relationUpdates[0]?.patch as {
+        last_processed: { comment_id?: number };
+      }
+    )?.last_processed.comment_id,
+    123,
+  );
 });
 
 test("GitHub publish draft PR creates a relation when relation metadata is supplied", async () => {

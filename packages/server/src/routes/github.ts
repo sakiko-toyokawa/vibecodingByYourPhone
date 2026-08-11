@@ -334,6 +334,47 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
     if (!relation) {
       return c.json({ accepted: false, reason: "relation_not_found" }, 202);
     }
+    const comment =
+      typeof payload.comment === "object" && payload.comment !== null
+        ? (payload.comment as Record<string, unknown>)
+        : undefined;
+    const review =
+      typeof payload.review === "object" && payload.review !== null
+        ? (payload.review as Record<string, unknown>)
+        : undefined;
+    const commentId =
+      typeof comment?.id === "number"
+        ? comment.id
+        : typeof comment?.id === "string" && comment.id.trim() !== ""
+          ? Number(comment.id)
+          : undefined;
+    const reviewId =
+      typeof review?.id === "number"
+        ? review.id
+        : typeof review?.id === "string" && review.id.trim() !== ""
+          ? Number(review.id)
+          : undefined;
+    const nextRepairCount = relation.repair_count + 1;
+    if (nextRepairCount > 3) {
+      await deps.relationStore.updateState(
+        relation.relation_id,
+        "needs_human",
+        {
+          needs_human_reason:
+            "repeated relation feedback exceeded auto-repair limit",
+        },
+      );
+      return c.json({ accepted: false, reason: "repair_limit_reached" }, 202);
+    }
+    await deps.relationStore.updateState(relation.relation_id, "fixing", {
+      last_processed: {
+        ...relation.last_processed,
+        ...(commentId ? { comment_id: commentId } : {}),
+        ...(reviewId ? { review_id: reviewId } : {}),
+      },
+      feedback_count: relation.feedback_count + 1,
+      repair_count: nextRepairCount,
+    });
     const eventId = delivery || `github-${eventType}-${repository}-${prNumber}`;
     await deps.triggerQueueStore.enqueue({
       event_id: eventId,
@@ -345,6 +386,8 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
         event_type: eventType,
         repository,
         pr_number: prNumber,
+        ...(commentId ? { comment_id: commentId } : {}),
+        ...(reviewId ? { review_id: reviewId } : {}),
       },
     });
     await deps.drainPendingTriggers?.(relation.loop_id);
