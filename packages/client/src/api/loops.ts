@@ -62,6 +62,16 @@ export interface RunDetail {
   session_ref: string | null;
 }
 
+export interface RunTurnSummary {
+  turn: number;
+  status: RunState;
+  source?: string;
+  created_at: string;
+  stdout_ref: string | null;
+  judgment_ref: string | null;
+  executor_summary_ref: string | null;
+}
+
 export interface InteractionDepsStatus {
   status: "ready" | "missing" | "unsupported";
   message: string;
@@ -151,6 +161,11 @@ export const loopsApi = {
   getRunArtifact: (runId: string, name: string) =>
     fetchJSON<{ content: string }>(
       `/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(name)}`,
+    ),
+
+  listRunTurns: (runId: string) =>
+    fetchJSON<{ turns: RunTurnSummary[] }>(
+      `/runs/${encodeURIComponent(runId)}/turns`,
     ),
 
   /** Discard one run and optionally revert/clean up its workspace changes. */

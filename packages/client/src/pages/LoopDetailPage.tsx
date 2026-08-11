@@ -5,6 +5,7 @@ import {
   type InteractionDepsStatus,
   type LoopRunSummary,
   type RunDetail,
+  type RunTurnSummary,
   type StoredLoop,
   loopsApi,
 } from "../api/loops";
@@ -22,6 +23,11 @@ function formatTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleString();
+}
+
+function artifactNameFromRef(ref: string | null): string | null {
+  if (!ref) return null;
+  return ref.split("/").at(-1) ?? null;
 }
 
 /**
@@ -51,6 +57,8 @@ export function LoopDetailPage() {
   const [selectedArtifact, setSelectedArtifact] = useState<string | null>(null);
   const [artifactContent, setArtifactContent] = useState<string | null>(null);
   const [artifactLoading, setArtifactLoading] = useState(false);
+  const [runTurns, setRunTurns] = useState<RunTurnSummary[]>([]);
+  const [turnsOpen, setTurnsOpen] = useState(false);
   const [interactionDeps, setInteractionDeps] =
     useState<InteractionDepsStatus | null>(null);
   const [interactionDepsLoading, setInteractionDepsLoading] = useState(false);
@@ -79,12 +87,14 @@ export function LoopDetailPage() {
       // reports) land as the run progresses.
       if (selectedRunIdRef.current) {
         try {
-          const [detail, artifactList] = await Promise.all([
+          const [detail, artifactList, turnList] = await Promise.all([
             loopsApi.getRun(selectedRunIdRef.current),
             loopsApi.listRunArtifacts(selectedRunIdRef.current),
+            loopsApi.listRunTurns(selectedRunIdRef.current),
           ]);
           setRunDetail(detail);
           setArtifacts(artifactList.artifacts);
+          setRunTurns(turnList.turns);
         } catch {
           // Keep showing the stale detail; the list still refreshed
         }
@@ -169,12 +179,15 @@ export function LoopDetailPage() {
     setSelectedArtifact(null);
     setArtifactContent(null);
     try {
-      const [detail, artifactList] = await Promise.all([
+      const [detail, artifactList, turnList] = await Promise.all([
         loopsApi.getRun(runId),
         loopsApi.listRunArtifacts(runId),
+        loopsApi.listRunTurns(runId),
       ]);
       setRunDetail(detail);
       setArtifacts(artifactList.artifacts);
+      setRunTurns(turnList.turns);
+      setTurnsOpen(false);
     } catch {
       setRunDetail(null);
       setArtifacts([]);
@@ -665,6 +678,101 @@ export function LoopDetailPage() {
                             sessionRef={runDetail?.session_ref ?? null}
                           />
                         </div>
+
+                        {runTurns.length > 0 && (
+                          <div className="mt-4 border-t border-[var(--border-color)] pt-4">
+                            <div className="mb-3 flex items-center justify-between gap-2">
+                              <h4 className="m-0 [font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
+                                Turn History
+                              </h4>
+                              <button
+                                type="button"
+                                className="rounded-md border border-[var(--border-color)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)]"
+                                onClick={() => setTurnsOpen((open) => !open)}
+                              >
+                                {turnsOpen ? "Hide turns" : "Show turns"}
+                              </button>
+                            </div>
+                            {turnsOpen && (
+                              <div className="flex flex-col gap-2">
+                                {runTurns.map((turn) => (
+                                  <div
+                                    key={turn.turn}
+                                    className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-3"
+                                  >
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="font-mono [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
+                                        turn {turn.turn}
+                                      </span>
+                                      <span className="rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
+                                        {turn.status}
+                                      </span>
+                                      {turn.source && (
+                                        <span className="text-xs text-[var(--text-muted)]">
+                                          {turn.source}
+                                        </span>
+                                      )}
+                                      <span className="text-xs text-[var(--text-muted)]">
+                                        {formatTime(turn.created_at)}
+                                      </span>
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                      {artifactNameFromRef(turn.stdout_ref) && (
+                                        <button
+                                          type="button"
+                                          className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1 text-xs font-mono text-[var(--text-muted)] transition-colors hover:border-[var(--border-hover)]"
+                                          onClick={() =>
+                                            void handleSelectArtifact(
+                                              artifactNameFromRef(
+                                                turn.stdout_ref,
+                                              ) ?? "",
+                                            )
+                                          }
+                                        >
+                                          stdout
+                                        </button>
+                                      )}
+                                      {artifactNameFromRef(
+                                        turn.judgment_ref,
+                                      ) && (
+                                        <button
+                                          type="button"
+                                          className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1 text-xs font-mono text-[var(--text-muted)] transition-colors hover:border-[var(--border-hover)]"
+                                          onClick={() =>
+                                            void handleSelectArtifact(
+                                              artifactNameFromRef(
+                                                turn.judgment_ref,
+                                              ) ?? "",
+                                            )
+                                          }
+                                        >
+                                          judgment
+                                        </button>
+                                      )}
+                                      {artifactNameFromRef(
+                                        turn.executor_summary_ref,
+                                      ) && (
+                                        <button
+                                          type="button"
+                                          className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1 text-xs font-mono text-[var(--text-muted)] transition-colors hover:border-[var(--border-hover)]"
+                                          onClick={() =>
+                                            void handleSelectArtifact(
+                                              artifactNameFromRef(
+                                                turn.executor_summary_ref,
+                                              ) ?? "",
+                                            )
+                                          }
+                                        >
+                                          summary
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {artifacts.length > 0 && (
                           <div className="mt-4 border-t border-[var(--border-color)] pt-4">

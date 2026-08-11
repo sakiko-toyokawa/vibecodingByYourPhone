@@ -111,6 +111,19 @@ export function createRunsRoutes(deps: RunsRoutesDeps): Hono {
   });
 
   /**
+   * GET /api/runs/:id/turns
+   * Per-turn history for a run, built from run ledger entries and artifacts.
+   */
+  app.get("/:id/turns", async (c) => {
+    const found = await deps.runService.getRun(c.req.param("id"));
+    if (!found) {
+      return c.json({ error: "run_not_found", message: "Run not found" }, 404);
+    }
+    const turns = await deps.runService.listRunTurns(c.req.param("id"));
+    return c.json({ turns });
+  });
+
+  /**
    * GET /api/runs/:id/artifacts/:name
    * 读取指定 artifact 内容。404 当 run 或 artifact 不存在。
    */

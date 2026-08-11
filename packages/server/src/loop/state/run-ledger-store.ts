@@ -338,6 +338,16 @@ export class RunLedgerStore {
    * warning; an entry that fails schema validation is treated as absent.
    */
   async readEntry(runId: string): Promise<RunLedgerEntry | null> {
+    const entries = await this.readEntries(runId);
+    return entries.length > 0 ? (entries[entries.length - 1] ?? null) : null;
+  }
+
+  /**
+   * Read all run_ledger_entry lines for a run. A run appends one entry per
+   * turn (02 §8.1: 每次 retry 产生独立 entry), so this list is the per-turn
+   * history consumed by the turns API and frontend turn view.
+   */
+  async readEntries(runId: string): Promise<RunLedgerEntry[]> {
     this.assertSafeName(runId, "run_id");
     let content: string;
     try {
@@ -347,12 +357,12 @@ export class RunLedgerStore {
       );
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        return null;
+        return [];
       }
       throw error;
     }
 
-    let latest: RunLedgerEntry | null = null;
+    const entries: RunLedgerEntry[] = [];
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
       if (!trimmed) {
@@ -391,12 +401,14 @@ export class RunLedgerStore {
           );
           continue;
         }
-        latest = stripLedgerMeta(
-          result.data as unknown as Record<string, unknown>,
-        ) as RunLedgerEntry;
+        entries.push(
+          stripLedgerMeta(
+            result.data as unknown as Record<string, unknown>,
+          ) as RunLedgerEntry,
+        );
       }
     }
-    return latest;
+    return entries;
   }
 
   /**

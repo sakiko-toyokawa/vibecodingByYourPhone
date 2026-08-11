@@ -97,6 +97,7 @@ import type {
   LedgerSummary,
   RunExecutionContext,
   RunSummary,
+  RunTurnSummary,
 } from "./run/types.js";
 import {
   displayGitHubPromptWorkspacePath,
@@ -153,7 +154,7 @@ export interface IntentOverrides {
   max_items_per_run?: number;
 }
 
-export type { RunSummary, LedgerSummary } from "./run/types.js";
+export type { RunSummary, LedgerSummary, RunTurnSummary } from "./run/types.js";
 
 export interface LoopRunServiceDeps {
   supervisor: Supervisor;
@@ -486,6 +487,40 @@ export class LoopRunService {
   /** List artifact file names written for a run (empty when none). */
   async listRunArtifacts(runId: string): Promise<string[]> {
     return this.deps.runLedgerStore.listArtifacts(runId);
+  }
+
+  /** Per-turn history projection for the frontend turn view. */
+  async listRunTurns(runId: string): Promise<RunTurnSummary[]> {
+    const found = await this.getRun(runId);
+    if (!found) {
+      return [];
+    }
+    const entries = await this.deps.runLedgerStore.readEntries(runId);
+    const artifacts = new Set(
+      await this.deps.runLedgerStore.listArtifacts(runId),
+    );
+    return entries.map((entry, index) => {
+      const turn = index + 1;
+      const suffix = turn === 1 ? "" : `-turn${turn}`;
+      const stdoutName = `stdout${suffix}.log`;
+      const judgmentName = `judgment-report${suffix}.json`;
+      const summaryName = `executor-summary${suffix}.md`;
+      return {
+        turn,
+        status: entry.final_status,
+        source: entry.source,
+        created_at: entry.created_at,
+        stdout_ref: artifacts.has(stdoutName)
+          ? `artifact://${runId}/${stdoutName}`
+          : null,
+        judgment_ref: artifacts.has(judgmentName)
+          ? `artifact://${runId}/${judgmentName}`
+          : null,
+        executor_summary_ref: artifacts.has(summaryName)
+          ? `artifact://${runId}/${summaryName}`
+          : null,
+      };
+    });
   }
 
   /** Read one artifact's content for a run (undefined when missing). */

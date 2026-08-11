@@ -160,3 +160,14 @@ export interface LedgerSummary {
   decision_refs: string[];
   failure_tags: string[];
 }
+
+/** Per-turn projection shown in the frontend turn history. */
+export interface RunTurnSummary {
+  turn: number;
+  status: RunState;
+  source?: string;
+  created_at: string;
+  stdout_ref: string | null;
+  judgment_ref: string | null;
+  executor_summary_ref: string | null;
+}
