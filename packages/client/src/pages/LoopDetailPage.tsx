@@ -705,7 +705,7 @@ export function LoopDetailPage() {
                                         turn {turn.turn}
                                       </span>
                                       <span className="rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
-                                        {turn.status}
+                                        {turn.decision ?? turn.status}
                                       </span>
                                       {turn.source && (
                                         <span className="text-xs text-[var(--text-muted)]">

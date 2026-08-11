@@ -165,6 +165,7 @@ export interface LedgerSummary {
 export interface RunTurnSummary {
   turn: number;
   status: RunState;
+  decision?: string;
   source?: string;
   created_at: string;
   stdout_ref: string | null;

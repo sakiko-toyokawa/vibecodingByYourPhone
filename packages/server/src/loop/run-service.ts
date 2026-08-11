@@ -496,6 +496,7 @@ export class LoopRunService {
       return [];
     }
     const entries = await this.deps.runLedgerStore.readEntries(runId);
+    const decisions = await this.deps.runLedgerStore.readDecisionEntries(runId);
     const artifacts = new Set(
       await this.deps.runLedgerStore.listArtifacts(runId),
     );
@@ -505,9 +506,19 @@ export class LoopRunService {
       const stdoutName = `stdout${suffix}.log`;
       const judgmentName = `judgment-report${suffix}.json`;
       const summaryName = `executor-summary${suffix}.md`;
+      const turnDecisions = decisions.filter(
+        (decision) =>
+          decision.decision_id.includes(`-t${turn}-`) &&
+          decision.decision !== "bypass_used" &&
+          decision.decision !== "resumed",
+      );
       return {
         turn,
         status: entry.final_status,
+        decision:
+          turnDecisions.length > 0
+            ? (turnDecisions[turnDecisions.length - 1]?.decision ?? undefined)
+            : undefined,
         source: entry.source,
         created_at: entry.created_at,
         stdout_ref: artifacts.has(stdoutName)
