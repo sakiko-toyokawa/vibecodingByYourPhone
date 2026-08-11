@@ -220,7 +220,7 @@ export class GitHubClient {
       "api",
       `repos/${repository}/pulls/${prNumber}`,
       "--jq",
-      "{state, merged, head_sha: .head.sha}",
+      "{state,merged,head_sha:.head.sha}",
     ]);
     const parsed = JSON.parse(stdout) as Record<string, unknown>;
     return {
