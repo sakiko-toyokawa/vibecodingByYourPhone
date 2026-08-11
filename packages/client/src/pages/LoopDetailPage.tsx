@@ -59,6 +59,14 @@ export function LoopDetailPage() {
   const [artifactLoading, setArtifactLoading] = useState(false);
   const [runTurns, setRunTurns] = useState<RunTurnSummary[]>([]);
   const [turnsOpen, setTurnsOpen] = useState(false);
+  const [selectedTurn, setSelectedTurn] = useState<RunTurnSummary | null>(null);
+  const [turnView, setTurnView] = useState<{
+    turn: number;
+    stdout: string | null;
+    judgment: string | null;
+    summary: string | null;
+  } | null>(null);
+  const [turnViewLoading, setTurnViewLoading] = useState(false);
   const [interactionDeps, setInteractionDeps] =
     useState<InteractionDepsStatus | null>(null);
   const [interactionDepsLoading, setInteractionDepsLoading] = useState(false);
@@ -188,6 +196,8 @@ export function LoopDetailPage() {
       setArtifacts(artifactList.artifacts);
       setRunTurns(turnList.turns);
       setTurnsOpen(false);
+      setSelectedTurn(null);
+      setTurnView(null);
     } catch {
       setRunDetail(null);
       setArtifacts([]);
@@ -211,6 +221,58 @@ export function LoopDetailPage() {
       }
     },
     [selectedRunId],
+  );
+
+  const handleSelectTurn = useCallback(
+    async (turn: RunTurnSummary) => {
+      if (!selectedRunId) return;
+      if (selectedTurn?.turn === turn.turn) {
+        setSelectedTurn(null);
+        setTurnView(null);
+        return;
+      }
+      setSelectedTurn(turn);
+      setTurnViewLoading(true);
+      setTurnView(null);
+      try {
+        const [stdout, judgment, summary] = await Promise.all([
+          turn.stdout_ref
+            ? loopsApi.getRunArtifact(
+                selectedRunId,
+                artifactNameFromRef(turn.stdout_ref) ?? "",
+              )
+            : Promise.resolve(null),
+          turn.judgment_ref
+            ? loopsApi.getRunArtifact(
+                selectedRunId,
+                artifactNameFromRef(turn.judgment_ref) ?? "",
+              )
+            : Promise.resolve(null),
+          turn.executor_summary_ref
+            ? loopsApi.getRunArtifact(
+                selectedRunId,
+                artifactNameFromRef(turn.executor_summary_ref) ?? "",
+              )
+            : Promise.resolve(null),
+        ]);
+        setTurnView({
+          turn: turn.turn,
+          stdout: stdout?.content ?? null,
+          judgment: judgment?.content ?? null,
+          summary: summary?.content ?? null,
+        });
+      } catch {
+        setTurnView({
+          turn: turn.turn,
+          stdout: null,
+          judgment: null,
+          summary: null,
+        });
+      } finally {
+        setTurnViewLoading(false);
+      }
+    },
+    [selectedRunId, selectedTurn?.turn],
   );
 
   const handleDiscardRun = useCallback(async () => {
@@ -696,9 +758,15 @@ export function LoopDetailPage() {
                             {turnsOpen && (
                               <div className="flex flex-col gap-2">
                                 {runTurns.map((turn) => (
-                                  <div
+                                  <button
                                     key={turn.turn}
-                                    className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-3"
+                                    type="button"
+                                    onClick={() => void handleSelectTurn(turn)}
+                                    className={`block w-full rounded-[var(--radius-sm)] border p-3 text-left transition-colors ${
+                                      selectedTurn?.turn === turn.turn
+                                        ? "border-[var(--accent-rust)] bg-[var(--accent-rust)]/10"
+                                        : "border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[var(--border-hover)]"
+                                    }`}
                                   >
                                     <div className="flex flex-wrap items-center gap-2">
                                       <span className="font-mono [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
@@ -715,60 +783,48 @@ export function LoopDetailPage() {
                                       <span className="text-xs text-[var(--text-muted)]">
                                         {formatTime(turn.created_at)}
                                       </span>
+                                      <span className="ml-auto text-xs text-[var(--text-muted)]">
+                                        {selectedTurn?.turn === turn.turn
+                                          ? "Hide"
+                                          : "View"}
+                                      </span>
                                     </div>
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                      {artifactNameFromRef(turn.stdout_ref) && (
-                                        <button
-                                          type="button"
-                                          className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1 text-xs font-mono text-[var(--text-muted)] transition-colors hover:border-[var(--border-hover)]"
-                                          onClick={() =>
-                                            void handleSelectArtifact(
-                                              artifactNameFromRef(
-                                                turn.stdout_ref,
-                                              ) ?? "",
-                                            )
-                                          }
-                                        >
-                                          stdout
-                                        </button>
-                                      )}
-                                      {artifactNameFromRef(
-                                        turn.judgment_ref,
-                                      ) && (
-                                        <button
-                                          type="button"
-                                          className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1 text-xs font-mono text-[var(--text-muted)] transition-colors hover:border-[var(--border-hover)]"
-                                          onClick={() =>
-                                            void handleSelectArtifact(
-                                              artifactNameFromRef(
-                                                turn.judgment_ref,
-                                              ) ?? "",
-                                            )
-                                          }
-                                        >
-                                          judgment
-                                        </button>
-                                      )}
-                                      {artifactNameFromRef(
-                                        turn.executor_summary_ref,
-                                      ) && (
-                                        <button
-                                          type="button"
-                                          className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1 text-xs font-mono text-[var(--text-muted)] transition-colors hover:border-[var(--border-hover)]"
-                                          onClick={() =>
-                                            void handleSelectArtifact(
-                                              artifactNameFromRef(
-                                                turn.executor_summary_ref,
-                                              ) ?? "",
-                                            )
-                                          }
-                                        >
-                                          summary
-                                        </button>
-                                      )}
+                                  </button>
+                                ))}
+                                {selectedTurn && turnViewLoading && (
+                                  <p className="p-2 text-xs italic text-[var(--text-muted)]">
+                                    loading turn content...
+                                  </p>
+                                )}
+                                {selectedTurn && turnView && (
+                                  <div className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] p-3">
+                                    <div className="grid gap-3">
+                                      {[
+                                        {
+                                          label: "stdout",
+                                          content: turnView.stdout,
+                                        },
+                                        {
+                                          label: "judgment",
+                                          content: turnView.judgment,
+                                        },
+                                        {
+                                          label: "executor summary",
+                                          content: turnView.summary,
+                                        },
+                                      ].map((item) => (
+                                        <div key={item.label}>
+                                          <div className="mb-1 text-xs font-medium text-[var(--text-muted)]">
+                                            {item.label}
+                                          </div>
+                                          <pre className="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-[var(--bg-secondary)] p-3 [font-size:var(--font-size-xs)] text-[var(--text-primary)]">
+                                            {item.content || "—"}
+                                          </pre>
+                                        </div>
+                                      ))}
                                     </div>
                                   </div>
-                                ))}
+                                )}
                               </div>
                             )}
                           </div>
