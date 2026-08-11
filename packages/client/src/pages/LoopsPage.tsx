@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import {
   type GitHubCredentialStatus,
+  type GitHubRelation,
   type GitHubToolStatus,
   githubApi,
 } from "../api/github";
@@ -66,6 +67,7 @@ export function LoopsPage() {
   );
   const [githubError, setGithubError] = useState<string | null>(null);
   const [githubMessage, setGithubMessage] = useState<string | null>(null);
+  const [relations, setRelations] = useState<GitHubRelation[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
 
   const load = useCallback(async () => {
@@ -101,6 +103,13 @@ export function LoopsPage() {
       .getCredentialStatus()
       .then(({ credential }) => setGithubCredential(credential))
       .catch(() => setGithubCredential(null));
+  }, []);
+
+  useEffect(() => {
+    githubApi
+      .listRelations()
+      .then(({ relations }) => setRelations(relations))
+      .catch(() => setRelations([]));
   }, []);
 
   useEffect(() => {
@@ -363,6 +372,51 @@ export function LoopsPage() {
                   </div>
                 </div>
               </div>
+            </section>
+
+            <section className="mb-6 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-secondary)] p-6">
+              <div className="mb-4">
+                <h2
+                  className="m-0 text-lg text-[var(--text-primary)]"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  GitHub Relations
+                </h2>
+                <p className="m-0 mt-1 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                  PRs currently tracked and maintained by GitHub loops.
+                </p>
+              </div>
+              {relations.length === 0 ? (
+                <p className="m-0 [font-size:var(--font-size-sm)] italic text-[var(--text-muted)]">
+                  No relations yet.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {relations.map((relation) => (
+                    <div
+                      key={relation.relation_id}
+                      className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-4"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
+                          {relation.subject.repository}#
+                          {relation.subject.pr_number ?? "?"}
+                        </span>
+                        <span className="rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
+                          {relation.state}
+                        </span>
+                        <span className="text-xs text-[var(--text-muted)]">
+                          feedback {relation.feedback_count} · repair{" "}
+                          {relation.repair_count}
+                        </span>
+                      </div>
+                      <div className="mt-1 font-mono text-xs text-[var(--text-dimmed)]">
+                        {relation.relation_id} · {relation.loop_id}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
 
             {createOpen && (

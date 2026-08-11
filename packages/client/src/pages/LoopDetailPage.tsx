@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { type GitHubRelation, githubApi } from "../api/github";
 import {
   type InteractionDepsStatus,
   type LoopRunSummary,
@@ -58,6 +59,7 @@ export function LoopDetailPage() {
   const [interactionDepsMessage, setInteractionDepsMessage] = useState<
     string | null
   >(null);
+  const [relations, setRelations] = useState<GitHubRelation[]>([]);
   const [discarding, setDiscarding] = useState(false);
   const selectedRunIdRef = useRef<string | null>(null);
   selectedRunIdRef.current = selectedRunId;
@@ -132,6 +134,14 @@ export function LoopDetailPage() {
     }
     void loadInteractionDeps();
   }, [loadInteractionDeps, loop]);
+
+  useEffect(() => {
+    if (!loopId) return;
+    githubApi
+      .listRelations(loopId)
+      .then(({ relations }) => setRelations(relations))
+      .catch(() => setRelations([]));
+  }, [loopId]);
 
   const handleInstallInteractionDeps = useCallback(async () => {
     if (!loopId) return;
@@ -370,6 +380,50 @@ export function LoopDetailPage() {
                 {" · "}
                 {t("loopsCreated", { time: formatTime(loop.created_at) })}
               </p>
+            )}
+
+            {relations.length > 0 && (
+              <section className="mb-6 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-secondary)] p-4">
+                <h2 className="m-0 mb-3 [font-size:var(--font-size-sm)] font-semibold text-[var(--text-primary)]">
+                  GitHub Relation
+                </h2>
+                <div className="flex flex-col gap-2">
+                  {relations.map((relation) => (
+                    <div
+                      key={relation.relation_id}
+                      className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-4"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
+                          {relation.subject.repository}#
+                          {relation.subject.pr_number ?? "?"}
+                        </span>
+                        <span className="rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
+                          {relation.state}
+                        </span>
+                      </div>
+                      <div className="mt-2 grid gap-1 [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
+                        <div>
+                          branch:{" "}
+                          <span className="font-mono">
+                            {relation.subject.branch}
+                          </span>
+                        </div>
+                        <div>
+                          feedback: {relation.feedback_count} · repair:{" "}
+                          {relation.repair_count}
+                        </div>
+                        <div>
+                          last processed:{" "}
+                          {relation.last_processed.comment_id ??
+                            relation.last_processed.review_id ??
+                            "—"}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
             )}
 
             {loop?.card.loop.verification.required.includes("interaction") && (

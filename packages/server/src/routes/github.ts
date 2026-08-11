@@ -275,6 +275,28 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
     return c.json({ relation: saved }, 200);
   });
 
+  app.get("/relations", (c) => {
+    if (!deps.relationStore) {
+      return c.json({ error: "relation_store_unavailable" }, 503);
+    }
+    const loopId = c.req.query("loop_id");
+    const relations = deps.relationStore
+      .list()
+      .filter((relation) => !loopId || relation.loop_id === loopId);
+    return c.json({ relations });
+  });
+
+  app.get("/relations/:id", (c) => {
+    if (!deps.relationStore) {
+      return c.json({ error: "relation_store_unavailable" }, 503);
+    }
+    const relation = deps.relationStore.findById(c.req.param("id"));
+    if (!relation) {
+      return c.json({ error: "relation_not_found" }, 404);
+    }
+    return c.json({ relation });
+  });
+
   app.post("/webhook", async (c) => {
     if (!deps.relationStore || !deps.triggerQueueStore) {
       return c.json({ error: "relation_trigger_unavailable" }, 503);

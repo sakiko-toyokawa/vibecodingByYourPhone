@@ -303,3 +303,47 @@ test("GitHub publish draft PR creates a relation when relation metadata is suppl
   assert.equal(relations[0]?.relation_id, "rel-1");
   assert.equal(relations[0]?.subject.pr_number, 12);
 });
+
+test("GitHub routes list and get relations", async () => {
+  const relation = {
+    relation_id: "rel-1",
+    loop_id: "loop-maintainer",
+    subject: {
+      type: "github_pr",
+      repository: "owner/repo",
+      pr_number: 12,
+      branch: "fix/12",
+    },
+    state: "awaiting_feedback",
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 0,
+    created_at: "2026-08-11T00:00:00.000Z",
+    updated_at: "2026-08-11T00:00:00.000Z",
+  };
+  const relationStore = {
+    list: () => [relation],
+    findById: () => relation,
+  } as never;
+  const app = new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {} as GitHubClient,
+      relationStore,
+    }),
+  );
+
+  const listResponse = await app.request("/github/relations");
+  assert.equal(listResponse.status, 200);
+  assert.deepEqual((await json(listResponse)).relations, [relation]);
+
+  const detailResponse = await app.request("/github/relations/rel-1");
+  assert.equal(detailResponse.status, 200);
+  const detail = await json(detailResponse);
+  assert.equal(
+    (detail.relation as { relation_id: string }).relation_id,
+    "rel-1",
+  );
+});
