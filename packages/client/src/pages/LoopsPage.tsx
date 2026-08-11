@@ -94,7 +94,13 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
           }
         }),
       );
-      setEntries(withRuns);
+      setEntries(
+        [...withRuns].sort((a, b) =>
+          (b.lastRun?.created_at ?? "").localeCompare(
+            a.lastRun?.created_at ?? "",
+          ),
+        ),
+      );
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));

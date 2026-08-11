@@ -265,8 +265,9 @@ export function LoopDetailPage() {
     [loopId, load],
   );
 
-  const sortedRuns = [...runs].sort((a, b) =>
-    b.created_at.localeCompare(a.created_at),
+  const sortedRuns = [...runs].sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   );
   const currentRunState = sortedRuns[0]?.state ?? null;
 
