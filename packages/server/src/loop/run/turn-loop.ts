@@ -687,6 +687,7 @@ export async function runTurns(
       let judgment: JudgmentReport | null = null;
       let judgmentRef: string | null = null;
       let verifierFailureTags: FailureTag[] = [];
+      let missingFinalReport = false;
       let preVerifySnapshot: WorkspaceSnapshot | null = null;
 
       const requiredPhases = ctx.card.loop.verification.required;
@@ -925,6 +926,7 @@ export async function runTurns(
         outcome.finalText &&
         !extractExecutorSummary(outcome.finalText)
       ) {
+        missingFinalReport = true;
         judgment = {
           overall: "failed",
           next_action: "retry",
@@ -1012,6 +1014,7 @@ export async function runTurns(
 
       // A) identical output across turns
       if (
+        !missingFinalReport &&
         outcome.ok &&
         judgment &&
         (judgment.next_action === "retry" ||
@@ -1042,6 +1045,7 @@ export async function runTurns(
 
       // B) no effective workspace change across retry turns (idle / spinning)
       if (
+        !missingFinalReport &&
         outcome.ok &&
         judgment &&
         judgment.next_action === "retry" &&
