@@ -39,6 +39,7 @@
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { HardGateAction, RiskLevel } from "@yep-anywhere/shared";
+import type { MaintenanceTarget } from "../maintenance/types.js";
 import type { RelationRecord } from "../relation/relation-store.js";
 
 /** 非硬闸门的动作类别；硬闸门命中时 action 就是硬闸门动作本身。 */
@@ -68,6 +69,8 @@ export interface ClassifyContext {
   commandActions?: CommandActionHint[];
   /** Durable external relationship context for relation-scoped actions. */
   relation?: RelationRecord;
+  /** Generic external maintenance target context for target-scoped actions. */
+  maintenanceTarget?: MaintenanceTarget | null;
 }
 
 /** Minimal projection of Codex CommandAction used by the classifier. */

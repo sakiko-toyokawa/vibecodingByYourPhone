@@ -5,6 +5,7 @@ import type {
   GitHubClient,
   GitHubCredentialStore,
   GitHubToolProvisioner,
+  PublishDraftPrInput,
 } from "../github/index.js";
 import { createGitHubRoutes } from "./github.js";
 
@@ -245,6 +246,10 @@ test("GitHub webhook enqueues a trigger for a known relation", async () => {
     (enqueued[0]?.payload as { relation_id: string }).relation_id,
     "rel-1",
   );
+  assert.equal(
+    (enqueued[0]?.payload as { maintenance_id: string }).maintenance_id,
+    "rel-1",
+  );
   assert.equal(drainedLoop, "loop-maintainer");
   assert.equal(relationUpdates.length, 1);
   assert.equal(relationUpdates[0]?.state, "fixing");
@@ -345,5 +350,202 @@ test("GitHub routes list and get relations", async () => {
   assert.equal(
     (detail.relation as { relation_id: string }).relation_id,
     "rel-1",
+  );
+});
+
+test("GitHub approve-pr rejects a relation that is not waiting for approval", async () => {
+  const relation = {
+    relation_id: "rel-1",
+    loop_id: "loop-maintainer",
+    subject: {
+      type: "github_pr",
+      repository: "owner/repo",
+      pr_number: 12,
+      branch: "fix/12",
+    },
+    state: "awaiting_feedback",
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 0,
+  };
+  const app = new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {
+        publishDraftPr: async () => {
+          throw new Error("should not publish");
+        },
+      } as unknown as GitHubClient,
+      relationStore: {
+        findById: () => relation,
+      } as never,
+    }),
+  );
+
+  const response = await app.request("/github/relations/rel-1/approve-pr", {
+    method: "POST",
+  });
+
+  assert.equal(response.status, 409);
+  assert.equal((await json(response)).error, "invalid_state");
+});
+
+test("GitHub approve-pr publishes the pending draft and transitions to awaiting_review", async () => {
+  let publishInput: {
+    repository: string;
+    branch: string;
+    title: string;
+    body: string;
+    cwd: string;
+  } | null = null;
+  const relation = {
+    relation_id: "rel-1",
+    loop_id: "loop-maintainer",
+    subject: {
+      type: "github_pr",
+      repository: "owner/repo",
+      branch: "fix/12",
+    },
+    state: "pr_pending_approval",
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 0,
+    pending_publish: {
+      repository: "owner/repo",
+      branch: "fix/12",
+      title: "Fix bug 12",
+      body: "Closes #12",
+      cwd: "E:/work/owner/repo",
+    },
+  };
+  const app = new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {
+        publishDraftPr: async (input: PublishDraftPrInput) => {
+          publishInput = input;
+          return "https://github.com/owner/repo/pull/12";
+        },
+      } as unknown as GitHubClient,
+      relationStore: {
+        findById: () => relation,
+        updateState: async (id: string, state: string, patch?: object) => ({
+          ...relation,
+          ...patch,
+          state,
+          subject: {
+            ...relation.subject,
+            ...((patch as { subject?: object } | undefined)?.subject ?? {}),
+          },
+        }),
+      } as never,
+    }),
+  );
+
+  const response = await app.request("/github/relations/rel-1/approve-pr", {
+    method: "POST",
+  });
+
+  assert.equal(response.status, 200);
+  const body = await json(response);
+  assert.equal((body.relation as { state: string }).state, "awaiting_review");
+  assert.equal(
+    (body.relation as { subject: { pr_number?: number } }).subject.pr_number,
+    12,
+  );
+  assert.equal(body.prUrl, "https://github.com/owner/repo/pull/12");
+  const capturedInput = publishInput as PublishDraftPrInput | null;
+  assert.equal(capturedInput?.repository, "owner/repo");
+  assert.equal(capturedInput?.branch, "fix/12");
+});
+
+test("GitHub mark-ready rejects a relation that is not awaiting review", async () => {
+  const relation = {
+    relation_id: "rel-1",
+    loop_id: "loop-maintainer",
+    subject: {
+      type: "github_pr",
+      repository: "owner/repo",
+      pr_number: 12,
+      branch: "fix/12",
+    },
+    state: "pr_pending_approval",
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 0,
+  };
+  const app = new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {
+        markPullRequestReady: async () => {
+          throw new Error("should not mark ready");
+        },
+      } as unknown as GitHubClient,
+      relationStore: {
+        findById: () => relation,
+      } as never,
+    }),
+  );
+
+  const response = await app.request("/github/relations/rel-1/mark-ready", {
+    method: "POST",
+  });
+
+  assert.equal(response.status, 409);
+  assert.equal((await json(response)).error, "invalid_state");
+});
+
+test("GitHub mark-ready marks the draft PR ready and transitions to awaiting_feedback", async () => {
+  let readyArgs: { repository: string; prNumber: number } | null = null;
+  const relation = {
+    relation_id: "rel-1",
+    loop_id: "loop-maintainer",
+    subject: {
+      type: "github_pr",
+      repository: "owner/repo",
+      pr_number: 12,
+      branch: "fix/12",
+    },
+    state: "awaiting_review",
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 0,
+  };
+  const app = new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {
+        markPullRequestReady: async (repository: string, prNumber: number) => {
+          readyArgs = { repository, prNumber };
+        },
+      } as unknown as GitHubClient,
+      relationStore: {
+        findById: () => relation,
+        updateState: async (id: string, state: string) => ({
+          ...relation,
+          state,
+        }),
+      } as never,
+    }),
+  );
+
+  const response = await app.request("/github/relations/rel-1/mark-ready", {
+    method: "POST",
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(readyArgs, { repository: "owner/repo", prNumber: 12 });
+  assert.equal(
+    ((await json(response)).relation as { state: string }).state,
+    "awaiting_feedback",
   );
 });

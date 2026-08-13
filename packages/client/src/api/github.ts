@@ -23,6 +23,7 @@ export interface GitHubIssueCandidate {
 export type GitHubRelationState =
   | "pr_pending_approval"
   | "awaiting_feedback"
+  | "awaiting_review"
   | "fixing"
   | "merged"
   | "closed"
@@ -50,6 +51,18 @@ export interface GitHubRelation {
   };
   feedback_count: number;
   repair_count: number;
+  pending_publish?: {
+    repository: string;
+    branch: string;
+    title: string;
+    body: string;
+    cwd: string;
+    author_name?: string;
+    author_email?: string;
+    identity_source?: string;
+    run_id?: string;
+    created_at?: string;
+  };
   needs_human_reason?: string;
   created_at: string;
   updated_at: string;
@@ -95,5 +108,17 @@ export const githubApi = {
   getRelation: (relationId: string) =>
     fetchJSON<{ relation: GitHubRelation }>(
       `/github/relations/${encodeURIComponent(relationId)}`,
+    ),
+
+  approvePr: (relationId: string) =>
+    fetchJSON<{ relation: GitHubRelation; prUrl: string }>(
+      `/github/relations/${encodeURIComponent(relationId)}/approve-pr`,
+      { method: "POST" },
+    ),
+
+  markReady: (relationId: string) =>
+    fetchJSON<{ relation: GitHubRelation }>(
+      `/github/relations/${encodeURIComponent(relationId)}/mark-ready`,
+      { method: "POST" },
     ),
 };

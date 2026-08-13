@@ -80,6 +80,7 @@ test("passed judgment with requires_human escalates (human outranks verdict)", (
   });
   assert.equal(decision.kind, "needs_human");
   assert.match(decision.reason, /requires human/);
+  assert.equal(decision.humanReasons[0]?.code, "verifier_requires_human");
 });
 
 test("failed retryable judgment with budget headroom → retry (phase 2: automatic)", () => {
@@ -110,6 +111,7 @@ test("failed retryable judgment with exhausted budget → budget_limited (先触
   });
   assert.equal(decision.kind, "budget_limited");
   assert.match(decision.reason, /budget.*exhausted|exhausted/);
+  assert.equal(decision.humanReasons[0]?.code, "budget_exhausted");
 });
 
 test("failed judgment with escalate next_action goes needs_human", () => {

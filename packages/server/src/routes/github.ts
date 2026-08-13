@@ -1,4 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { stat } from "node:fs/promises";
+import path from "node:path";
 import { Hono } from "hono";
 import type {
   GitHubClient,
@@ -11,11 +13,15 @@ import type {
   RelationStore,
   TriggerQueueStore,
 } from "../loop/index.js";
+import { isGitWorkTree } from "../loop/index.js";
+import { githubPromptWorkspacePath } from "../loop/run/workspace.js";
 
 export interface GitHubRoutesDeps {
   credentialStore: GitHubCredentialStore;
   toolProvisioner: GitHubToolProvisioner;
   githubClient: GitHubClient;
+  /** Required to validate that pending PR publish cwd stays in the managed workspace. */
+  dataDir?: string;
   relationStore?: RelationStore;
   triggerQueueStore?: TriggerQueueStore;
   drainPendingTriggers?: (loopId?: string) => Promise<void>;
@@ -297,6 +303,136 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
     return c.json({ relation });
   });
 
+  app.post("/relations/:id/approve-pr", async (c) => {
+    if (!deps.relationStore) {
+      return c.json({ error: "relation_store_unavailable" }, 503);
+    }
+    const relation = deps.relationStore.findById(c.req.param("id"));
+    if (!relation) {
+      return c.json({ error: "relation_not_found" }, 404);
+    }
+    if (relation.state !== "pr_pending_approval") {
+      return c.json(
+        {
+          error: "invalid_state",
+          message: `relation '${relation.relation_id}' is '${relation.state}', not 'pr_pending_approval'`,
+        },
+        409,
+      );
+    }
+    const pending = relation.pending_publish;
+    if (
+      !pending ||
+      !pending.repository ||
+      !pending.branch ||
+      !pending.title ||
+      !pending.body ||
+      !pending.cwd
+    ) {
+      return c.json(
+        {
+          error: "invalid_publish_payload",
+          message: "relation has no complete pending_publish payload",
+        },
+        409,
+      );
+    }
+    if (deps.dataDir && !(await isValidPrPublishCwd(relation, deps.dataDir))) {
+      return c.json(
+        {
+          error: "invalid_publish_payload",
+          message:
+            "pending_publish.cwd must be an existing git checkout inside this loop's managed workspace",
+        },
+        409,
+      );
+    }
+    try {
+      const prUrl = await githubClient.publishDraftPr({
+        repository: pending.repository,
+        branch: pending.branch,
+        title: pending.title,
+        body: pending.body,
+        cwd: pending.cwd,
+        draft: true,
+      });
+      const prNumber = prNumberFromUrl(prUrl);
+      if (!prNumber) {
+        throw new Error(`GitHub returned an invalid PR URL: ${prUrl}`);
+      }
+      const updated = await deps.relationStore.updateState(
+        relation.relation_id,
+        "awaiting_review",
+        {
+          subject: {
+            ...relation.subject,
+            repository: pending.repository,
+            branch: pending.branch,
+            pr_number: prNumber,
+          },
+          pending_publish: undefined,
+        },
+      );
+      if (!updated) {
+        throw new Error("relation disappeared while publishing draft PR");
+      }
+      return c.json({ relation: updated, prUrl });
+    } catch (error) {
+      return c.json(
+        { error: "publish_failed", message: errorMessage(error) },
+        502,
+      );
+    }
+  });
+
+  app.post("/relations/:id/mark-ready", async (c) => {
+    if (!deps.relationStore) {
+      return c.json({ error: "relation_store_unavailable" }, 503);
+    }
+    const relation = deps.relationStore.findById(c.req.param("id"));
+    if (!relation) {
+      return c.json({ error: "relation_not_found" }, 404);
+    }
+    if (relation.state !== "awaiting_review") {
+      return c.json(
+        {
+          error: "invalid_state",
+          message: `relation '${relation.relation_id}' is '${relation.state}', not 'awaiting_review'`,
+        },
+        409,
+      );
+    }
+    const prNumber = relation.subject.pr_number;
+    if (!prNumber || !relation.subject.repository) {
+      return c.json(
+        {
+          error: "invalid_relation_subject",
+          message: "relation has no published PR number",
+        },
+        409,
+      );
+    }
+    try {
+      await githubClient.markPullRequestReady(
+        relation.subject.repository,
+        prNumber,
+      );
+      const updated = await deps.relationStore.updateState(
+        relation.relation_id,
+        "awaiting_feedback",
+      );
+      if (!updated) {
+        throw new Error("relation disappeared while marking PR ready");
+      }
+      return c.json({ relation: updated });
+    } catch (error) {
+      return c.json(
+        { error: "mark_ready_failed", message: errorMessage(error) },
+        502,
+      );
+    }
+  });
+
   app.post("/webhook", async (c) => {
     if (!deps.relationStore || !deps.triggerQueueStore) {
       return c.json({ error: "relation_trigger_unavailable" }, 503);
@@ -356,6 +492,15 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
     if (!relation) {
       return c.json({ accepted: false, reason: "relation_not_found" }, 202);
     }
+    if (
+      relation.state === "pr_pending_approval" ||
+      relation.state === "awaiting_review"
+    ) {
+      return c.json(
+        { accepted: false, reason: "relation_not_actionable" },
+        202,
+      );
+    }
     const comment =
       typeof payload.comment === "object" && payload.comment !== null
         ? (payload.comment as Record<string, unknown>)
@@ -405,6 +550,7 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
       priority: "normal",
       payload: {
         relation_id: relation.relation_id,
+        maintenance_id: relation.relation_id,
         event_type: eventType,
         repository,
         pr_number: prNumber,
@@ -417,4 +563,28 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
   });
 
   return app;
+}
+
+async function isValidPrPublishCwd(
+  relation: RelationRecord,
+  dataDir: string,
+): Promise<boolean> {
+  const pending = relation.pending_publish;
+  if (!pending) {
+    return false;
+  }
+  const cwd = path.resolve(pending.cwd);
+  const managedRoot = githubPromptWorkspacePath(dataDir, relation.loop_id);
+  const relative = path.relative(path.resolve(managedRoot), cwd);
+  if (
+    relative.startsWith("..") ||
+    path.isAbsolute(relative) ||
+    !(await stat(cwd).then(
+      (info) => info.isDirectory(),
+      () => false,
+    ))
+  ) {
+    return false;
+  }
+  return isGitWorkTree(cwd);
 }

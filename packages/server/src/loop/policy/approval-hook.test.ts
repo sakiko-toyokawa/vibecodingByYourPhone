@@ -160,6 +160,52 @@ test("hard gate under bypass: denied + escalation collected + policy_blocked aud
   });
 });
 
+test("human-approved one-shot tool call is allowed exactly once", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-policy-hook-"));
+  try {
+    const store = new RunLedgerStore({ dataDir });
+    const escalations: PolicyEscalation[] = [];
+    const permissionEvents: PermissionEvent[] = [];
+    const approvedToolCalls = [
+      {
+        tool: "Bash",
+        input: { command: "gh issue close 12 --repo owner/repo" },
+        summary: "gh issue close 12 --repo owner/repo",
+      },
+    ];
+    const hook = createLoopToolApprovalHook({
+      profile: PROFILE,
+      runId: "run-hook-approved",
+      loopId: "loop-hook",
+      turn: 1,
+      workspacePath: WS,
+      store,
+      escalations,
+      permissionEvents,
+      approvedToolCalls,
+    });
+
+    const first = await hook("Bash", {
+      command: "gh issue close 12 --repo owner/repo",
+    });
+    assert.deepEqual(first, { behavior: "allow" });
+    assert.equal(approvedToolCalls.length, 0);
+    assert.equal(escalations.length, 0);
+
+    const entries = await store.readDecisionEntries("run-hook-approved");
+    assert.equal(entries.length, 1);
+    assert.match(entries[0]?.reason ?? "", /one-shot restriction release/);
+
+    const modified = await hook("Bash", {
+      command: "gh issue close 13 --repo owner/repo",
+    });
+    assert.equal(modified.behavior, "deny");
+    assert.equal(escalations.length, 1);
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
 test("audit write failure is fail-closed (self-approval requires audit)", async () => {
   const dataDir = await mkdtemp(join(tmpdir(), "yep-policy-hook-"));
   try {

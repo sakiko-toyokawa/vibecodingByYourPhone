@@ -5,7 +5,9 @@
 import type {
   AgentActivity,
   ContextUsage,
+  HumanReason,
   PendingInputType,
+  PendingToolCall,
   RunState,
   UrlProjectId,
 } from "@yep-anywhere/shared";
@@ -255,6 +257,10 @@ export interface RunDecisionRequiredEvent {
   reason: string;
   /** artifact:// evidence refs (verifier evidence, diff, …) */
   evidence_refs: string[];
+  /** Exact blocked tool call when the agent requested a one-shot release. */
+  tool_call?: PendingToolCall;
+  /** Structured human-readable reasons shown to the user. */
+  human_reasons: HumanReason[];
   /** Artifact summary, when available */
   diff_summary?: string;
   /** Subset of ["approve","reject","request_changes","pause"] */

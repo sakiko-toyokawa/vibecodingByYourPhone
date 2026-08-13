@@ -47,3 +47,45 @@ test("drainPendingTriggers passes relation_id into startRun", async () => {
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("drainPendingTriggers passes maintenance_id and marks target fixing", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-trigger-"));
+  const updates: Array<{ id: string; state: string }> = [];
+  try {
+    const queueStore = new TriggerQueueStore({ dataDir });
+    await queueStore.enqueue({
+      event_id: "maintenance-event-1",
+      loop_id: "loop-maintainer",
+      source: "webhook",
+      payload: { maintenance_id: "target-1" },
+    });
+    const calls: unknown[] = [];
+    const runService = {
+      isRunActive: () => false,
+      startRun: async (
+        loopId: string,
+        source: string,
+        _overrides: unknown,
+        options: { maintenanceId?: string },
+      ) => {
+        calls.push({ loopId, source, options });
+        return { run_id: "run-1", loop_id: loopId, state: "active", source };
+      },
+    };
+    await drainPendingTriggers({
+      queueStore,
+      runService: runService as never,
+      controlPlane: {} as never,
+      maintenanceTargetStore: {
+        updateState: async (id: string, state: string) => {
+          updates.push({ id, state });
+          return { target_id: id, state };
+        },
+      } as never,
+    });
+    assert.equal(calls.length, 1);
+    assert.deepEqual(updates, [{ id: "target-1", state: "fixing" }]);
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});

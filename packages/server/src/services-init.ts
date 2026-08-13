@@ -20,6 +20,7 @@ import {
 } from "./logging/index.js";
 import {
   LoopCardStore,
+  MaintenanceTargetStore,
   type RelationPoller,
   RelationStore,
 } from "./loop/index.js";
@@ -91,6 +92,7 @@ export interface ServicesContainer {
   // 阶段 3 第三刀: 发布管线 (worker 自动推进 draft→shadow→canary)
   proposalPipeline?: ProposalPipeline;
   relationStore?: RelationStore;
+  maintenanceTargetStore?: MaintenanceTargetStore;
   relationPoller?: RelationPoller;
   triggerQueueStore?: TriggerQueueStore;
   drainPendingTriggers?: (loopId?: string) => Promise<void>;
@@ -331,8 +333,12 @@ export async function initializeServices(): Promise<ServicesContainer> {
     ghPath: githubToolProvisioner.getGhPath(),
     tokenProvider: () => githubCredentialStore.getToken(),
   });
+  const maintenanceTargetStore = new MaintenanceTargetStore({
+    dataDir: config.dataDir,
+  });
   const relationStore = new RelationStore({
     dataDir: config.dataDir,
+    maintenanceTargetStore,
   });
 
   // Initialize services (loads state from disk)
@@ -350,6 +356,7 @@ export async function initializeServices(): Promise<ServicesContainer> {
   await serverSettingsService.initialize();
   await sharingService.initialize();
   await githubCredentialStore.initialize();
+  await maintenanceTargetStore.initialize();
   await relationStore.initialize();
   await remoteSessionService.setDiskPersistenceEnabled(
     serverSettingsService.getSetting("persistRemoteSessionsToDisk"),
@@ -443,6 +450,7 @@ export async function initializeServices(): Promise<ServicesContainer> {
     githubToolProvisioner,
     githubClient,
     relationStore,
+    maintenanceTargetStore,
   };
 
   // Register all services in the DI container

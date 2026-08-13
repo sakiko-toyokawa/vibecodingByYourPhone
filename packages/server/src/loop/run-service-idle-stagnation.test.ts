@@ -16,6 +16,10 @@ import type { JudgmentReport, LoopCard } from "@yep-anywhere/shared";
 import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { IEventBus } from "../watcher/index.js";
+import {
+  EXECUTOR_SUMMARY_BEGIN,
+  EXECUTOR_SUMMARY_END,
+} from "./assembly/runtime-input.js";
 import { blockerFingerprint } from "./control-plane/blocker.js";
 import { ControlPlane } from "./control-plane/control-plane.js";
 import { RunStateStore } from "./control-plane/run-state-store.js";
@@ -96,6 +100,16 @@ class FakeSupervisor {
           ? this.collectorResult
           : this.nextAutoResult();
         if (result) {
+          const finalResult = isCollector
+            ? result
+            : [
+                result,
+                EXECUTOR_SUMMARY_BEGIN,
+                "- 已完成：turn completed",
+                "- 風險：none",
+                "- 文件：none",
+                EXECUTOR_SUMMARY_END,
+              ].join("\n");
           queueMicrotask(() => {
             listener({
               type: "message",
@@ -106,7 +120,7 @@ class FakeSupervisor {
               message: {
                 type: "result",
                 subtype: "success",
-                result,
+                result: finalResult,
                 is_error: false,
                 usage: { input_tokens: 5, output_tokens: 5 },
               },

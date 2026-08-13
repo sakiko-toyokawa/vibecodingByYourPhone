@@ -7,7 +7,10 @@ import { RelationPoller } from "./relation-poller.js";
 import { RelationStore } from "./relation-store.js";
 
 function makeRelation(
-  state: "awaiting_feedback" | "fixing" = "awaiting_feedback",
+  state:
+    | "awaiting_feedback"
+    | "fixing"
+    | "awaiting_review" = "awaiting_feedback",
 ) {
   return {
     relation_id: "rel-1",
@@ -60,6 +63,10 @@ test("RelationPoller enqueues new comments and reviews", async () => {
     assert.match(enqueued[0]?.event_id ?? "", /^github-poll-rel-1-3$/);
     assert.equal(
       (enqueued[0]?.payload as { relation_id: string }).relation_id,
+      "rel-1",
+    );
+    assert.equal(
+      (enqueued[0]?.payload as { maintenance_id: string }).maintenance_id,
       "rel-1",
     );
     const updated = relationStore.findById("rel-1");
@@ -138,6 +145,36 @@ test("RelationPoller marks merged relations terminal", async () => {
     });
     await poller.pollOnce();
     assert.equal(relationStore.findById("rel-1")?.state, "merged");
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("RelationPoller skips awaiting_review until the PR is marked ready", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-rel-poll-"));
+  try {
+    const relationStore = new RelationStore({ dataDir });
+    await relationStore.initialize();
+    await relationStore.upsert(makeRelation("awaiting_review"));
+    let enqueued = 0;
+    const poller = new RelationPoller({
+      relationStore,
+      githubClient: {
+        getPullRequest: async () => {
+          throw new Error("should not query PR before ready");
+        },
+      } as never,
+      triggerQueueStore: {
+        enqueue: async () => {
+          enqueued += 1;
+          return { event_id: "x", state: "pending" };
+        },
+      } as never,
+    });
+    const events = await poller.pollOnce();
+    assert.equal(events, 0);
+    assert.equal(enqueued, 0);
+    assert.equal(relationStore.findById("rel-1")?.state, "awaiting_review");
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }

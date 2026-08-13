@@ -119,6 +119,37 @@ test("parseVerifierAgentOutput: 缺省欄位有預設值", () => {
   assert.equal(report.issues?.length, 0);
 });
 
+test("parseVerifierAgentOutput: human_reasons are preserved and fallback fills missing", () => {
+  const withReasons = parseVerifierAgentOutput(
+    JSON.stringify({
+      status: "passed",
+      recommendation: "stop",
+      confidence: 0.9,
+      requires_human: true,
+      human_reasons: [
+        {
+          code: "duplicate_pr",
+          message: "Open PR #123 already covers this fix.",
+        },
+      ],
+    }),
+    { outputRef: "artifact://run-1/out.log" },
+  );
+  assert.equal(withReasons.human_reasons?.[0]?.code, "duplicate_pr");
+
+  const fallback = parseVerifierAgentOutput(
+    JSON.stringify({
+      status: "failed",
+      recommendation: "retry",
+      confidence: 0.8,
+      requires_human: false,
+      unresolved_risks: ["missing evidence"],
+    }),
+    { outputRef: "artifact://run-1/out.log" },
+  );
+  assert.equal(fallback.human_reasons?.[0]?.message, "missing evidence");
+});
+
 test("parseVerifierAgentOutput: 接受字串數字 confidence/score 與 location", () => {
   const report = parseVerifierAgentOutput(
     JSON.stringify({

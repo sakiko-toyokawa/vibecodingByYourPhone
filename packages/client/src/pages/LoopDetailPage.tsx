@@ -1,3 +1,4 @@
+import type { RunDecisionAction } from "@yep-anywhere/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { type GitHubRelation, githubApi } from "../api/github";
@@ -9,12 +10,23 @@ import {
   type StoredLoop,
   loopsApi,
 } from "../api/loops";
+import { type MaintenanceTarget, maintenanceApi } from "../api/maintenance";
+import { GitHubRelationCard } from "../components/GitHubRelationCard";
+import { LoopReportSummary } from "../components/LoopReportSummary";
 import { WorkspaceStrategyBadge } from "../components/LoopWorkspaceHint";
+import { MaintenanceTargetCard } from "../components/MaintenanceTargetCard";
 import { PageHeader } from "../components/PageHeader";
 import { RunStreamOutput } from "../components/RunStreamOutput";
 import { useI18n } from "../i18n";
 import { useNavigationLayout } from "../layouts";
 import { activityBus } from "../lib/activityBus";
+import {
+  formatHumanReasons,
+  humanizeDecision,
+  humanizeNextAction,
+  humanizeReason,
+  humanizeVerifierStatus,
+} from "../lib/loopHumanText";
 import { runStateBadgeClass } from "../lib/loopStateStyle";
 
 const POLL_INTERVAL_MS = 10_000;
@@ -76,19 +88,31 @@ export function LoopDetailPage() {
     string | null
   >(null);
   const [relations, setRelations] = useState<GitHubRelation[]>([]);
+  const [maintenanceTargets, setMaintenanceTargets] = useState<
+    MaintenanceTarget[]
+  >([]);
   const [discarding, setDiscarding] = useState(false);
+  const [decisionBusy, setDecisionBusy] = useState(false);
   const selectedRunIdRef = useRef<string | null>(null);
   selectedRunIdRef.current = selectedRunId;
 
   const load = useCallback(async () => {
     if (!loopId) return;
     try {
-      const [{ loop: storedLoop }, { runs: runList }] = await Promise.all([
+      const [
+        { loop: storedLoop },
+        { runs: runList },
+        { targets: maintenanceList },
+      ] = await Promise.all([
         loopsApi.getLoop(loopId),
         loopsApi.listRuns(loopId),
+        maintenanceApi
+          .listTargets(loopId)
+          .catch(() => ({ targets: [] as MaintenanceTarget[] })),
       ]);
       setLoop(storedLoop);
       setRuns(runList);
+      setMaintenanceTargets(maintenanceList);
       setError(null);
       // Refresh the open judgment panel too (state may have changed),
       // including the artifact list — turn artifacts (stdout, summaries,
@@ -153,13 +177,19 @@ export function LoopDetailPage() {
     void loadInteractionDeps();
   }, [loadInteractionDeps, loop]);
 
-  useEffect(() => {
+  const loadRelations = useCallback(async () => {
     if (!loopId) return;
-    githubApi
-      .listRelations(loopId)
-      .then(({ relations }) => setRelations(relations))
-      .catch(() => setRelations([]));
+    try {
+      const { relations } = await githubApi.listRelations(loopId);
+      setRelations(relations);
+    } catch {
+      setRelations([]);
+    }
   }, [loopId]);
+
+  useEffect(() => {
+    void loadRelations();
+  }, [loadRelations]);
 
   const handleInstallInteractionDeps = useCallback(async () => {
     if (!loopId) return;
@@ -301,6 +331,23 @@ export function LoopDetailPage() {
       setDiscarding(false);
     }
   }, [load, runDetail, selectedRunId]);
+
+  const handleDecision = useCallback(
+    async (decision: RunDecisionAction) => {
+      if (!selectedRunId) return;
+      setDecisionBusy(true);
+      setActionError(null);
+      try {
+        await loopsApi.submitDecision(selectedRunId, decision);
+        await load();
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setDecisionBusy(false);
+      }
+    },
+    [load, selectedRunId],
+  );
 
   const handleRunNow = useCallback(async () => {
     if (!loopId) return;
@@ -468,38 +515,28 @@ export function LoopDetailPage() {
                 </h2>
                 <div className="flex flex-col gap-2">
                   {relations.map((relation) => (
-                    <div
+                    <GitHubRelationCard
                       key={relation.relation_id}
-                      className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-4"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
-                          {relation.subject.repository}#
-                          {relation.subject.pr_number ?? "?"}
-                        </span>
-                        <span className="rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
-                          {relation.state}
-                        </span>
-                      </div>
-                      <div className="mt-2 grid gap-1 [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
-                        <div>
-                          branch:{" "}
-                          <span className="font-mono">
-                            {relation.subject.branch}
-                          </span>
-                        </div>
-                        <div>
-                          feedback: {relation.feedback_count} · repair:{" "}
-                          {relation.repair_count}
-                        </div>
-                        <div>
-                          last processed:{" "}
-                          {relation.last_processed.comment_id ??
-                            relation.last_processed.review_id ??
-                            "—"}
-                        </div>
-                      </div>
-                    </div>
+                      relation={relation}
+                      onChanged={() => void loadRelations()}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {maintenanceTargets.length > 0 && (
+              <section className="mb-6 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-secondary)] p-4">
+                <h2 className="m-0 mb-3 [font-size:var(--font-size-sm)] font-semibold text-[var(--text-primary)]">
+                  Maintenance Targets
+                </h2>
+                <div className="flex flex-col gap-2">
+                  {maintenanceTargets.map((target) => (
+                    <MaintenanceTargetCard
+                      key={target.target_id}
+                      target={target}
+                      onChanged={() => void load()}
+                    />
                   ))}
                 </div>
               </section>
@@ -572,7 +609,7 @@ export function LoopDetailPage() {
                           <span
                             className={`shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium ${runStateBadgeClass(run.state)}`}
                           >
-                            {run.state}
+                            {humanizeDecision(run.state)}
                           </span>
                           <span className="shrink-0 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
                             {run.source}
@@ -619,12 +656,46 @@ export function LoopDetailPage() {
                           runDetail.run.state === "budget_limited") && (
                           <p className="m-0 rounded-[var(--radius-sm)] border border-[var(--warning-color)]/40 bg-[var(--warning-color)]/10 p-3 text-[var(--warning-color)]">
                             {t("loopsRunBlocked", {
-                              state: runDetail.run.state,
+                              state: humanizeDecision(runDetail.run.state),
                               reason:
                                 runDetail.ledger_summary.last_decision
-                                  ?.reason ?? "—",
+                                  ?.human_reasons &&
+                                runDetail.ledger_summary.last_decision
+                                  .human_reasons.length > 0
+                                  ? formatHumanReasons(
+                                      runDetail.ledger_summary.last_decision
+                                        .human_reasons,
+                                    )
+                                  : runDetail.ledger_summary.last_decision
+                                    ? humanizeReason(
+                                        runDetail.ledger_summary.last_decision
+                                          .reason,
+                                      )
+                                    : "—",
                             })}
                           </p>
+                        )}
+                        {runDetail.run.state === "needs_human" && (
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-medium text-[var(--on-primary)] transition-opacity hover:opacity-90 disabled:opacity-50"
+                              disabled={decisionBusy}
+                              onClick={() => void handleDecision("approve")}
+                            >
+                              {decisionBusy
+                                ? "Submitting..."
+                                : t("loopApprovalApprove")}
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-md border border-[var(--error-color)]/50 bg-[var(--error-color)]/10 px-4 py-2 text-sm font-medium text-[var(--error-color)] transition-opacity hover:opacity-90 disabled:opacity-50"
+                              disabled={decisionBusy}
+                              onClick={() => void handleDecision("reject")}
+                            >
+                              {t("loopApprovalReject")}
+                            </button>
+                          </div>
                         )}
                         {runDetail.run.state !== "discarded" && (
                           <button
@@ -641,7 +712,9 @@ export function LoopDetailPage() {
                             {t("loopsJudgmentOverall")}
                           </span>
                           <span className="break-all text-right text-[var(--text-primary)]">
-                            {judgment?.overall ?? "—"}
+                            {judgment
+                              ? humanizeVerifierStatus(judgment.overall)
+                              : "—"}
                           </span>
                         </div>
                         <div className="flex items-start justify-between gap-[var(--space-3)]">
@@ -649,7 +722,9 @@ export function LoopDetailPage() {
                             {t("loopsJudgmentNextAction")}
                           </span>
                           <span className="break-all text-right text-[var(--text-primary)]">
-                            {judgment?.next_action ?? "—"}
+                            {judgment
+                              ? humanizeNextAction(judgment.next_action)
+                              : "—"}
                           </span>
                         </div>
                         <div className="flex items-start justify-between gap-[var(--space-3)]">
@@ -670,38 +745,35 @@ export function LoopDetailPage() {
                             {runDetail.ledger_summary.max_retries ?? "—"}
                           </span>
                         </div>
-                        {collectorReportRef && (
-                          <div className="flex items-start justify-between gap-[var(--space-3)]">
-                            <span className="shrink-0 text-[var(--text-muted)]">
-                              Collector
-                            </span>
-                            <span className="break-all text-right font-mono text-xs text-[var(--text-primary)]">
-                              {collectorReportRef}
-                            </span>
-                          </div>
-                        )}
-                        {handoffRef && (
-                          <div className="flex items-start justify-between gap-[var(--space-3)]">
-                            <span className="shrink-0 text-[var(--text-muted)]">
-                              Handoff
-                            </span>
-                            <span className="break-all text-right font-mono text-xs text-[var(--text-primary)]">
-                              {handoffRef}
-                            </span>
-                          </div>
-                        )}
-                        {blockerFingerprint && (
-                          <div className="flex items-start justify-between gap-[var(--space-3)]">
-                            <span className="shrink-0 text-[var(--text-muted)]">
-                              Blocker
-                            </span>
-                            <span className="break-all text-right font-mono text-xs text-[var(--text-primary)]">
-                              {blockerFingerprint}
-                              {repeatedBlockerCount > 0
-                                ? ` (${repeatedBlockerCount})`
-                                : ""}
-                            </span>
-                          </div>
+                        {(collectorReportRef ||
+                          handoffRef ||
+                          blockerFingerprint ||
+                          failureTags.length > 0) && (
+                          <details className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-2">
+                            <summary className="cursor-pointer text-xs text-[var(--text-muted)]">
+                              Technical metadata
+                            </summary>
+                            <pre className="m-0 mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-all [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
+                              {[
+                                collectorReportRef
+                                  ? `collector: ${collectorReportRef}`
+                                  : null,
+                                handoffRef ? `handoff: ${handoffRef}` : null,
+                                blockerFingerprint
+                                  ? `blocker: ${blockerFingerprint}${
+                                      repeatedBlockerCount > 0
+                                        ? ` (${repeatedBlockerCount})`
+                                        : ""
+                                    }`
+                                  : null,
+                                failureTags.length > 0
+                                  ? `failure tags: ${failureTags.join(", ")}`
+                                  : null,
+                              ]
+                                .filter((line): line is string => Boolean(line))
+                                .join("\n")}
+                            </pre>
+                          </details>
                         )}
                         {repeatedBlockerCount > 1 && (
                           <p className="m-0 rounded-[var(--radius-sm)] border border-[var(--warning-color)]/40 bg-[var(--warning-color)]/10 p-3 text-[var(--warning-color)]">
@@ -710,22 +782,6 @@ export function LoopDetailPage() {
                             environment first.
                           </p>
                         )}
-                        {failureTags.length > 0 && (
-                          <div className="flex flex-wrap items-center gap-[var(--space-2)] pt-1">
-                            <span className="text-[var(--text-muted)]">
-                              {t("loopsFailureTags")}
-                            </span>
-                            {failureTags.map((tag) => (
-                              <span
-                                key={tag}
-                                className="rounded-[var(--radius-sm)] bg-[var(--error-color)]/15 px-2 py-0.5 text-xs font-medium text-[var(--error-color)]"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
                         <div className="mt-4 border-t border-[var(--border-color)] pt-4">
                           <h4 className="m-0 mb-3 [font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
                             Stream Output
@@ -773,7 +829,9 @@ export function LoopDetailPage() {
                                         turn {turn.turn}
                                       </span>
                                       <span className="rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
-                                        {turn.decision ?? turn.status}
+                                        {humanizeDecision(
+                                          turn.decision ?? turn.status,
+                                        )}
                                       </span>
                                       {turn.source && (
                                         <span className="text-xs text-[var(--text-muted)]">
@@ -803,23 +861,37 @@ export function LoopDetailPage() {
                                         {
                                           label: "stdout",
                                           content: turnView.stdout,
+                                          reportName: null,
                                         },
                                         {
                                           label: "judgment",
                                           content: turnView.judgment,
+                                          reportName: `judgment-report${
+                                            turnView.turn === 1
+                                              ? ""
+                                              : `-turn${turnView.turn}`
+                                          }.json`,
                                         },
                                         {
                                           label: "executor summary",
                                           content: turnView.summary,
+                                          reportName: null,
                                         },
                                       ].map((item) => (
                                         <div key={item.label}>
                                           <div className="mb-1 text-xs font-medium text-[var(--text-muted)]">
                                             {item.label}
                                           </div>
-                                          <pre className="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-[var(--bg-secondary)] p-3 [font-size:var(--font-size-xs)] text-[var(--text-primary)]">
-                                            {item.content || "—"}
-                                          </pre>
+                                          {item.reportName && item.content ? (
+                                            <LoopReportSummary
+                                              name={item.reportName}
+                                              content={item.content}
+                                            />
+                                          ) : (
+                                            <pre className="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-[var(--bg-secondary)] p-3 [font-size:var(--font-size-xs)] text-[var(--text-primary)]">
+                                              {item.content || "—"}
+                                            </pre>
+                                          )}
                                         </div>
                                       ))}
                                     </div>
@@ -866,9 +938,19 @@ export function LoopDetailPage() {
                                     </span>
                                   )}
                                 </div>
-                                <pre className="m-0 max-h-[480px] overflow-auto whitespace-pre-wrap break-all rounded bg-[var(--bg-secondary)] p-3 [font-size:var(--font-size-xs)] text-[var(--text-primary)]">
-                                  {artifactContent ?? "—"}
-                                </pre>
+                                {artifactContent &&
+                                /(?:judgment|verifier|collector)-report/.test(
+                                  selectedArtifact,
+                                ) ? (
+                                  <LoopReportSummary
+                                    name={selectedArtifact}
+                                    content={artifactContent}
+                                  />
+                                ) : (
+                                  <pre className="m-0 max-h-[480px] overflow-auto whitespace-pre-wrap break-all rounded bg-[var(--bg-secondary)] p-3 [font-size:var(--font-size-xs)] text-[var(--text-primary)]">
+                                    {artifactContent ?? "—"}
+                                  </pre>
+                                )}
                               </div>
                             )}
                           </div>

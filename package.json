@@ -21,6 +21,7 @@
     "test:loop-modules": "tsx benchmarks/loop-modules/harness/run-all.ts",
     "test:loop-modules:score": "tsx benchmarks/loop-modules/harness/score.ts",
     "test:loop-runtime:sample": "tsx benchmarks/loop-runtime-eval/run.ts \"Scan the workspace and report any TODO comments\"",
+    "test:loop:github:pr-maintenance": "tsx benchmarks/loop-runtime-eval/run-github-pr-maintenance-flow.ts",
     "test:phase7:full-chain": "tsx benchmarks/loop-runtime-eval/run-full-chain.ts",
     "benchmark:phase7": "tsx benchmarks/loop-runtime-eval/benchmark.ts",
     "format": "biome format --write .",

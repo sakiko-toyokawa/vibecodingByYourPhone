@@ -44,6 +44,7 @@ import { HostPickerPage } from "./pages/HostPickerPage";
 import { InboxPage } from "./pages/InboxPage";
 import { LoopDetailPage } from "./pages/LoopDetailPage";
 import { LoopsPage } from "./pages/LoopsPage";
+import { MaintenanceTargetsPage } from "./pages/MaintenanceTargetsPage";
 import { NewSessionPage } from "./pages/NewSessionPage";
 import { OlderSessionsPage } from "./pages/OlderSessionsPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
@@ -103,6 +104,7 @@ const APP_ROUTES = (
       <Route path="inbox" element={<InboxPage />} />
       <Route path="loops" element={<LoopsPage />} />
       <Route path="loops/:loopId" element={<LoopDetailPage />} />
+      <Route path="maintenance" element={<MaintenanceTargetsPage />} />
       <Route path="github" element={<GitHubModePage />} />
       <Route path="git-status" element={<GitStatusPage />} />
       <Route path="devices" element={<EmulatorPage />} />

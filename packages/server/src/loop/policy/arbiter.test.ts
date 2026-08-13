@@ -122,6 +122,41 @@ test("relation scope allows push/comment only for the active relation", () => {
   assert.equal(otherBranch.decision, "hard_gate");
 });
 
+test("generic maintenance target scope allows only declared commands", () => {
+  const maintenanceTarget = {
+    target_id: "target-1",
+    loop_id: "loop-x",
+    target_type: "generic_webhook",
+    external_ref: { source: "ops", subject_id: "deploy-42" },
+    state: "fixing" as const,
+    feedback_cursor: {},
+    feedback_count: 0,
+    repair_count: 0,
+    wake_policy: { trigger_types: ["deploy_ready"], max_repairs: 3 },
+    context_payload: {
+      allowed_commands: ["npm test", "git push origin fix/42"],
+    },
+    created_at: "2026-08-12T00:00:00.000Z",
+    updated_at: "2026-08-12T00:00:00.000Z",
+  };
+  const allowed = arbitrate(
+    BYPASS,
+    "Bash",
+    { command: "npm test -- --watch=false" },
+    { workspacePath: WS, maintenanceTarget },
+  );
+  assert.equal(allowed.decision, "allow");
+  assert.match(allowed.reason, /target-scoped action allowed/);
+
+  const blocked = arbitrate(
+    BYPASS,
+    "Bash",
+    { command: "rm -rf /tmp/cache" },
+    { workspacePath: WS, maintenanceTarget },
+  );
+  assert.equal(blocked.decision, "hard_gate");
+});
+
 test("direct allowlist: writes inside IntentContract.target.files are allowed; outside escalate", () => {
   const inside = arbitrate(
     BYPASS,

@@ -44,7 +44,9 @@ export class RelationPoller {
         !relation.subject.pr_number ||
         relation.state === "merged" ||
         relation.state === "closed" ||
-        relation.state === "needs_human"
+        relation.state === "needs_human" ||
+        relation.state === "pr_pending_approval" ||
+        relation.state === "awaiting_review"
       ) {
         continue;
       }
@@ -116,6 +118,7 @@ export class RelationPoller {
         priority: "normal",
         payload: {
           relation_id: relation.relation_id,
+          maintenance_id: relation.relation_id,
           event_type: hasNewReview ? "pull_request_review" : "issue_comment",
           repository,
           pr_number: prNumber,

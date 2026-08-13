@@ -167,6 +167,42 @@ test("evidence and unresolved_risks are flattened across reports", () => {
   assert.deepEqual(judgment.unresolved_risks, ["risk-a", "risk-b"]);
 });
 
+test("human_reasons are merged across reports", () => {
+  const judgment = aggregateVerifierReports(
+    [
+      makeReport({
+        human_reasons: [
+          {
+            code: "duplicate_pr",
+            message: "Open PR #123 already covers this fix.",
+          },
+        ],
+      }),
+      makeReport({
+        verifier_phase: "review",
+        requires_human: true,
+        human_reasons: [
+          {
+            code: "scope_unconfirmed",
+            message: "Maintainer has not confirmed the narrowed scope.",
+          },
+        ],
+      }),
+    ],
+    RETRY_POLICY,
+  );
+  assert.deepEqual(judgment.human_reasons, [
+    {
+      code: "duplicate_pr",
+      message: "Open PR #123 already covers this fix.",
+    },
+    {
+      code: "scope_unconfirmed",
+      message: "Maintainer has not confirmed the narrowed scope.",
+    },
+  ]);
+});
+
 test("empty chain → passed / complete (no failure evidence to judge)", () => {
   const judgment = aggregateVerifierReports([], RETRY_POLICY);
   assert.equal(judgment.overall, "passed");

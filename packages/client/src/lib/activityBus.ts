@@ -1,7 +1,9 @@
 import type {
   AgentActivity,
   ContextUsage,
+  HumanReason,
   PendingInputType,
+  PendingToolCall,
   UrlProjectId,
 } from "@yep-anywhere/shared";
 import type { SessionStatus, SessionSummary } from "../types";
@@ -160,6 +162,10 @@ export interface RunDecisionRequiredEvent {
   risk: string;
   reason: string;
   evidence_refs: string[];
+  /** Exact blocked tool call when the agent requested a one-shot release. */
+  tool_call?: PendingToolCall;
+  /** Structured human-readable reasons shown to the user. */
+  human_reasons: HumanReason[];
   /** 工作区改动摘要 (git diff --stat 文本); 无改动或未捕获时缺省 */
   diff_summary?: string;
   options: LoopDecisionOption[];

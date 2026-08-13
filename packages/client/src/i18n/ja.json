@@ -1046,6 +1046,7 @@
   "loopApprovalCancel": "キャンセル",
   "loopApprovalRecommended": "推奨",
   "loopApprovalDiffSummary": "ワークスペースの差分サマリ",
+  "loopApprovalToolCall": "承認済みツール呼び出し",
   "loopActionMerge": "保護ブランチへマージ",
   "loopActionDeploy": "デプロイ",
   "loopActionDelete": "削除",

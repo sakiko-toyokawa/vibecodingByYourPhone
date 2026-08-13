@@ -25,6 +25,10 @@ import type {
 import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { ToolApprovalHook } from "../supervisor/types.js";
+import {
+  EXECUTOR_SUMMARY_BEGIN,
+  EXECUTOR_SUMMARY_END,
+} from "./assembly/runtime-input.js";
 import { ControlPlane } from "./control-plane/control-plane.js";
 import { RunStateStore } from "./control-plane/run-state-store.js";
 import { LoopRunService } from "./run-service.js";
@@ -87,7 +91,14 @@ class StabilityFakeSupervisor {
             message: {
               type: "result",
               subtype: "success",
-              result: "done",
+              result: [
+                "done",
+                EXECUTOR_SUMMARY_BEGIN,
+                "- 已完成：turn completed",
+                "- 風險：none",
+                "- 文件：none",
+                EXECUTOR_SUMMARY_END,
+              ].join("\n"),
               is_error: false,
               usage: { input_tokens: 10, output_tokens: 5 },
             },

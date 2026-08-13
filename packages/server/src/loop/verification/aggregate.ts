@@ -71,6 +71,7 @@ export function aggregateVerifierReports(
   // 3. 可重试性
   const retryable =
     overall !== "passed" && overall !== "unverified" && retryAllowed;
+  const humanReasons = reports.flatMap((report) => report.human_reasons ?? []);
 
   return {
     overall,
@@ -79,5 +80,6 @@ export function aggregateVerifierReports(
     requires_human: requiresHuman,
     evidence: reports.flatMap((report) => report.evidence_refs),
     unresolved_risks: reports.flatMap((report) => report.unresolved_risks),
+    ...(humanReasons.length > 0 ? { human_reasons: humanReasons } : {}),
   };
 }

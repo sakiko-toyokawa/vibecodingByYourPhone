@@ -1046,6 +1046,7 @@
   "loopApprovalCancel": "Cancel",
   "loopApprovalRecommended": "Recommended",
   "loopApprovalDiffSummary": "Workspace diff summary",
+  "loopApprovalToolCall": "Approved tool call",
   "loopActionMerge": "Merge to protected branch",
   "loopActionDeploy": "Deploy",
   "loopActionDelete": "Delete",

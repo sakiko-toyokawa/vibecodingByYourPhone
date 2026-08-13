@@ -18,6 +18,10 @@ import { test } from "node:test";
 import type { JudgmentReport, LoopCard, RunState } from "@yep-anywhere/shared";
 import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
+import {
+  EXECUTOR_SUMMARY_BEGIN,
+  EXECUTOR_SUMMARY_END,
+} from "./assembly/runtime-input.js";
 import { ControlPlane } from "./control-plane/control-plane.js";
 import { RunStateStore } from "./control-plane/run-state-store.js";
 import { LoopRunService } from "./run-service.js";
@@ -79,7 +83,14 @@ class FakeSupervisor {
             message: {
               type: "result",
               subtype: "success",
-              result: "turn report text",
+              result: [
+                "turn report text",
+                EXECUTOR_SUMMARY_BEGIN,
+                "- 已完成：turn completed",
+                "- 風險：none",
+                "- 文件：none",
+                EXECUTOR_SUMMARY_END,
+              ].join("\n"),
               is_error: false,
               // Claude SDK result message usage (02 §4)
               usage: { input_tokens: 100, output_tokens: 50 },
@@ -329,7 +340,7 @@ test("retry: fresh session with AU2 handoff, judgment injected, backoff waited, 
         summary.run_id,
         "stdout-turn2.log",
       );
-      assert.equal(stdout2, "turn report text");
+      assert.match(stdout2 ?? "", /turn report text/);
     },
   );
 });

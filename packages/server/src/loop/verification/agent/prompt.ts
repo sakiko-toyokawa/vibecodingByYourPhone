@@ -112,6 +112,13 @@ export function buildVerifierAgentPrompt(bundle: VerifierAgentBundle): string {
         ],
         suggested_fix: "整體修復方向（可空字串）",
         adversarial_findings: ["攻擊者視角發現（步驟 1）"],
+        human_reasons: [
+          {
+            code: "duplicate_pr",
+            message: "例如：存在同範圍 open PR #123，發布前需人工決定。",
+            evidence_refs: ["https://github.com/owner/repo/pull/123"],
+          },
+        ],
       },
       null,
       2,

@@ -3,6 +3,12 @@ import {
   isAwaitingHuman,
   loopChangedState,
 } from "./loopDecisions.js";
+import {
+  buildReportSummary,
+  formatHumanReasons,
+  humanizeDecision,
+  humanizeReason,
+} from "./loopHumanText.js";
 
 function assertEqual<T>(actual: T, expected: T, message?: string): void {
   if (actual !== expected) {
@@ -59,11 +65,63 @@ function testIsAwaitingHuman(): void {
   assertEqual(isAwaitingHuman(undefined), false);
 }
 
+function testHumanizedLoopText(): void {
+  assertEqual(humanizeDecision("needs_human"), "Human review required");
+  assertEqual(humanizeDecision("budget_limited"), "Budget exhausted");
+  assertEqual(humanizeDecision("mystery_state"), "mystery_state");
+  assertEqual(
+    humanizeReason(
+      "judgment overall == inconclusive, not automatically retryable",
+    ),
+    "Verifier could not reach a clear verdict; the run was escalated for human review.",
+  );
+  assertEqual(
+    humanizeReason("budget exhausted before turn 9"),
+    "Budget exhausted before the next turn; increase budget to continue.",
+  );
+  assertEqual(
+    humanizeReason(
+      "a verifier requires human review (overall == passed); human escalation outranks the verdict",
+    ),
+    "A verifier passed but requested human review; the run was escalated for a human decision.",
+  );
+}
+
+function testReportSummary(): void {
+  const summary = buildReportSummary(
+    "judgment-report-turn2.json",
+    JSON.stringify({
+      overall: "failed",
+      next_action: "retry",
+      requires_human: false,
+      unresolved_risks: ["missing evidence"],
+      human_reasons: [
+        {
+          code: "duplicate_pr",
+          message: "Open PR #123 already covers this fix.",
+        },
+      ],
+    }),
+  );
+  if (!summary) throw new Error("judgment summary should be built");
+  assertEqual(summary.title, "Judgment Summary");
+  assertEqual(summary.rows[0]?.label, "Overall");
+  assertEqual(summary.rows[0]?.value, "Failed");
+  assertEqual(summary.risks[0], "missing evidence");
+  assertEqual(summary.humanReasons[0]?.code, "duplicate_pr");
+  assertEqual(
+    formatHumanReasons(summary.humanReasons),
+    "Open PR #123 already covers this fix.",
+  );
+}
+
 testApproveWithoutFeedback();
 testRejectWithFeedback();
 testRequestChangesRequiresFeedback();
 testRequestChangesWithFeedback();
 testLoopChangedState();
 testIsAwaitingHuman();
+testHumanizedLoopText();
+testReportSummary();
 
-console.log("loopDecisions tests passed");
+console.log("loopDecisions + loopHumanText tests passed");

@@ -38,7 +38,7 @@
  *   stands.
  */
 
-import type { JudgmentReport } from "@yep-anywhere/shared";
+import type { HumanReason, JudgmentReport } from "@yep-anywhere/shared";
 
 /** The states the phase-2 control decision can produce (from `active`). */
 export type ControlDecisionKind =
@@ -67,6 +67,54 @@ export interface ControlDecisionContext {
 export interface ControlDecision {
   kind: ControlDecisionKind;
   reason: string;
+  humanReasons: HumanReason[];
+}
+
+function humanReasonsForDecision(
+  kind: ControlDecisionKind,
+  judgment: JudgmentReport | null,
+): HumanReason[] {
+  const evidence = judgment?.evidence ?? [];
+  switch (kind) {
+    case "needs_human":
+      return [
+        {
+          code: judgment?.requires_human
+            ? "verifier_requires_human"
+            : "verifier_inconclusive",
+          message: judgment?.requires_human
+            ? "A verifier requested human review before the run can proceed."
+            : "Verifier could not reach a clear verdict; the run was escalated for human review.",
+          evidence_refs: evidence,
+        },
+      ];
+    case "retry":
+      return [
+        {
+          code: "verifier_failed_retry",
+          message:
+            "Verifier found issues that should be corrected and retried.",
+          evidence_refs: evidence,
+        },
+      ];
+    case "budget_limited":
+      return [
+        {
+          code: "budget_exhausted",
+          message:
+            "Budget exhausted before the next turn; increase budget to continue.",
+        },
+      ];
+    case "failed":
+      return [
+        {
+          code: "execution_failed",
+          message: "Execution failed; the run stopped.",
+        },
+      ];
+    default:
+      return [];
+  }
 }
 
 export function decideControl(ctx: ControlDecisionContext): ControlDecision {
@@ -75,6 +123,7 @@ export function decideControl(ctx: ControlDecisionContext): ControlDecision {
       kind: "failed",
       reason:
         "execution failed; a crashed turn is an unrecoverable error (02 §7: active → failed)",
+      humanReasons: humanReasonsForDecision("failed", ctx.judgment),
     };
   }
 
@@ -82,6 +131,7 @@ export function decideControl(ctx: ControlDecisionContext): ControlDecision {
     return {
       kind: "complete",
       reason: "card requires no verification phases; execution succeeded",
+      humanReasons: [],
     };
   }
 
@@ -90,6 +140,7 @@ export function decideControl(ctx: ControlDecisionContext): ControlDecision {
     return {
       kind: "needs_human",
       reason: `a verifier requires human review (overall == ${judgment.overall}); human escalation outranks the verdict (02 §6)`,
+      humanReasons: humanReasonsForDecision("needs_human", judgment),
     };
   }
 
@@ -97,6 +148,7 @@ export function decideControl(ctx: ControlDecisionContext): ControlDecision {
     return {
       kind: "complete",
       reason: "judgment overall == passed",
+      humanReasons: [],
     };
   }
 
@@ -106,17 +158,20 @@ export function decideControl(ctx: ControlDecisionContext): ControlDecision {
         kind: "retry",
         reason:
           "judgment overall == failed and retryable; budget has headroom for another turn (状态机.md: active → retry)",
+        humanReasons: humanReasonsForDecision("retry", judgment),
       };
     }
     return {
       kind: "budget_limited",
       reason:
         "judgment overall == failed and retryable, but the run's budget is exhausted (状态机.md: active --预算耗尽--> budget_limited; max_turns / max_retries 先触者停)",
+      humanReasons: humanReasonsForDecision("budget_limited", judgment),
     };
   }
 
   return {
     kind: "needs_human",
     reason: `judgment overall == ${judgment.overall}, not automatically retryable (next_action: ${judgment.next_action}); escalating to needs_human`,
+    humanReasons: humanReasonsForDecision("needs_human", judgment),
   };
 }

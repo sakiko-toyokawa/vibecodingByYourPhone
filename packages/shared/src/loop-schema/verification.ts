@@ -1,6 +1,14 @@
 import { z } from "zod";
 import { VerificationPhaseSchema } from "./loop-card.js";
 
+/** Structured human-readable reason used for UI and approval decisions. */
+export const HumanReasonSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  evidence_refs: z.array(z.string()).optional(),
+});
+export type HumanReason = z.infer<typeof HumanReasonSchema>;
+
 /**
  * VerificationInputBundle — verifier 的输入包，与给 executor 的
  * RuntimeInputBundle 严格区分：verifier 只拿判断所需证据，不拿 executor
@@ -101,6 +109,8 @@ export const VerifierReportSchema = z.object({
   auto_fixable: z.boolean().optional(),
   // 顶层修复建议（供 retry context / 人工参考）
   suggested_fix: z.string().optional(),
+  // 人读原因：requires_human / failed / inconclusive 时必须尽量提供
+  human_reasons: z.array(HumanReasonSchema).optional(),
 });
 export type VerifierReport = z.infer<typeof VerifierReportSchema>;
 
@@ -131,6 +141,8 @@ export const JudgmentReportSchema = z.object({
   evidence: z.array(z.string()),
   // 各 verifier_report unresolved_risks 汇总
   unresolved_risks: z.array(z.string()),
+  // 人读原因汇总（由各 verifier / collector 的 human_reasons 聚合）
+  human_reasons: z.array(HumanReasonSchema).optional(),
 });
 export type JudgmentReport = z.infer<typeof JudgmentReportSchema>;
 
@@ -143,6 +155,7 @@ export const CollectorReportSchema = z.object({
   confidence: z.number().min(0).max(1),
   requires_human: z.boolean().default(false),
   summary: z.string(),
+  human_reasons: z.array(HumanReasonSchema).optional(),
 });
 export type CollectorReport = z.infer<typeof CollectorReportSchema>;
 

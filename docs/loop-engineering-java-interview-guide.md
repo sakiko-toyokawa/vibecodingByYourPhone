@@ -2226,6 +2226,7 @@ verifier theater、fail-closed、審計。
 - `E:/projects/loop/docs/spec/06-項目規定.md`：51 條偏差登記，本專案最濃縮的工程決策史。
 - `E:/projects/loop/docs/loop-engineering/interview/面試問題.md`：57 題自測 + 實現實戰追問。
 - `E:/projects/vibecodingByYourPhone-main/packages/server/src/loop/`：本專案全部實現。
+- `E:/projects/vibecodingByYourPhone-main/docs/loop-engineering-anti-dead-loop.md`：Loop 多層死循環防護機制面試導向。
 
 ---
 

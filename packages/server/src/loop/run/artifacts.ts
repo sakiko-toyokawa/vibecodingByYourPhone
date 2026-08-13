@@ -7,7 +7,12 @@
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { JudgmentReport, LoopCard } from "@yep-anywhere/shared";
+import type {
+  CollectorReport,
+  HumanReason,
+  JudgmentReport,
+  LoopCard,
+} from "@yep-anywhere/shared";
 import { CollectorReportSchema, TurnHandoffSchema } from "@yep-anywhere/shared";
 import type { Process } from "../../supervisor/Process.js";
 import type { Supervisor } from "../../supervisor/Supervisor.js";
@@ -46,6 +51,7 @@ export function buildCollectorPrompt(
 export function mergeEvidence(
   judgment: JudgmentReport,
   extraRefs: (string | null)[],
+  collectorReport?: CollectorReport | null,
 ): JudgmentReport {
   const evidence = Array.from(
     new Set([
@@ -53,7 +59,15 @@ export function mergeEvidence(
       ...extraRefs.filter((ref): ref is string => Boolean(ref)),
     ]),
   );
-  return { ...judgment, evidence };
+  const humanReasons: HumanReason[] = [
+    ...(judgment.human_reasons ?? []),
+    ...(collectorReport?.human_reasons ?? []),
+  ];
+  return {
+    ...judgment,
+    evidence,
+    ...(humanReasons.length > 0 ? { human_reasons: humanReasons } : {}),
+  };
 }
 
 const execFileAsync = promisify(execFile);
@@ -253,6 +267,15 @@ export async function runCollector(
     confidence: collectorOk ? 0.7 : 0.2,
     requires_human: !collectorOk,
     summary: collectorOutput,
+    human_reasons: collectorOk
+      ? []
+      : [
+          {
+            code: "collector_failed",
+            message: "Collector did not complete with a successful result.",
+            evidence_refs: [outputRef],
+          },
+        ],
   });
   await deps.runLedgerStore.writeArtifact(
     runId,

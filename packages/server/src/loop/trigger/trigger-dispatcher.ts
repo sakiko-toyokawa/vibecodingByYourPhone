@@ -1,4 +1,5 @@
 import type { ControlPlane } from "../control-plane/control-plane.js";
+import type { MaintenanceTargetStore } from "../maintenance/maintenance-target-store.js";
 import type { LoopRunService } from "../run-service.js";
 import type { TriggerQueueStore } from "../state/trigger-queue-store.js";
 
@@ -6,6 +7,7 @@ export interface TriggerDispatcherDeps {
   queueStore: TriggerQueueStore;
   runService: LoopRunService;
   controlPlane: ControlPlane;
+  maintenanceTargetStore?: MaintenanceTargetStore;
 }
 
 /**
@@ -51,9 +53,17 @@ export async function drainPendingTriggers(
         typeof entry.payload.relation_id === "string"
           ? entry.payload.relation_id
           : undefined;
+      const maintenanceId =
+        typeof entry.payload.maintenance_id === "string"
+          ? entry.payload.maintenance_id
+          : undefined;
       await deps.runService.startRun(entry.loop_id, source, undefined, {
         relationId,
+        maintenanceId,
       });
+      if (maintenanceId) {
+        await deps.maintenanceTargetStore?.updateState(maintenanceId, "fixing");
+      }
       await deps.queueStore.mark(entry.event_id, "done");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

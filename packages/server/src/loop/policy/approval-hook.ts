@@ -24,9 +24,14 @@ import type {
   PolicyProfile,
 } from "@yep-anywhere/shared";
 import type { ToolApprovalResult } from "../../sdk/types.js";
+import type { MaintenanceTarget } from "../maintenance/types.js";
 import type { RelationRecord } from "../relation/relation-store.js";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
 import { type PolicyVerdict, arbitrate } from "./arbiter.js";
+import {
+  type ApprovedToolCall,
+  isSameToolCall,
+} from "./restriction-release.js";
 import type { PolicyReviewRequest, PolicyReviewResult } from "./reviewer.js";
 
 /** 一次硬闸门 / 高风险升级（run-service 在 turn 结束时装配成 needs_human）。 */
@@ -37,6 +42,11 @@ export interface PolicyEscalation {
   reason: string;
   /** 关键参数摘要。 */
   summary: string;
+  /** 被拦截的工具呼叫原样，供人类批准后一次性放行。 */
+  toolName: string;
+  input: unknown;
+  /** 工具呼叫的 cwd；缺省时由 run context 决定。 */
+  cwd?: string;
   /** True when this escalation came from a review_or_policy high-risk lane. */
   reviewable?: boolean;
   /** 策略档案引用（policy://<profile>），进决策账本 policy_refs。 */
@@ -78,8 +88,12 @@ export interface LoopToolApprovalHookDeps {
   directWriteAllowlist?: string[];
   /** Durable external relationship context for relation-scoped actions. */
   relation?: RelationRecord | null;
+  /** Generic external maintenance target context for target-scoped actions. */
+  maintenanceTarget?: MaintenanceTarget | null;
   /** Intent contract used by the independent reviewer to judge intent. */
   contract?: IntentContract | null;
+  /** One-shot tool calls approved by a human; exact matches are allowed once. */
+  approvedToolCalls?: ApprovedToolCall[];
   /**
    * Independent read-only reviewer for review_or_policy escalations. When
    * absent, reviewable actions keep their deterministic hard_gate behavior.
@@ -145,10 +159,48 @@ export function createLoopToolApprovalHook(
   };
 
   return async (toolName, input) => {
+    if (deps.approvedToolCalls && deps.approvedToolCalls.length > 0) {
+      const approvedIndex = deps.approvedToolCalls.findIndex((approved) =>
+        isSameToolCall(approved, { tool: toolName, input }),
+      );
+      if (approvedIndex !== -1) {
+        const approved = deps.approvedToolCalls[approvedIndex];
+        if (approved) {
+          const verdict = arbitrate(deps.profile, toolName, input, {
+            workspacePath: deps.workspacePath,
+            directWriteAllowlist: deps.directWriteAllowlist,
+            relation: deps.relation ?? undefined,
+            maintenanceTarget: deps.maintenanceTarget ?? undefined,
+          });
+          const reasonOverride = `human approved one-shot restriction release: tool=${toolName} action=${verdict.classification.action} risk=${verdict.classification.risk} (${approved.summary ?? verdict.classification.summary}); ${approved.reason ?? "no reason provided"}`;
+          try {
+            await appendAudit(verdict, toolName, "bypass_used", {
+              reasonOverride,
+            });
+          } catch (error) {
+            console.error(
+              `[policy] audit append failed for run ${deps.runId}; denying approved one-shot tool ${toolName} (fail-closed):`,
+              error,
+            );
+            recordEvent(verdict, toolName, "denied");
+            return {
+              behavior: "deny",
+              message:
+                "one-shot approval audit ledger write failed; tool call denied (fail-closed)",
+            };
+          }
+          deps.approvedToolCalls?.splice(approvedIndex, 1);
+          recordEvent(verdict, toolName, "bypass_used");
+          return { behavior: "allow" };
+        }
+      }
+    }
+
     const verdict = arbitrate(deps.profile, toolName, input, {
       workspacePath: deps.workspacePath,
       directWriteAllowlist: deps.directWriteAllowlist,
       relation: deps.relation ?? undefined,
+      maintenanceTarget: deps.maintenanceTarget ?? undefined,
     });
 
     switch (verdict.decision) {
@@ -240,6 +292,9 @@ export function createLoopToolApprovalHook(
             verdict.classification.hardGate ?? verdict.classification.action,
           reason: verdict.reason,
           summary: verdict.classification.summary,
+          toolName,
+          input,
+          cwd: deps.workspacePath,
           reviewable: verdict.reviewable === true,
           policyRef,
         });

@@ -24,8 +24,16 @@ import type {
 import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { ToolApprovalHook } from "../supervisor/types.js";
+import {
+  EXECUTOR_SUMMARY_BEGIN,
+  EXECUTOR_SUMMARY_END,
+} from "./assembly/runtime-input.js";
 import { ControlPlane } from "./control-plane/control-plane.js";
 import { RunStateStore } from "./control-plane/run-state-store.js";
+import {
+  RESTRICTION_RELEASE_BEGIN,
+  RESTRICTION_RELEASE_END,
+} from "./policy/restriction-release.js";
 import { LoopRunService } from "./run-service.js";
 import { buildCollectorPrompt } from "./run/artifacts.js";
 import type { LoopCardStore } from "./state/loop-card-store.js";
@@ -58,7 +66,17 @@ interface SupervisorCall {
 class PolicyFakeSupervisor {
   readonly calls: SupervisorCall[] = [];
 
-  constructor(private readonly scripted: ScriptedToolCall[]) {}
+  constructor(
+    private readonly scripted: ScriptedToolCall[],
+    private readonly finalText = [
+      "turn report text",
+      EXECUTOR_SUMMARY_BEGIN,
+      "- 已完成：turn completed",
+      "- 風險：none",
+      "- 文件：none",
+      EXECUTOR_SUMMARY_END,
+    ].join("\n"),
+  ) {}
 
   async startSession(
     cwd: string,
@@ -127,7 +145,7 @@ class PolicyFakeSupervisor {
             message: {
               type: "result",
               subtype: "success",
-              result: "turn report text",
+              result: this.finalText,
               is_error: false,
               usage: { input_tokens: 100, output_tokens: 50 },
             },
@@ -225,6 +243,7 @@ async function withFixture(
     withPolicy: boolean;
     scripted: ScriptedToolCall[];
     card?: LoopCard;
+    finalText?: string;
   },
   fn: (ctx: {
     service: LoopRunService;
@@ -242,7 +261,7 @@ async function withFixture(
       runStateStore: stateStore,
       runLedgerStore: ledgerStore,
     });
-    const supervisor = new PolicyFakeSupervisor(opts.scripted);
+    const supervisor = new PolicyFakeSupervisor(opts.scripted, opts.finalText);
     const card = opts.card ?? makeCard(opts.withPolicy);
     const loopCardStore = {
       getLoop: (id: string) =>
@@ -413,6 +432,70 @@ test("hard gate smoke: git merge under bypass is denied and the run escalates to
       assert.match(
         latest?.runtime.adapter_capability_snapshot ?? "",
         /interrupt=graceful/,
+      );
+    },
+  );
+});
+
+test("restriction release: approve carries exact tool call into the next turn", async () => {
+  const command = "gh issue close 12 --repo owner/repo";
+  const releaseText = [
+    "This hard-gated action is necessary.",
+    RESTRICTION_RELEASE_BEGIN,
+    JSON.stringify({
+      tool: "Bash",
+      input: { command },
+      reason: "Issue confirmed fixed",
+    }),
+    RESTRICTION_RELEASE_END,
+    EXECUTOR_SUMMARY_BEGIN,
+    "- 已完成：requested restriction release",
+    "- 風險：none",
+    "- 文件：none",
+    EXECUTOR_SUMMARY_END,
+  ].join("\n");
+
+  await withFixture(
+    {
+      withPolicy: true,
+      scripted: [{ tool: "Bash", input: { command } }],
+      finalText: releaseText,
+    },
+    async ({ service, controlPlane, supervisor, ledgerStore, stateStore }) => {
+      const summary = await service.startRun("loop-policy", "manual");
+
+      const blocked = await waitForState(controlPlane, summary.run_id, [
+        "needs_human",
+      ]);
+      assert.equal(blocked, "needs_human");
+      const record = await stateStore.load("loop-policy");
+      assert.deepEqual(record?.pending_approval?.tool_call, {
+        tool: "Bash",
+        input: { command },
+        summary: command,
+        reason: "Issue confirmed fixed",
+      });
+
+      await controlPlane.submitDecision(summary.run_id, "approve");
+      const completed = await waitForState(controlPlane, summary.run_id, [
+        "complete",
+      ]);
+      assert.equal(completed, "complete");
+      await waitForInactive(service, "loop-policy");
+
+      const executorCalls = supervisor.calls.filter(
+        (call) => call.role === "executor",
+      );
+      assert.equal(executorCalls.length, 2);
+      assert.equal(executorCalls[1]?.hookResults[0]?.behavior, "allow");
+
+      const decisions = await ledgerStore.readDecisionEntries(summary.run_id);
+      assert.ok(
+        decisions.some(
+          (entry) =>
+            entry.decision === "bypass_used" &&
+            /one-shot restriction release/.test(entry.reason),
+        ),
       );
     },
   );

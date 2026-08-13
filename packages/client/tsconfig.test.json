@@ -10,6 +10,8 @@
     "src/components/FilePathLink.test.tsx",
     "src/components/LoopApprovalCards.shared.tsx",
     "src/components/LoopApprovalCards.test.tsx",
+    "src/components/MaintenancePipeline.tsx",
+    "src/components/MaintenancePipeline.test.tsx",
     "src/components/LoopWorkspaceHint.tsx",
     "src/components/LoopWorkspaceHint.test.tsx",
     "src/pages/relayConnectAttempt.ts",

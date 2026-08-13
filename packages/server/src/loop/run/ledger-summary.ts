@@ -103,6 +103,10 @@ export async function buildLedgerSummary(
       ? {
           decision: lastDecisionEntry.decision,
           reason: lastDecisionEntry.reason,
+          ...(lastDecisionEntry.human_reasons &&
+          lastDecisionEntry.human_reasons.length > 0
+            ? { human_reasons: lastDecisionEntry.human_reasons }
+            : {}),
         }
       : null,
     verifier_report_refs: notApplicable(refs?.verifier_report)

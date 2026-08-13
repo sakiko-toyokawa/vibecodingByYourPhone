@@ -12,6 +12,7 @@ import type {
   ControlPlane,
   LoopCardStore,
   LoopRunService,
+  MaintenanceTargetStore,
   ProposalStore,
   RelationStore,
   TriggerQueueStore,
@@ -48,6 +49,7 @@ import { health } from "./health.js";
 import { createInboxRoutes } from "./inbox.js";
 import { createLocalImageRoutes } from "./local-image.js";
 import { createLoopsRoutes } from "./loops.js";
+import { createMaintenanceRoutes } from "./maintenance.js";
 import { createNetworkBindingRoutes } from "./network-binding.js";
 import { createOnboardingRoutes } from "./onboarding.js";
 import { createProcessesRoutes } from "./processes.js";
@@ -78,6 +80,7 @@ export interface RouteDependencies {
   loopControlPlane?: ControlPlane;
   proposalStore?: ProposalStore;
   relationStore?: RelationStore;
+  maintenanceTargetStore?: MaintenanceTargetStore;
   githubCredentialStore: GitHubCredentialStore;
   githubToolProvisioner: GitHubToolProvisioner;
   githubClient: GitHubClient;
@@ -103,6 +106,7 @@ export function registerRoutes(
     loopControlPlane,
     proposalStore,
     relationStore,
+    maintenanceTargetStore,
     githubCredentialStore,
     githubToolProvisioner,
     githubClient,
@@ -427,11 +431,23 @@ export function registerRoutes(
       credentialStore: githubCredentialStore,
       toolProvisioner: githubToolProvisioner,
       githubClient,
+      dataDir: options.dataDir,
       relationStore,
       triggerQueueStore,
       drainPendingTriggers,
     }),
   );
+
+  if (maintenanceTargetStore) {
+    app.route(
+      "/api/maintenance",
+      createMaintenanceRoutes({
+        targetStore: maintenanceTargetStore,
+        triggerQueueStore,
+        drainPendingTriggers,
+      }),
+    );
+  }
 
   // Recents routes (recently visited sessions)
   if (options.recentsService) {

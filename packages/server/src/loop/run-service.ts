@@ -66,6 +66,7 @@ import {
 } from "./control-plane/control-plane.js";
 import { retryBackoffMs } from "./control-plane/retry-backoff.js";
 import type { RunStateStore } from "./control-plane/run-state-store.js";
+import type { MaintenanceTargetStore } from "./maintenance/maintenance-target-store.js";
 import {
   type PermissionEvent,
   type PolicyEscalation,
@@ -187,6 +188,8 @@ export interface LoopRunServiceDeps {
   dataDir?: string;
   /** Durable external relationship store used by relation-aware runs. */
   relationStore?: RelationStore;
+  /** Durable generic maintenance target store used by external-driven runs. */
+  maintenanceTargetStore?: MaintenanceTargetStore;
   /** Planner Agent for multi-turn task decomposition (optional). */
   planner?: PlannerService;
   /** Watchdog / stagnation settings. */
@@ -364,7 +367,7 @@ export class LoopRunService {
     loopId: string,
     source: ContractSource,
     intentOverrides?: IntentOverrides,
-    options: { relationId?: string } = {},
+    options: { relationId?: string; maintenanceId?: string } = {},
   ): Promise<RunSummary> {
     const stored = this.deps.loopCardStore.getLoop(loopId);
     if (!stored) {
@@ -425,6 +428,7 @@ export class LoopRunService {
       source,
       createdAt: createdAt.toISOString(),
       relationId: options.relationId,
+      maintenanceId: options.maintenanceId,
     };
     this.state.activeByLoop.set(loopId, active);
     this.state.activeByRunId.set(runId, active);

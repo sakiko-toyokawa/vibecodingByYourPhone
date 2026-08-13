@@ -18,6 +18,10 @@ import type {
 } from "@yep-anywhere/shared";
 import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
+import {
+  EXECUTOR_SUMMARY_BEGIN,
+  EXECUTOR_SUMMARY_END,
+} from "./assembly/runtime-input.js";
 import { ControlPlane } from "./control-plane/control-plane.js";
 import { RunStateStore } from "./control-plane/run-state-store.js";
 import { LoopRunService } from "./run-service.js";
@@ -41,7 +45,15 @@ const INTENT_JSON = JSON.stringify({
   clarification_questions: [],
 });
 
-const TURN_REPORT = "1. Done\n2. Report written";
+const TURN_REPORT = [
+  "1. Done",
+  "2. Report written",
+  EXECUTOR_SUMMARY_BEGIN,
+  "- 已完成：turn completed",
+  "- 風險：none",
+  "- 文件：none",
+  EXECUTOR_SUMMARY_END,
+].join("\n");
 
 const PASSED_JUDGMENT: JudgmentReport = {
   overall: "passed",

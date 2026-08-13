@@ -97,3 +97,20 @@ pnpm benchmark:phase7
 - 1000 個 state event 的 `load()` / `readEvents()` p95。
 - 最小 TS fixture 的 `tsc --noEmit` 啟動時間。
 - full-chain run 的 Maker / Verifier token 成本與 checkpoint / handoff artifact 數量。
+
+## GitHub PR Maintenance E2E
+
+需要真實 server、provider auth 與 GitHub PAT：
+
+```bash
+GITHUB_TOKEN=ghp_... \
+GITHUB_TEST_REPO=owner/repo \
+GITHUB_TEST_ISSUE=12 \
+SERVER_URL=http://127.0.0.1:3400 \
+pnpm exec tsx benchmarks/loop-runtime-eval/run-github-pr-maintenance-flow.ts
+```
+
+驗證：issue 修復 → `PR-PUBLISH` → relation `pr_pending_approval` →
+模擬人工 approve/mark-ready → webhook feedback → 同一 loop 維護 →
+relation 回到 `awaiting_feedback`。測試結束會關閉建立的 PR；此流程需要
+專用測試 repo，不要用正式 repo。

@@ -17,6 +17,10 @@ import type { JudgmentReport, LoopCard } from "@yep-anywhere/shared";
 import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { IEventBus } from "../watcher/index.js";
+import {
+  EXECUTOR_SUMMARY_BEGIN,
+  EXECUTOR_SUMMARY_END,
+} from "./assembly/runtime-input.js";
 import { ControlPlane } from "./control-plane/control-plane.js";
 import { RunStateStore } from "./control-plane/run-state-store.js";
 import { LoopRunService } from "./run-service.js";
@@ -28,6 +32,17 @@ let sessionCounter = 0;
 
 function nextSessionId(): string {
   return `session-restart-${++sessionCounter}`;
+}
+
+function executorResult(text: string): string {
+  return [
+    text,
+    EXECUTOR_SUMMARY_BEGIN,
+    "- 已完成：turn completed",
+    "- 風險：none",
+    "- 文件：none",
+    EXECUTOR_SUMMARY_END,
+  ].join("\n");
 }
 
 interface ProcessController {
@@ -336,7 +351,7 @@ test("resumeAfterRestart resumes a retry-state run on a new service", async () =
     // Freeze the resumed run after it starts turn 2 so the test ends cleanly
     // without background writes racing the temp directory cleanup.
     const restartedSupervisor = new FakeSupervisor();
-    restartedSupervisor.autoResult = "fixed output";
+    restartedSupervisor.autoResult = executorResult("fixed output");
     const { sleep: resumedSleep } = makePausingSleep();
     const restartedService = createService(
       stores,
@@ -458,7 +473,7 @@ test("resumeAfterRestart resumes an active-state run on a new service", async ()
     });
 
     const restartedSupervisor = new FakeSupervisor();
-    restartedSupervisor.autoResult = "completed after restart";
+    restartedSupervisor.autoResult = executorResult("completed after restart");
     const restartedService = createService(
       stores,
       restartedSupervisor,
@@ -485,7 +500,7 @@ test("resumeAfterRestart ignores terminal runs", async () => {
   try {
     await stores.loopCardStore.createLoop(makeCard("loop-it"));
     const supervisor = new FakeSupervisor();
-    supervisor.autoResult = "done";
+    supervisor.autoResult = executorResult("done");
     const service = createService(stores, supervisor, fakeVerifyPassed);
 
     const start = service.startRun("loop-it", "manual");

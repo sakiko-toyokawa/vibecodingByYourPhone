@@ -1046,6 +1046,7 @@
   "loopApprovalCancel": "Annuler",
   "loopApprovalRecommended": "Recommandé",
   "loopApprovalDiffSummary": "Résumé des modifications du workspace",
+  "loopApprovalToolCall": "Appel d'outil approuvé",
   "loopActionMerge": "Fusionner vers la branche protégée",
   "loopActionDeploy": "Déployer",
   "loopActionDelete": "Supprimer",

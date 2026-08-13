@@ -1,9 +1,15 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { MaintenanceTargetStore } from "../maintenance/maintenance-target-store.js";
+import type {
+  MaintenanceTarget,
+  MaintenanceTargetState,
+} from "../maintenance/types.js";
 
 export const RELATION_STATES = [
   "pr_pending_approval",
   "awaiting_feedback",
+  "awaiting_review",
   "fixing",
   "merged",
   "closed",
@@ -34,18 +40,31 @@ export interface RelationRecord {
   };
   feedback_count: number;
   repair_count: number;
+  pending_publish?: {
+    repository: string;
+    branch: string;
+    title: string;
+    body: string;
+    cwd: string;
+    author_name?: string;
+    author_email?: string;
+    identity_source?: string;
+    run_id?: string;
+    created_at?: string;
+  };
   needs_human_reason?: string;
   created_at: string;
   updated_at: string;
 }
 
-interface RelationStoreFile {
+interface LegacyRelationFile {
   version: 1;
   relations: Record<string, RelationRecord>;
 }
 
 export interface RelationStoreOptions {
   dataDir?: string;
+  maintenanceTargetStore?: MaintenanceTargetStore;
 }
 
 function defaultDataDir(): string {
@@ -55,76 +74,206 @@ function defaultDataDir(): string {
   );
 }
 
+function relationStateToTargetState(
+  state: RelationState,
+): MaintenanceTargetState {
+  switch (state) {
+    case "pr_pending_approval":
+      return "pending_approval";
+    case "awaiting_review":
+      return "awaiting_review";
+    case "awaiting_feedback":
+      return "awaiting_feedback";
+    case "fixing":
+      return "fixing";
+    case "needs_human":
+      return "needs_human";
+    case "merged":
+    case "closed":
+      return "done";
+  }
+}
+
+function targetStateToRelationState(
+  state: MaintenanceTargetState,
+  fallback?: unknown,
+): RelationState {
+  switch (state) {
+    case "pending_approval":
+      return "pr_pending_approval";
+    case "awaiting_review":
+      return "awaiting_review";
+    case "awaiting_feedback":
+      return "awaiting_feedback";
+    case "fixing":
+      return "fixing";
+    case "needs_human":
+      return "needs_human";
+    case "done":
+      return fallback === "merged" ? "merged" : "closed";
+    default:
+      return "awaiting_feedback";
+  }
+}
+
+function relationToTarget(relation: RelationRecord): MaintenanceTarget {
+  const subjectId = relation.subject.pr_number
+    ? `${relation.subject.repository}#${relation.subject.pr_number}`
+    : `${relation.subject.repository}:${relation.subject.branch}`;
+  return {
+    target_id: relation.relation_id,
+    loop_id: relation.loop_id,
+    target_type: "github_pr",
+    external_ref: {
+      source: "github",
+      subject_id: subjectId,
+    },
+    state: relationStateToTargetState(relation.state),
+    feedback_cursor: relation.last_processed,
+    feedback_count: relation.feedback_count,
+    repair_count: relation.repair_count,
+    wake_policy: {
+      trigger_types: ["github_comment", "github_review"],
+      max_repairs: 3,
+    },
+    context_payload: {
+      target: relation.subject,
+    },
+    adapter_data: {
+      relation_id: relation.relation_id,
+      relation_state: relation.state,
+      repository: relation.subject.repository,
+      pr_number: relation.subject.pr_number,
+      issue_number: relation.subject.issue_number,
+      branch: relation.subject.branch,
+      fork_owner: relation.subject.fork_owner,
+      base_sha: relation.subject.base_sha,
+      last_processed: relation.last_processed,
+      pending_publish: relation.pending_publish,
+      needs_human_reason: relation.needs_human_reason,
+    },
+    created_at: relation.created_at,
+    updated_at: relation.updated_at,
+  };
+}
+
+function targetToRelation(target: MaintenanceTarget): RelationRecord | null {
+  if (target.target_type !== "github_pr") {
+    return null;
+  }
+  const adapter = target.adapter_data ?? {};
+  const repository =
+    typeof adapter.repository === "string" ? adapter.repository : "";
+  const branch = typeof adapter.branch === "string" ? adapter.branch : "";
+  if (!repository || !branch) {
+    return null;
+  }
+  const state = targetStateToRelationState(
+    target.state,
+    adapter.relation_state,
+  );
+  const lastProcessed =
+    adapter.last_processed && typeof adapter.last_processed === "object"
+      ? (adapter.last_processed as RelationRecord["last_processed"])
+      : {};
+  return {
+    relation_id: target.target_id,
+    loop_id: target.loop_id,
+    subject: {
+      type: "github_pr",
+      repository,
+      branch,
+      ...(typeof adapter.pr_number === "number"
+        ? { pr_number: adapter.pr_number }
+        : {}),
+      ...(typeof adapter.issue_number === "number"
+        ? { issue_number: adapter.issue_number }
+        : {}),
+      ...(typeof adapter.fork_owner === "string"
+        ? { fork_owner: adapter.fork_owner }
+        : {}),
+      ...(typeof adapter.base_sha === "string"
+        ? { base_sha: adapter.base_sha }
+        : {}),
+    },
+    state,
+    last_processed: lastProcessed,
+    feedback_count: target.feedback_count,
+    repair_count: target.repair_count,
+    pending_publish:
+      adapter.pending_publish && typeof adapter.pending_publish === "object"
+        ? (adapter.pending_publish as RelationRecord["pending_publish"])
+        : undefined,
+    needs_human_reason:
+      typeof adapter.needs_human_reason === "string"
+        ? adapter.needs_human_reason
+        : undefined,
+    created_at: target.created_at,
+    updated_at: target.updated_at,
+  };
+}
+
 export class RelationStore {
-  private readonly filePath: string;
-  private state: RelationStoreFile = { version: 1, relations: {} };
+  private readonly maintenanceTargetStore: MaintenanceTargetStore;
+  private readonly legacyFilePath: string;
   private initialized = false;
 
   constructor(options: RelationStoreOptions = {}) {
-    this.filePath = path.join(
-      options.dataDir ?? defaultDataDir(),
+    const dataDir = options.dataDir ?? defaultDataDir();
+    this.legacyFilePath = path.join(
+      dataDir,
       "loops",
       "relations",
       "relations.json",
     );
+    this.maintenanceTargetStore =
+      options.maintenanceTargetStore ?? new MaintenanceTargetStore({ dataDir });
   }
 
   async initialize(): Promise<void> {
     if (this.initialized) {
       return;
     }
-    try {
-      const content = await fs.readFile(this.filePath, "utf-8");
-      const parsed = JSON.parse(content) as RelationStoreFile;
-      this.state = {
-        version: 1,
-        relations: parsed.relations ?? {},
-      };
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        console.warn("[RelationStore] Failed to load relations:", error);
-      }
-    }
+    await this.maintenanceTargetStore.initialize();
+    await this.importLegacyRelations();
     this.initialized = true;
   }
 
   async upsert(relation: RelationRecord): Promise<RelationRecord> {
     this.ensureInitialized();
-    const existing = this.state.relations[relation.relation_id];
-    const now = new Date().toISOString();
-    const record: RelationRecord = {
-      ...existing,
-      ...relation,
-      created_at: existing?.created_at ?? relation.created_at ?? now,
-      updated_at: now,
-    };
-    this.state.relations[record.relation_id] = record;
-    await this.save();
-    return record;
+    const target = await this.maintenanceTargetStore.upsert(
+      relationToTarget(relation),
+    );
+    return targetToRelation(target) ?? relation;
   }
 
   findById(relationId: string): RelationRecord | null {
     this.ensureInitialized();
-    return this.state.relations[relationId] ?? null;
+    const target = this.maintenanceTargetStore.findById(relationId);
+    return target ? targetToRelation(target) : null;
   }
 
   findByGitHubPr(repository: string, prNumber: number): RelationRecord | null {
     this.ensureInitialized();
-    return (
-      Object.values(this.state.relations).find(
-        (relation) =>
-          relation.subject.type === "github_pr" &&
-          relation.subject.repository === repository &&
-          relation.subject.pr_number === prNumber,
-      ) ?? null
-    );
+    const target = this.maintenanceTargetStore
+      .list()
+      .find(
+        (item) =>
+          item.target_type === "github_pr" &&
+          item.adapter_data?.repository === repository &&
+          item.adapter_data?.pr_number === prNumber,
+      );
+    return target ? targetToRelation(target) : null;
   }
 
   list(): RelationRecord[] {
     this.ensureInitialized();
-    return Object.values(this.state.relations).sort((a, b) =>
-      b.updated_at.localeCompare(a.updated_at),
-    );
+    return this.maintenanceTargetStore
+      .list()
+      .filter((target) => target.target_type === "github_pr")
+      .map((target) => targetToRelation(target))
+      .filter((relation): relation is RelationRecord => relation !== null)
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   }
 
   async updateState(
@@ -132,22 +281,42 @@ export class RelationStore {
     state: RelationState,
     patch?: Partial<RelationRecord>,
   ): Promise<RelationRecord | null> {
-    const existing = this.findById(relationId);
-    if (!existing) {
+    const current = this.findById(relationId);
+    if (!current) {
       return null;
     }
-    return this.upsert({ ...existing, ...patch, state });
+    const merged = { ...current, ...patch, state };
+    await this.maintenanceTargetStore.upsert(relationToTarget(merged));
+    return this.findById(relationId);
   }
 
-  private async save(): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const tmpPath = `${this.filePath}.tmp`;
-    await fs.writeFile(
-      tmpPath,
-      `${JSON.stringify(this.state, null, 2)}\n`,
-      "utf-8",
-    );
-    await fs.rename(tmpPath, this.filePath);
+  private async importLegacyRelations(): Promise<void> {
+    const existingGithubTargets = this.maintenanceTargetStore
+      .list()
+      .some((target) => target.target_type === "github_pr");
+    if (existingGithubTargets) {
+      return;
+    }
+    let content: string;
+    try {
+      content = await fs.readFile(this.legacyFilePath, "utf-8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.warn("[RelationStore] Failed to load legacy relations:", error);
+      }
+      return;
+    }
+    try {
+      const parsed = JSON.parse(content) as LegacyRelationFile;
+      for (const relation of Object.values(parsed.relations ?? {})) {
+        await this.maintenanceTargetStore.upsert(relationToTarget(relation));
+      }
+    } catch (error) {
+      console.warn(
+        "[RelationStore] Failed to migrate legacy relations:",
+        error,
+      );
+    }
   }
 
   private ensureInitialized(): void {

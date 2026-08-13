@@ -15,6 +15,7 @@
 
 import path from "node:path";
 import type { PolicyProfile } from "@yep-anywhere/shared";
+import type { MaintenanceTarget } from "../maintenance/types.js";
 import type { RelationRecord } from "../relation/relation-store.js";
 import {
   type ClassifyContext,
@@ -95,6 +96,48 @@ function isRelationScopedAction(
   return false;
 }
 
+function isTargetScopedAction(
+  toolName: string,
+  input: unknown,
+  target: MaintenanceTarget,
+): boolean {
+  if (target.target_type === "github_pr") {
+    const repository = String(target.external_ref.repository ?? "");
+    const prNumber = Number(target.external_ref.pr_number);
+    const branch = String(target.external_ref.branch ?? "");
+    if (!repository || !Number.isFinite(prNumber) || !branch) {
+      return false;
+    }
+    return isRelationScopedAction(toolName, input, {
+      relation_id: target.target_id,
+      loop_id: target.loop_id,
+      subject: {
+        type: "github_pr",
+        repository,
+        pr_number: prNumber,
+        branch,
+      },
+      state: "fixing",
+      last_processed: {},
+      feedback_count: 0,
+      repair_count: 0,
+      created_at: target.created_at,
+      updated_at: target.updated_at,
+    });
+  }
+  const allowed = target.context_payload.allowed_commands;
+  if (!Array.isArray(allowed)) {
+    return false;
+  }
+  const command = commandText(input).trim();
+  return allowed.some(
+    (prefix) =>
+      typeof prefix === "string" &&
+      prefix.length > 0 &&
+      command.startsWith(prefix),
+  );
+}
+
 /**
  * 裁决一次工具调用。纯函数，不做 IO（审计落账在 approval-hook 层）。
  */
@@ -110,6 +153,17 @@ export function arbitrate(
     return {
       decision: "allow",
       reason: `relation-scoped action allowed: relation=${ctx.relation.relation_id} (${classification.summary})`,
+      classification,
+    };
+  }
+
+  if (
+    ctx.maintenanceTarget &&
+    isTargetScopedAction(toolName, input, ctx.maintenanceTarget)
+  ) {
+    return {
+      decision: "allow",
+      reason: `target-scoped action allowed: target=${ctx.maintenanceTarget.target_id} (${classification.summary})`,
       classification,
     };
   }

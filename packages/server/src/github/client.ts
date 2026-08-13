@@ -24,6 +24,12 @@ export interface CloneAndCheckoutBranchInput {
   branch: string;
 }
 
+export interface GitHubVerifiedIdentity {
+  login: string;
+  email: string;
+  emails: string[];
+}
+
 export interface GitHubComment {
   id: number;
   body: string;
@@ -127,32 +133,21 @@ export class GitHubClient {
       ],
       input.cwd,
     );
-    const viewerLogin = (
-      await this.runChecked(["api", "user", "--jq", ".login"])
-    ).trim();
-    if (!viewerLogin) {
-      throw new Error("Unable to determine GitHub viewer login");
-    }
+    const identity = await this.getVerifiedIdentity();
     await this.runChecked(
-      [
-        "git",
-        "-c",
-        "http.proxy=",
-        "-c",
-        "https.proxy=",
-        "push",
-        "fork",
-        input.branch,
-      ],
+      ["auth", "setup-git", "--hostname", "github.com"],
       input.cwd,
     );
+    await this.ensureForkRemote(input.cwd, input.repository, identity.login);
+    await this.assertGitIdentity(input.cwd, identity);
+    await this.runChecked(["git", "push", "fork", input.branch], input.cwd);
     const prArgs = [
       "pr",
       "create",
       "--repo",
       input.repository,
       "--head",
-      `${viewerLogin}:${input.branch}`,
+      `${identity.login}:${input.branch}`,
       "--title",
       input.title,
       "--body",
@@ -163,6 +158,135 @@ export class GitHubClient {
     }
     const stdout = await this.runChecked(prArgs, input.cwd);
     return stdout.trim();
+  }
+
+  async getVerifiedIdentity(): Promise<GitHubVerifiedIdentity> {
+    const login = (
+      await this.runChecked(["api", "user", "--jq", ".login"])
+    ).trim();
+    if (!login) {
+      throw new Error("Unable to determine GitHub viewer login");
+    }
+    const emailOutput = await this.runChecked([
+      "api",
+      "user/emails",
+      "--jq",
+      ".[] | select(.verified == true) | .email",
+    ]);
+    const emails = emailOutput
+      .split(/\r?\n/)
+      .map((email) => email.trim())
+      .filter((email) => email.length > 0);
+    if (emails.length === 0) {
+      throw new Error(
+        `GitHub account '${login}' has no verified email; configure one before publishing a PR`,
+      );
+    }
+    const email = emails[0];
+    if (!email) {
+      throw new Error(
+        `GitHub account '${login}' has no verified email; configure one before publishing a PR`,
+      );
+    }
+    return { login, email, emails };
+  }
+
+  async configureGitIdentity(cwd: string): Promise<GitHubVerifiedIdentity> {
+    const identity = await this.getVerifiedIdentity();
+    await this.runChecked(["git", "config", "user.name", identity.login], cwd);
+    await this.runChecked(["git", "config", "user.email", identity.email], cwd);
+    return identity;
+  }
+
+  private async assertGitIdentity(
+    cwd: string,
+    identity: GitHubVerifiedIdentity,
+  ): Promise<void> {
+    const configuredName = await this.runChecked(
+      ["git", "config", "user.name"],
+      cwd,
+    ).catch(() => "");
+    const configuredEmail = await this.runChecked(
+      ["git", "config", "user.email"],
+      cwd,
+    ).catch(() => "");
+    const authorEmail = await this.runChecked(
+      ["git", "log", "-1", "--format=%ae"],
+      cwd,
+    ).catch(() => "");
+    const problems: string[] = [];
+    if (configuredName.trim() !== identity.login) {
+      problems.push(
+        `git user.name is '${configuredName.trim()}', expected '${identity.login}'`,
+      );
+    }
+    if (!identity.emails.includes(configuredEmail.trim())) {
+      problems.push(
+        `git user.email '${configuredEmail.trim()}' is not a verified email for '${identity.login}'`,
+      );
+    }
+    if (!identity.emails.includes(authorEmail.trim())) {
+      problems.push(
+        `HEAD author email '${authorEmail.trim()}' is not a verified email for '${identity.login}'`,
+      );
+    }
+    if (problems.length > 0) {
+      throw new Error(
+        `GitHub identity mismatch for ${cwd}: ${problems.join("; ")}`,
+      );
+    }
+  }
+
+  private async ensureForkRemote(
+    cwd: string,
+    repository: string,
+    viewerLogin: string,
+  ): Promise<void> {
+    const repoName = repository.split("/").pop();
+    if (!repoName) {
+      throw new Error(`Invalid GitHub repository: ${repository}`);
+    }
+    const expectedUrl = `https://github.com/${viewerLogin}/${repoName}.git`;
+    let currentUrl: string | null = null;
+    try {
+      currentUrl = (
+        await this.runChecked(["git", "remote", "get-url", "fork"], cwd)
+      ).trim();
+    } catch {
+      currentUrl = null;
+    }
+    if (currentUrl === expectedUrl) {
+      return;
+    }
+    if (currentUrl) {
+      await this.runChecked(
+        ["git", "remote", "set-url", "fork", expectedUrl],
+        cwd,
+      );
+      return;
+    }
+    await this.runChecked(["git", "remote", "add", "fork", expectedUrl], cwd);
+  }
+
+  async markPullRequestReady(
+    repository: string,
+    prNumber: number,
+  ): Promise<void> {
+    try {
+      await this.runChecked([
+        "pr",
+        "ready",
+        String(prNumber),
+        "--repo",
+        repository,
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/not (a )?draft|is not draft/i.test(message)) {
+        return;
+      }
+      throw error;
+    }
   }
 
   async listPullRequestComments(
@@ -235,10 +359,6 @@ export class GitHubClient {
   ): Promise<void> {
     await this.runChecked([
       "git",
-      "-c",
-      "http.proxy=",
-      "-c",
-      "https.proxy=",
       "clone",
       input.repository,
       input.destination,
@@ -247,6 +367,7 @@ export class GitHubClient {
       ["git", "checkout", "-B", input.branch],
       input.destination,
     );
+    await this.configureGitIdentity(input.destination);
   }
 
   private async runChecked(args: string[], cwd?: string): Promise<string> {
@@ -277,7 +398,6 @@ export class GitHubClient {
       const child = spawn(command, commandArgs, {
         cwd: options.cwd,
         env: options.env,
-        shell: process.platform === "win32",
       });
       let stdout = "";
       let stderr = "";

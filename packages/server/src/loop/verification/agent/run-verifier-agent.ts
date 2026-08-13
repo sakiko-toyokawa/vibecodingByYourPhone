@@ -128,7 +128,12 @@ export async function runVerifierAgent(
               `${JSON.stringify({ tokens: watched.usage.tokens })}\n`,
             );
           }
-          canRetry = Boolean(watched.ok || watched.finalText);
+          const transientError =
+            typeof watched.error === "string" &&
+            /reconnect|stale|no sdk messages|timeout|network|socket|econn|tls|api error/i.test(
+              watched.error,
+            );
+          canRetry = Boolean(watched.ok || watched.finalText || transientError);
         }
       }
     } catch (error) {

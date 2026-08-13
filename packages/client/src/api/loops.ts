@@ -1,4 +1,5 @@
 import type {
+  HumanReason,
   LoopAction,
   LoopCard,
   RunDecisionAction,
@@ -38,7 +39,11 @@ export interface LedgerSummary {
   max_turns: number | null;
   max_retries: number | null;
   /** 最新一条决策（解释 run 为何处于当前状态，如 paused 的原因） */
-  last_decision: { decision: string; reason: string } | null;
+  last_decision: {
+    decision: string;
+    reason: string;
+    human_reasons?: HumanReason[];
+  } | null;
   verifier_report_refs: string[];
   judgment_report_ref: string | null;
   collector_report_ref: string | null;

@@ -227,7 +227,7 @@ export function createApp(
   // control-plane (needs_human bridging). Built here (not in services-init)
   // because they need the app-level Supervisor and event bus.
   {
-    const { loopCardStore } = container.cradle;
+    const { loopCardStore, maintenanceTargetStore } = container.cradle;
     const runLedgerStore = new RunLedgerStore({ dataDir: options.dataDir });
     const runStateStore = new RunStateStore({ dataDir: options.dataDir });
     const learningEventStore = new LearningEventStore({
@@ -256,6 +256,9 @@ export function createApp(
     if (!relationStore) {
       throw new Error("RelationStore not initialized");
     }
+    if (!maintenanceTargetStore) {
+      throw new Error("MaintenanceTargetStore not initialized");
+    }
     const loopRunService = new LoopRunService({
       supervisor,
       loopCardStore,
@@ -271,6 +274,7 @@ export function createApp(
       githubToolProvisioner: container.cradle.githubToolProvisioner,
       dataDir: options.dataDir,
       relationStore,
+      maintenanceTargetStore,
       planner,
       loopWatchdog: {
         turnIdleTimeoutMs: options.loopTurnIdleTimeoutMs ?? 10 * 60 * 1000,
@@ -378,6 +382,7 @@ export function createApp(
           queueStore: triggerQueueStore,
           runService: loopRunService,
           controlPlane: loopControlPlane,
+          maintenanceTargetStore,
         },
         loopId,
       );

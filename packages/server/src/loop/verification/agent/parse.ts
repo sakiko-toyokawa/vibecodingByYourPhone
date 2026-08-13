@@ -1,4 +1,4 @@
-import type { VerifierReport } from "@yep-anywhere/shared";
+import type { HumanReason, VerifierReport } from "@yep-anywhere/shared";
 import { VerifierReportSchema } from "@yep-anywhere/shared";
 import { z } from "zod";
 
@@ -64,9 +64,47 @@ const AgentVerdictSchema = z.object({
     .default([]),
   suggested_fix: z.string().optional(),
   adversarial_findings: z.array(z.string()).default([]),
+  human_reasons: z
+    .array(
+      z.object({
+        code: z.string(),
+        message: z.string(),
+        evidence_refs: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
 });
 
 export type AgentVerdict = z.infer<typeof AgentVerdictSchema>;
+
+function fallbackHumanReasons(value: AgentVerdict): HumanReason[] {
+  if (value.human_reasons && value.human_reasons.length > 0) {
+    return value.human_reasons;
+  }
+  if (value.requires_human) {
+    return [
+      {
+        code: "verifier_requires_human",
+        message: "Verifier requested human review before the run can proceed.",
+      },
+    ];
+  }
+  const message =
+    value.issues?.[0]?.message ??
+    value.unresolved_risks[0] ??
+    `Verifier status: ${value.status}; recommendation: ${value.recommendation}`;
+  return [
+    {
+      code:
+        value.status === "failed"
+          ? "verifier_failed"
+          : value.status === "inconclusive"
+            ? "verifier_inconclusive"
+            : "verifier_passed",
+      message,
+    },
+  ];
+}
 
 /**
  * Repair the most common LLM JSON damage without guessing semantics:
@@ -188,12 +226,14 @@ export function parseVerifierAgentOutput(
   const adversarialRisks = verdict.value.adversarial_findings.map(
     (finding) => `adversarial: ${finding}`,
   );
+  const humanReasons = fallbackHumanReasons(verdict.value);
 
   return VerifierReportSchema.parse({
     verifier_phase: "review",
     status: verdict.value.status,
     evidence_refs: baseEvidence,
     unresolved_risks: [...verdict.value.unresolved_risks, ...adversarialRisks],
+    human_reasons: humanReasons,
     recommendation: verdict.value.recommendation,
     confidence: verdict.value.confidence,
     requires_human: verdict.value.requires_human,

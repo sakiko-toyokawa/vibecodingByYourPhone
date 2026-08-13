@@ -1046,6 +1046,7 @@
   "loopApprovalCancel": "取消",
   "loopApprovalRecommended": "建议",
   "loopApprovalDiffSummary": "工作区改动摘要",
+  "loopApprovalToolCall": "已批准的工具调用",
   "loopActionMerge": "合并到受保护分支",
   "loopActionDeploy": "部署",
   "loopActionDelete": "删除",

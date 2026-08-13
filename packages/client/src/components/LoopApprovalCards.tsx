@@ -12,6 +12,7 @@ import {
   isAwaitingHuman,
   loopChangedState,
 } from "../lib/loopDecisions";
+import { humanizeReason } from "../lib/loopHumanText";
 import {
   DecisionButtons,
   DiffSummaryBlock,
@@ -144,9 +145,40 @@ function ApprovalCard({
             ? t(ACTION_LABEL_KEYS[event.action] as MessageKey)
             : event.action}
         </div>
-        {event.reason && (
+        {event.human_reasons && event.human_reasons.length > 0 ? (
+          <div className="flex flex-col gap-1">
+            {event.human_reasons.map((reason) => (
+              <div key={reason.code} className="break-words">
+                {reason.message}
+                {reason.evidence_refs && reason.evidence_refs.length > 0 && (
+                  <div className="mt-1 flex flex-col gap-1">
+                    {reason.evidence_refs.map((ref) => (
+                      <span
+                        key={ref}
+                        className="break-all font-mono text-xs text-[var(--text-dimmed)]"
+                      >
+                        {ref}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : event.reason ? (
           <div className="break-words text-[var(--text-secondary)]">
-            {event.reason}
+            {humanizeReason(event.reason)}
+          </div>
+        ) : null}
+        {event.tool_call && (
+          <div className="mt-2 rounded-[var(--radius-sm)] border border-[var(--warning-color)]/25 bg-[var(--bg-secondary)] p-2">
+            <div className="text-xs font-semibold text-[var(--text-secondary)]">
+              {t("loopApprovalToolCall")}
+            </div>
+            <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-xs text-[var(--text-primary)]">
+              {event.tool_call.summary ??
+                `${event.tool_call.tool} ${JSON.stringify(event.tool_call.input)}`}
+            </pre>
           </div>
         )}
         {event.diff_summary && (
