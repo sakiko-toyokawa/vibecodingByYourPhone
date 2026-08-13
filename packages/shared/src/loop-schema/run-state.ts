@@ -35,6 +35,11 @@ export const PendingToolCallSchema = z.object({
 });
 export type PendingToolCall = z.infer<typeof PendingToolCallSchema>;
 
+export const BlockedSlaSchema = z.object({
+  last_reminder_at: z.string().datetime().nullable().default(null),
+});
+export type BlockedSla = z.infer<typeof BlockedSlaSchema>;
+
 export const PendingApprovalSchema = z.object({
   request_id: z.string(),
   run_id: z.string(),
@@ -64,6 +69,9 @@ export const RunStateRecordSchema = z.object({
   // run_state.runtime_ref 订阅对应 session 的消息流" 的载体；无 session
   // (setup 失败) 时为 null，旧文件缺省 null
   session_ref: z.string().nullable().default(null),
+  /** SLA runtime state for any blocking state (needs_human / paused /
+   *  budget_limited). Persisted so reminders do not repeat on restart. */
+  blocked_sla: BlockedSlaSchema.optional(),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
 });

@@ -291,6 +291,31 @@ export interface LoopBudgetWarningEvent {
   timestamp: string;
 }
 
+/** Emitted when a blocked run crosses its configured reminder SLA. */
+export interface LoopHumanSlaReminderEvent {
+  type: "loop-human-sla-reminder";
+  loop_id: string;
+  run_id: string;
+  state: RunState;
+  entered_at: string;
+  reminder_at: string;
+  policy: string;
+  timestamp: string;
+}
+
+/** Emitted when a blocked run is auto-abandoned after its SLA expires. */
+export interface LoopHumanSlaAbandonedEvent {
+  type: "loop-human-sla-abandoned";
+  loop_id: string;
+  run_id: string;
+  state: RunState;
+  entered_at: string;
+  abandoned_at: string;
+  policy: string;
+  reason: string;
+  timestamp: string;
+}
+
 /**
  * Loop learning: emitted when a proposal is published via
  * POST /api/proposals/:id/publish (spec: docs/spec/03-API契约.md
@@ -335,6 +360,8 @@ export type BusEvent =
   | LoopStateChangedEvent
   | RunDecisionRequiredEvent
   | LoopBudgetWarningEvent
+  | LoopHumanSlaReminderEvent
+  | LoopHumanSlaAbandonedEvent
   | ProposalPublishedEvent;
 
 export type EventHandler<T = BusEvent> = (event: T) => void;

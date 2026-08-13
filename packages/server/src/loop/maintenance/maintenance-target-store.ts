@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { withFileLock } from "../../utils/fileLock.js";
 import type { MaintenanceTarget, MaintenanceTargetState } from "./types.js";
 
 interface MaintenanceTargetFile {
@@ -77,6 +78,34 @@ export class MaintenanceTargetStore {
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   }
 
+  findByRepository(
+    repository: string,
+    issueNumber?: number,
+  ): MaintenanceTarget[] {
+    this.ensureInitialized();
+    const normalized = repository.trim().toLowerCase();
+    return this.list().filter((target) => {
+      if (target.target_type !== "github_pr") {
+        return false;
+      }
+      const adapter = (target.adapter_data ?? {}) as {
+        repository?: unknown;
+        issue_number?: unknown;
+        pr_number?: unknown;
+      };
+      if (String(adapter.repository ?? "").toLowerCase() !== normalized) {
+        return false;
+      }
+      if (issueNumber === undefined) {
+        return true;
+      }
+      return (
+        adapter.issue_number === issueNumber ||
+        adapter.pr_number === issueNumber
+      );
+    });
+  }
+
   async upsert(target: MaintenanceTarget): Promise<MaintenanceTarget> {
     this.ensureInitialized();
     const existing = this.state.targets[target.target_id];
@@ -106,13 +135,16 @@ export class MaintenanceTargetStore {
 
   private async save(): Promise<void> {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const tmpPath = `${this.filePath}.tmp`;
-    await fs.writeFile(
-      tmpPath,
-      `${JSON.stringify(this.state, null, 2)}\n`,
-      "utf-8",
-    );
-    await fs.rename(tmpPath, this.filePath);
+    await fs.writeFile(this.filePath, "", { flag: "a" });
+    await withFileLock(this.filePath, async () => {
+      const tmpPath = `${this.filePath}.tmp`;
+      await fs.writeFile(
+        tmpPath,
+        `${JSON.stringify(this.state, null, 2)}\n`,
+        "utf-8",
+      );
+      await fs.rename(tmpPath, this.filePath);
+    });
   }
 
   private ensureInitialized(): void {

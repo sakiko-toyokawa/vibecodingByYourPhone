@@ -13,6 +13,9 @@ export interface LoopCreateFormState {
   id: string;
   workspacePath: string;
   task: string;
+  /** Optional subject anchor for GitHub loop duplicate coverage. */
+  githubRepository: string;
+  githubIssueNumber: string;
   triggerType: "manual" | "schedule";
   cron: string;
   verifyStatic: boolean;
@@ -34,6 +37,8 @@ export const DEFAULT_LOOP_CREATE_FORM: LoopCreateFormState = {
   id: "",
   workspacePath: "",
   task: "",
+  githubRepository: "",
+  githubIssueNumber: "",
   triggerType: "manual",
   cron: "0 9 * * *",
   verifyStatic: true,

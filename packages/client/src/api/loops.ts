@@ -78,6 +78,32 @@ export interface RunTurnSummary {
   executor_summary_ref: string | null;
 }
 
+export interface HumanSlaItem {
+  run_id: string;
+  loop_id: string;
+  state: RunState;
+  request_id: string | null;
+  reason: string;
+  entered_at: string;
+  reminder_at: string;
+  abandon_at: string;
+  policy: "keep" | "auto_abandon" | "auto_approve_low_risk";
+  reminder_due: boolean;
+  abandon_due: boolean;
+  last_reminder_at: string | null;
+  human_reasons?: HumanReason[];
+}
+
+export interface LoopCoverageItem {
+  target_id: string;
+  loop_id: string;
+  state: string;
+  repository?: unknown;
+  issue_number?: unknown;
+  pr_number?: unknown;
+  updated_at: string;
+}
+
 export interface InteractionDepsStatus {
   status: "ready" | "missing" | "unsupported";
   message: string;
@@ -175,6 +201,17 @@ export const loopsApi = {
   listRunTurns: (runId: string) =>
     fetchJSON<{ turns: RunTurnSummary[] }>(
       `/runs/${encodeURIComponent(runId)}/turns`,
+    ),
+
+  listPendingHuman: () => fetchJSON<{ items: HumanSlaItem[] }>("/runs/pending"),
+
+  getCoverage: (repository: string, issueNumber?: number) =>
+    fetchJSON<{ coverage: LoopCoverageItem[] }>(
+      `/loops/coverage?repository=${encodeURIComponent(repository)}${
+        issueNumber === undefined
+          ? ""
+          : `&issue_number=${encodeURIComponent(issueNumber)}`
+      }`,
     ),
 
   /** Discard one run and optionally revert/clean up its workspace changes. */

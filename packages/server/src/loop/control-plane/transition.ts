@@ -80,8 +80,15 @@ export async function transition(
   }
 
   const now = new Date().toISOString();
+  const patch: Partial<RunStateRecord> = { ...(opts.patch ?? {}) };
+  if (
+    (to === "needs_human" || to === "paused" || to === "budget_limited") &&
+    !patch.blocked_sla
+  ) {
+    patch.blocked_sla = { last_reminder_at: null };
+  }
   const budget: Budget | null =
-    (opts.patch?.budget as Budget | undefined) ?? record.budget;
+    (patch.budget as Budget | undefined) ?? record.budget;
   const entry: DecisionEntry = {
     decision_id: opts.decisionId,
     loop_id: loopId,
@@ -107,7 +114,7 @@ export async function transition(
   const from = record.state;
   const updated: RunStateRecord = {
     ...record,
-    ...opts.patch,
+    ...patch,
     state: to,
     updated_at: now,
   };

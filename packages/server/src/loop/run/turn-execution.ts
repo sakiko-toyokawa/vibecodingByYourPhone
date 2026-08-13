@@ -15,6 +15,7 @@ import {
   MachineStateSchema,
   RunWorkingStateSchema,
   type TaskPlan,
+  WorkingStateValidationSchema,
 } from "@yep-anywhere/shared";
 import type { ProviderName } from "@yep-anywhere/shared";
 import { AdapterError, toAdapterError } from "../../sdk/adapter-error.js";
@@ -390,6 +391,7 @@ export async function buildLoopTurnStartPrompt(
   const humanReportName = "human-report.md";
   const machineStateName = "machine-state.json";
   const workingStateName = "working-state.json";
+  const workingStateValidationName = "working-state-validation.json";
   const turnHandoffName = turnSuffixedArtifactName(
     "turn-handoff.json",
     previousTurn,
@@ -407,12 +409,14 @@ export async function buildLoopTurnStartPrompt(
     humanReport,
     machineState,
     workingState,
+    workingStateValidation,
     turnHandoff,
     executorSummary,
   ] = await Promise.all([
     store.readArtifact(runId, humanReportName),
     store.readArtifact(runId, machineStateName),
     store.readArtifact(runId, workingStateName),
+    store.readArtifact(runId, workingStateValidationName),
     store.readArtifact(runId, turnHandoffName),
     store.readArtifact(runId, executorSummaryName),
   ]);
@@ -446,6 +450,7 @@ export async function buildLoopTurnStartPrompt(
           ...(githubWorkingStateInstruction(ctx.card, workingState) ?? []),
         ]
       : []),
+    ...workingStateValidationInstruction(workingStateValidation),
     "",
     "### Previous executor summary",
     executorSummary ?? "(previous executor summary not available)",
@@ -464,6 +469,27 @@ export async function buildLoopTurnStartPrompt(
   }
 
   return `${base}\n\n${lines.join("\n")}`;
+}
+
+function workingStateValidationInstruction(raw: string | undefined): string[] {
+  if (!raw) {
+    return [];
+  }
+  try {
+    const parsed = WorkingStateValidationSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success || parsed.data.verified) {
+      return [];
+    }
+    return [
+      "",
+      "### Working state validation",
+      "- 上一輪的 selected_subject 未通過確定性校驗，不得把它當成已鎖定目標重用。",
+      `- 校驗問題：${parsed.data.issues.join("；")}`,
+      "- 可以重新搜尋 issue；若你確認 clone_path 正確，請在下一輪重新輸出 LOOP-STATE。",
+    ];
+  } catch {
+    return [];
+  }
 }
 
 function githubWorkingStateInstruction(
@@ -777,21 +803,21 @@ export async function watchProcess(
         lastActivityAt = Date.now();
         const message = event.message;
         runtimeEvents.push({ at: new Date().toISOString(), message });
+        // Codex reports token usage on the turn_complete system message;
+        // Claude SDK reports it on the terminal result message. Capture
+        // either source before the result settles so provider telemetry is
+        // not lost.
+        const usage = (
+          message as {
+            usage?: { input_tokens?: number; output_tokens?: number };
+          }
+        ).usage;
+        if (usage && typeof usage.input_tokens === "number") {
+          tokens = usage.input_tokens + (usage.output_tokens ?? 0);
+        }
         if (message.type === "result") {
           if (typeof message.result === "string") {
             finalText = message.result;
-          }
-          // 02 §4 usage: the Claude SDK result message carries
-          // usage { input_tokens, output_tokens, ... } — counted as
-          // input + output per the contract's usage shape (cache tokens
-          // are not part of the 02 §4 usage contract).
-          const usage = (
-            message as {
-              usage?: { input_tokens?: number; output_tokens?: number };
-            }
-          ).usage;
-          if (usage && typeof usage.input_tokens === "number") {
-            tokens = usage.input_tokens + (usage.output_tokens ?? 0);
           }
           const isError =
             message.is_error === true ||

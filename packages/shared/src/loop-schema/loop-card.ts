@@ -2,6 +2,30 @@ import { z } from "zod";
 import { ApprovalModeSchema } from "./policy.js";
 import { VerificationRuleSchema } from "./verification-rules.js";
 
+/** 人工閘門 SLA：進入 blocking 狀態後無人回應的催辦/降級策略。 */
+export const HumanGateSlaPolicySchema = z.enum([
+  "keep",
+  "auto_abandon",
+  "auto_approve_low_risk",
+]);
+export type HumanGateSlaPolicy = z.infer<typeof HumanGateSlaPolicySchema>;
+
+export const HumanGateSlaSchema = z.object({
+  /** 進入等待多久後發出催辦事件。 */
+  reminder_after_minutes: z
+    .number()
+    .nonnegative()
+    .default(24 * 60),
+  /** 進入等待多久後執行降級策略。 */
+  abandon_after_minutes: z
+    .number()
+    .positive()
+    .default(7 * 24 * 60),
+  /** 超時降級策略；`keep` 是安全預設。 */
+  policy: HumanGateSlaPolicySchema.default("keep"),
+});
+export type HumanGateSla = z.infer<typeof HumanGateSlaSchema>;
+
 /**
  * LoopCard — trigger 层为每个长期 loop 维护的产品规格。
  * 权威定义：docs/spec/02-schema契约.md §1。
@@ -186,6 +210,8 @@ export const LoopCardSchema = z.object({
     human_gate: z
       .object({
         required_for: z.array(z.string()).optional(),
+        /** 超時語義：不設定時由 server 使用保守預設（只催辦、不自動處置）。 */
+        sla: HumanGateSlaSchema.optional(),
       })
       .optional(),
     // Yep extension: runtime model selection for unattended loop runs.

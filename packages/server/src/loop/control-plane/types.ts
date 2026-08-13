@@ -51,6 +51,30 @@ export interface PendingApproval {
   requestId: string;
 }
 
+/** Projection returned by ControlPlane.listHumanQueue for the unified queue. */
+export interface HumanSlaEntry {
+  run_id: string;
+  loop_id: string;
+  state: RunState;
+  request_id: string | null;
+  reason: string;
+  entered_at: string;
+  reminder_at: string;
+  abandon_at: string;
+  policy: "keep" | "auto_abandon" | "auto_approve_low_risk";
+  reminder_due: boolean;
+  abandon_due: boolean;
+  last_reminder_at: string | null;
+  human_reasons?: import("@yep-anywhere/shared").HumanReason[];
+}
+
+export interface HumanSlaSweepResult {
+  scanned: number;
+  reminded: number;
+  abandoned: number;
+  approved: number;
+}
+
 /** Per-turn resource consumption reported by the run service. */
 export interface TurnUsage {
   /**
@@ -59,6 +83,8 @@ export interface TurnUsage {
    * never fabricated.
    */
   tokens: number | null;
+  /** True when the adapter exposed no usage; distinguishes 0 from unknown. */
+  tokensUnavailable?: boolean;
   /** Wall-clock minutes the turn took (execution + verification). */
   timeMinutes: number;
 }

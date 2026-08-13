@@ -68,6 +68,25 @@ export function createRunsRoutes(deps: RunsRoutesDeps): Hono {
   const app = new Hono();
 
   /**
+   * GET /api/runs/pending
+   * Cross-loop human action queue. Includes needs_human / paused /
+   * budget_limited runs with SLA deadlines so stale work is visible and
+   * sortable in one place.
+   */
+  app.get("/pending", async (c) => {
+    if (!deps.controlPlane) {
+      return c.json(
+        {
+          error: "run_service_unavailable",
+          message: "Control plane not registered",
+        },
+        503,
+      );
+    }
+    return c.json({ items: await deps.controlPlane.listHumanQueue() });
+  });
+
+  /**
    * GET /api/runs/:id
    * 03 形状 (06 偏差 #30 确认): { run, run_state, ledger_summary } —
    * run_state 是 02 §7 状态机快照 (无记录时 null); 全量账本不经 API 暴

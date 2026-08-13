@@ -34,3 +34,19 @@ export const RunWorkingStateSchema = z.object({
   subtask_status: z.array(SubtaskStatusSchema).default([]),
 });
 export type RunWorkingState = z.infer<typeof RunWorkingStateSchema>;
+
+/**
+ * Result of deterministic validation applied to the executor's self-reported
+ * working state before it is treated as authoritative across turns.
+ */
+export const WorkingStateValidationSchema = z.object({
+  run_id: z.string(),
+  turn: z.number().int().nonnegative(),
+  verified_at: z.string().datetime(),
+  verified: z.boolean(),
+  issues: z.array(z.string()),
+  selected_subject: SelectedSubjectSchema.nullable().default(null),
+});
+export type WorkingStateValidation = z.infer<
+  typeof WorkingStateValidationSchema
+>;

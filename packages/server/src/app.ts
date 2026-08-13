@@ -407,6 +407,23 @@ export function createApp(
       );
     }, 30_000);
     triggerDrainTimer.unref?.();
+    const humanSlaTimer = setInterval(() => {
+      void loopControlPlane
+        .sweepHumanSla()
+        .then((result) => {
+          if (
+            result.reminded > 0 ||
+            result.abandoned > 0 ||
+            result.approved > 0
+          ) {
+            console.log(
+              `[HumanSLA] sweep: reminded=${result.reminded}, abandoned=${result.abandoned}, approved=${result.approved}`,
+            );
+          }
+        })
+        .catch((error) => console.warn("[HumanSLA] sweep failed:", error));
+    }, 60_000);
+    humanSlaTimer.unref?.();
   }
 
   // Register all API routes

@@ -99,6 +99,7 @@ import type {
   GithubToolProvisioner,
   RunExecutionContext,
 } from "./types.js";
+import { validateRunWorkingState } from "./working-state-validation.js";
 import {
   loopRuntime,
   resolveExecutableCard,
@@ -635,17 +636,45 @@ export async function runTurns(
 
       const loopState = extractLoopState(outcome.finalText);
       if (loopState) {
-        ctx.workingState = {
+        const candidate = {
           ...loopState,
           run_id: runId,
           turn: ctx.turn,
           updated_at: new Date().toISOString(),
         };
-        await store.writeArtifact(
-          runId,
-          "working-state.json",
-          `${JSON.stringify(ctx.workingState, null, 2)}\n`,
-        );
+        const validation = await validateRunWorkingState(candidate);
+        if (validation.verified) {
+          ctx.workingState = candidate;
+          await store.writeArtifact(
+            runId,
+            "working-state.json",
+            `${JSON.stringify(ctx.workingState, null, 2)}\n`,
+          );
+        } else {
+          console.warn(
+            `[LoopRunService] run ${runId} turn ${ctx.turn} reported unverified working state: ${validation.issues.join("; ")}`,
+          );
+          const validationArtifact = `${JSON.stringify(
+            {
+              run_id: runId,
+              turn: ctx.turn,
+              verified_at: new Date().toISOString(),
+              verified: false,
+              issues: validation.issues,
+              selected_subject: validation.selected_subject,
+            },
+            null,
+            2,
+          )}\n`;
+          await store.writeArtifact(
+            runId,
+            "working-state-validation.json",
+            validationArtifact,
+          );
+          artifactRefs.push(
+            `artifact://${runId}/working-state-validation.json`,
+          );
+        }
       }
 
       let diffRef: string | null = null;
@@ -1232,6 +1261,7 @@ export async function runTurns(
           policyEscalation: drainPolicyEscalation(ctx, restrictionRelease),
           usage: {
             tokens: outcome.usage?.tokens ?? null,
+            tokensUnavailable: outcome.usage === null,
             timeMinutes,
           },
           adapterFailure: outcome.adapterError
@@ -1423,6 +1453,29 @@ export async function runTurns(
         created_at: createdAt,
       };
       await store.appendEntry(runId, entry);
+      if (finalStatus === "failed") {
+        const failureTags = [...verifierFailureTags];
+        if (outcome.adapterError) {
+          const tag = adapterErrorCodeToFailureTag(outcome.adapterError.code);
+          if (!failureTags.includes(tag)) {
+            failureTags.push(tag);
+          }
+        }
+        const postmortem = `${JSON.stringify(
+          {
+            run_id: runId,
+            loop_id: loopId,
+            state: finalStatus,
+            turn: ctx.turn,
+            failure_tags: failureTags,
+            reason: outcome.error ?? "run failed without a turn error",
+            created_at: new Date().toISOString(),
+          },
+          null,
+          2,
+        )}\n`;
+        await store.writeArtifact(runId, "postmortem.json", postmortem);
+      }
       if (!deps.controlPlane && outcome.adapterError) {
         await store.appendDecisionEntry(runId, {
           decision_id: `decision-${runId}-adapter-failure`,
@@ -1484,6 +1537,7 @@ export async function runTurns(
               judgment,
               usage: {
                 tokens: outcome.usage?.tokens ?? null,
+                tokensUnavailable: outcome.usage === null,
                 timeMinutes,
               },
             },

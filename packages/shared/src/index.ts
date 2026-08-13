@@ -463,7 +463,11 @@ export {
 // (see 06-项目规定 hard constraint #1).
 export {
   LoopCardSchema,
+  HumanGateSlaSchema,
+  HumanGateSlaPolicySchema,
   type LoopCard,
+  type HumanGateSla,
+  type HumanGateSlaPolicy,
   type VerificationPhase,
   VerificationPhaseSchema,
 } from "./loop-schema/loop-card.js";
@@ -536,6 +540,8 @@ export {
 export {
   type PendingToolCall,
   PendingToolCallSchema,
+  type BlockedSla,
+  BlockedSlaSchema,
   type PendingApproval,
   PendingApprovalSchema,
   type RunStateSnapshotEvent,
@@ -558,6 +564,8 @@ export {
   SubtaskStatusSchema,
   type RunWorkingState,
   RunWorkingStateSchema,
+  type WorkingStateValidation,
+  WorkingStateValidationSchema,
 } from "./loop-schema/working-state.js";
 export {
   type HumanHandoffDecision,

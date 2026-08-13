@@ -385,6 +385,7 @@ export function registerRoutes(
     "/api/loops",
     createLoopsRoutes({
       loopCardStore,
+      maintenanceTargetStore,
       runService: loopRunService,
       controlPlane: loopControlPlane,
       proposalStore,

@@ -49,6 +49,7 @@
 import type {
   Budget,
   BudgetLimits,
+  HumanGateSla,
   RunState,
   RunStateRecord,
 } from "@yep-anywhere/shared";
@@ -74,6 +75,8 @@ import type {
   BeginTurnResult,
   ControlPlaneDeps,
   ControlPlaneState,
+  HumanSlaEntry,
+  HumanSlaSweepResult,
   PauseSeed,
   ResumeSignal,
 } from "./types.js";
@@ -82,6 +85,8 @@ export type {
   ApplyJudgmentResult,
   BeginTurnResult,
   ControlPlaneDeps,
+  HumanSlaEntry,
+  HumanSlaSweepResult,
   PauseSeed,
   ResumeSignal,
   TurnUsage,
@@ -112,6 +117,33 @@ const DECISION_OPTIONS = [
   "advance_subtask",
   "waive_phases",
 ];
+
+const DEFAULT_HUMAN_SLA: HumanGateSla = {
+  reminder_after_minutes: 24 * 60,
+  abandon_after_minutes: 7 * 24 * 60,
+  policy: "keep",
+};
+
+function addMinutes(iso: string, minutes: number): string {
+  return new Date(new Date(iso).getTime() + minutes * 60 * 1000).toISOString();
+}
+
+function humanSlaForCard(deps: ControlPlaneDeps, loopId: string): HumanGateSla {
+  return (
+    deps.loopCardStore?.getLoop(loopId)?.card.loop.human_gate?.sla ??
+    DEFAULT_HUMAN_SLA
+  );
+}
+
+function blockingReason(record: RunStateRecord): string {
+  if (record.state === "needs_human") {
+    return record.pending_approval?.reason ?? "waiting for human decision";
+  }
+  if (record.state === "paused") {
+    return "run paused by a human; resume signal required";
+  }
+  return "budget exhausted; human supplement required";
+}
 
 /**
  * judgment.next_action → run-decision-required 事件的 recommended 字段
@@ -247,6 +279,8 @@ export class ControlPlane {
       used_turns: input.turn,
       used_tokens: base.used_tokens + (input.usage.tokens ?? 0),
       used_time_minutes: base.used_time_minutes + input.usage.timeMinutes,
+      token_usage_unavailable:
+        base.token_usage_unavailable || input.usage.tokens === null,
     };
     const exhausted = exhaustedFields(budget, input.turn);
     const canRetry = exhausted.length === 0;
@@ -601,7 +635,11 @@ export class ControlPlane {
       subtaskIndex: number;
       subtaskCount: number;
       judgment: import("@yep-anywhere/shared").JudgmentReport | null;
-      usage: { tokens: number | null; timeMinutes: number };
+      usage: {
+        tokens: number | null;
+        tokensUnavailable?: boolean;
+        timeMinutes: number;
+      };
     },
   ): Promise<RunStateRecord> {
     this.state.runIndex.set(runId, loopId);
@@ -626,6 +664,8 @@ export class ControlPlane {
           used_turns: advance.completedTurn,
           used_tokens: base.used_tokens + (advance.usage.tokens ?? 0),
           used_time_minutes: base.used_time_minutes + advance.usage.timeMinutes,
+          token_usage_unavailable:
+            base.token_usage_unavailable || advance.usage.tokens === null,
         }
       : { ...base, used_turns: nextTurn };
 
@@ -1133,6 +1173,145 @@ export class ControlPlane {
   }
 
   /**
+   * Cross-loop human queue projection. Every blocking run state is included
+   * so stale needs_human / paused / budget_limited work is visible in one
+   * place, sorted by SLA deadline first.
+   */
+  async listHumanQueue(now = new Date()): Promise<HumanSlaEntry[]> {
+    const states = await this.deps.runStateStore.list();
+    const entries: HumanSlaEntry[] = [];
+    for (const { loopId, state: record } of states) {
+      if (
+        record.state !== "needs_human" &&
+        record.state !== "paused" &&
+        record.state !== "budget_limited"
+      ) {
+        continue;
+      }
+      const sla = humanSlaForCard(this.deps, loopId);
+      const enteredAt =
+        record.pending_approval?.entered_at ?? record.updated_at;
+      const reminderAt = addMinutes(enteredAt, sla.reminder_after_minutes);
+      const abandonAt = addMinutes(enteredAt, sla.abandon_after_minutes);
+      entries.push({
+        run_id: record.run_id,
+        loop_id: loopId,
+        state: record.state,
+        request_id: record.pending_approval?.request_id ?? null,
+        reason: blockingReason(record),
+        entered_at: enteredAt,
+        reminder_at: reminderAt,
+        abandon_at: abandonAt,
+        policy: sla.policy,
+        reminder_due: now.getTime() >= new Date(reminderAt).getTime(),
+        abandon_due: now.getTime() >= new Date(abandonAt).getTime(),
+        last_reminder_at: record.blocked_sla?.last_reminder_at ?? null,
+        human_reasons: record.pending_approval?.human_reasons,
+      });
+    }
+    return entries.sort((a, b) => {
+      const deadlineDiff = a.abandon_at.localeCompare(b.abandon_at);
+      return deadlineDiff !== 0
+        ? deadlineDiff
+        : a.entered_at.localeCompare(b.entered_at);
+    });
+  }
+
+  /**
+   * Process human SLA deadlines. Reminders are emitted once per blocked run;
+   * configured auto policies only apply after the abandon deadline.
+   */
+  async sweepHumanSla(now = new Date()): Promise<HumanSlaSweepResult> {
+    const result: HumanSlaSweepResult = {
+      scanned: 0,
+      reminded: 0,
+      abandoned: 0,
+      approved: 0,
+    };
+    for (const entry of await this.listHumanQueue(now)) {
+      result.scanned += 1;
+      if (entry.abandon_due) {
+        if (entry.policy === "auto_abandon") {
+          const reason = `human SLA expired for ${entry.state} run (entered ${entry.entered_at}, deadline ${entry.abandon_at}); auto-abandon policy applied`;
+          const failed = await this.failRun(entry.run_id, reason, {
+            force: true,
+          });
+          if (failed) {
+            result.abandoned += 1;
+            this.deps.eventBus?.emit({
+              type: "loop-human-sla-abandoned",
+              loop_id: entry.loop_id,
+              run_id: entry.run_id,
+              state: entry.state,
+              entered_at: entry.entered_at,
+              abandoned_at: now.toISOString(),
+              policy: entry.policy,
+              reason,
+              timestamp: now.toISOString(),
+            });
+          }
+        } else if (entry.policy === "auto_approve_low_risk") {
+          const record = await this.deps.runStateStore.load(entry.loop_id);
+          const pending = record?.pending_approval;
+          if (
+            entry.state === "needs_human" &&
+            pending &&
+            !pending.tool_call &&
+            !pending.reason.startsWith("policy gate")
+          ) {
+            try {
+              await this.submitDecision(entry.run_id, "approve");
+              result.approved += 1;
+              this.deps.eventBus?.emit({
+                type: "loop-human-sla-abandoned",
+                loop_id: entry.loop_id,
+                run_id: entry.run_id,
+                state: entry.state,
+                entered_at: entry.entered_at,
+                abandoned_at: now.toISOString(),
+                policy: entry.policy,
+                reason:
+                  "human SLA expired; low-risk auto-approve policy applied",
+                timestamp: now.toISOString(),
+              });
+            } catch {
+              // A repeated blocker / invalid transition is a signal that
+              // auto-approval is not safe; leave the run for a human.
+            }
+          }
+        }
+        continue;
+      }
+      if (
+        entry.reminder_due &&
+        entry.last_reminder_at === null &&
+        entry.state === "needs_human"
+      ) {
+        const nowIso = now.toISOString();
+        const found = await findRun(this.deps, this.state, entry.run_id);
+        if (found) {
+          await this.deps.runStateStore.save(entry.loop_id, {
+            ...found.record,
+            blocked_sla: { last_reminder_at: nowIso },
+          });
+        }
+        this.deps.eventBus?.emit({
+          type: "loop-human-sla-reminder",
+          loop_id: entry.loop_id,
+          run_id: entry.run_id,
+          state: entry.state,
+          entered_at: entry.entered_at,
+          reminder_at: entry.reminder_at,
+          policy: entry.policy,
+          timestamp: nowIso,
+        });
+        result.reminded += 1;
+      }
+    }
+    return result;
+  }
+
+  /**
    * Force a non-terminal run to failed. Used by the run service when restart
    * recovery cannot rebuild the execution context or when a resumed run
    * crashes before it can be judged — preventing the run from staying stuck
@@ -1157,8 +1336,7 @@ export class ControlPlane {
     if (
       record.state === "complete" ||
       record.state === "failed" ||
-      record.state === "discarded" ||
-      record.state === "budget_limited"
+      record.state === "discarded"
     ) {
       return record;
     }
@@ -1180,6 +1358,7 @@ export class ControlPlane {
       failureTags: ["runtime_blackbox_error"],
       patch: { pending_approval: null },
     });
+    this.state.pending.delete(runId);
     notifyResolved(this.resolvedListeners, runId, "failed");
     return updated;
   }

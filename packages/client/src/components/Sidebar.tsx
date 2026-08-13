@@ -417,6 +417,14 @@ export function Sidebar({
               collapsed={isCollapsed}
             />
             <SidebarNavItem
+              to="/human-queue"
+              icon={SidebarIcons.inbox}
+              label="Human Queue"
+              onClick={onNavigate}
+              basePath={basePath}
+              collapsed={isCollapsed}
+            />
+            <SidebarNavItem
               to="/maintenance"
               icon={SidebarIcons.maintenance}
               label="Maintenance"

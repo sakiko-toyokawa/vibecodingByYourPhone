@@ -174,6 +174,40 @@ test("passed judgment → complete: state persisted, decision ledgered with budg
   });
 });
 
+test("human SLA: queue aggregates a blocked run, reminder fires once, unavailable tokens are marked", async () => {
+  await withFixture(async ({ controlPlane, bus, stateStore }) => {
+    const result = await controlPlane.applyJudgment(applyInput());
+    assert.equal(result.state, "needs_human");
+    assert.equal(result.budget.token_usage_unavailable, true);
+
+    const record = await stateStore.load("loop-1");
+    assert.ok(record);
+    const enteredAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    await stateStore.save("loop-1", {
+      ...record,
+      updated_at: enteredAt,
+      pending_approval: record.pending_approval
+        ? { ...record.pending_approval, entered_at: enteredAt }
+        : null,
+      blocked_sla: { last_reminder_at: null },
+    });
+
+    const [item] = await controlPlane.listHumanQueue();
+    assert.ok(item);
+    assert.equal(item.state, "needs_human");
+    assert.equal(item.reminder_due, true);
+    assert.equal(item.abandon_due, false);
+
+    await controlPlane.sweepHumanSla();
+    assert.equal(bus.ofType("loop-human-sla-reminder").length, 1);
+    const afterReminder = await stateStore.load("loop-1");
+    assert.ok(afterReminder?.blocked_sla?.last_reminder_at);
+
+    await controlPlane.sweepHumanSla();
+    assert.equal(bus.ofType("loop-human-sla-reminder").length, 1);
+  });
+});
+
 test("discardRun: needs_human → discarded with decision entry and resolved listener", async () => {
   await withFixture(async ({ controlPlane, ledgerStore, stateStore }) => {
     let resolved: string | null = null;

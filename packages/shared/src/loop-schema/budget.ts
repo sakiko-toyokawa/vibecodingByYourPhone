@@ -29,6 +29,12 @@ const BudgetObjectSchema = z.object({
   used_time_minutes: z.number().default(0),
   used_turns: z.number().default(0),
   used_retries: z.number().default(0),
+  /**
+   * True when the latest accumulated turn had no adapter token usage and
+   * `used_tokens` is therefore not a real measurement. This is honest
+   * telemetry: unavailable is distinct from zero consumption.
+   */
+  token_usage_unavailable: z.boolean().optional(),
 });
 
 export const BudgetSchema = BudgetObjectSchema;

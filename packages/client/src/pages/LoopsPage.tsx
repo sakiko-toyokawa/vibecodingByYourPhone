@@ -65,6 +65,7 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
   );
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [coverageWarning, setCoverageWarning] = useState<string | null>(null);
   const [githubCredential, setGithubCredential] =
     useState<GitHubCredentialStatus | null>(null);
   const [githubToken, setGithubToken] = useState("");
@@ -184,6 +185,28 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
       ) {
         setCreateError(t("loopsCreateCronRequired"));
         return;
+      }
+      setCoverageWarning(null);
+      if (
+        createForm.kind === "github_prompt" &&
+        createForm.githubRepository.trim()
+      ) {
+        const issueNumber = Number(createForm.githubIssueNumber);
+        try {
+          const { coverage } = await loopsApi.getCoverage(
+            createForm.githubRepository.trim(),
+            Number.isInteger(issueNumber) ? issueNumber : undefined,
+          );
+          if (coverage.length > 0) {
+            setCoverageWarning(
+              `Existing loop '${coverage[0]?.loop_id}' already covers this GitHub subject. Change the loop id/task or keep the existing loop instead of creating a duplicate.`,
+            );
+            return;
+          }
+        } catch {
+          // Coverage lookup is advisory; a store failure must not block loop
+          // creation.
+        }
       }
 
       setCreating(true);
@@ -657,6 +680,49 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
                       </span>
                     )}
                   </label>
+
+                  {createForm.kind === "github_prompt" && (
+                    <div className="grid gap-2 md:col-span-2 md:grid-cols-2">
+                      <label className="flex flex-col gap-1">
+                        <span className="[font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
+                          Repository (owner/repo)
+                        </span>
+                        <input
+                          className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-border)]"
+                          value={createForm.githubRepository}
+                          onChange={(event) =>
+                            updateCreateForm(
+                              "githubRepository",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="owner/repo"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="[font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
+                          Issue number (optional)
+                        </span>
+                        <input
+                          className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 font-mono text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-border)]"
+                          value={createForm.githubIssueNumber}
+                          onChange={(event) =>
+                            updateCreateForm(
+                              "githubIssueNumber",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="123"
+                          inputMode="numeric"
+                        />
+                      </label>
+                      {coverageWarning && (
+                        <span className="md:col-span-2 rounded-[var(--radius-sm)] bg-[var(--bg-warning)] px-3 py-2 text-xs text-[var(--color-warning)]">
+                          {coverageWarning}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   <label className="flex flex-col gap-1">
                     <span className="[font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">

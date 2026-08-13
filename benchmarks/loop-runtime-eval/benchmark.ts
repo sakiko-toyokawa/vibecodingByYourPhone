@@ -154,6 +154,11 @@ async function main(): Promise<void> {
       verifierCostRatio: 0.3,
     },
   };
+  if (stateLog.readEventsP95Ms > 100) {
+    throw new Error(
+      `state log read p95 exceeded threshold: ${stateLog.readEventsP95Ms}ms > 100ms`,
+    );
+  }
   const resultsDir = join(__dirname, "results");
   await mkdir(resultsDir, { recursive: true });
   const reportPath = join(

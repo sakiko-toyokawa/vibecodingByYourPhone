@@ -19,6 +19,7 @@ import {
   type LoopCardStore,
   LoopRunError,
   type LoopRunService,
+  type MaintenanceTargetStore,
   type ProposalStore,
   type TriggerQueueStore,
   isGitWorkTree,
@@ -62,6 +63,8 @@ const TriggerEventBodySchema = z
 
 export interface LoopsRoutesDeps {
   loopCardStore: LoopCardStore;
+  /** Used for subject-level duplicate coverage when creating GitHub loops. */
+  maintenanceTargetStore?: MaintenanceTargetStore;
   /** Optional so tests mounting the registry alone still work */
   runService?: LoopRunService;
   /** Optional so phase-0 tests mounting the registry alone still work */
@@ -105,6 +108,7 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
   const app = new Hono();
   const {
     loopCardStore,
+    maintenanceTargetStore,
     runService,
     controlPlane,
     proposalStore,
@@ -217,6 +221,52 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
         .filter((entry) => entry.status === statusQuery)
         .slice(offset, offset + limit)
         .map((entry) => entry.stored),
+    });
+  });
+
+  /**
+   * GET /api/loops/coverage
+   * Subject-anchor lookup for GitHub loops: returns existing maintenance
+   * targets that already cover the same repository (and optional issue).
+   * The UI uses this to warn before creating a duplicate loop.
+   */
+  app.get("/coverage", (c) => {
+    if (!maintenanceTargetStore) {
+      return c.json(
+        {
+          error: "maintenance_store_unavailable",
+          message: "Maintenance target store not registered",
+        },
+        503,
+      );
+    }
+    const repository = c.req.query("repository")?.trim();
+    if (!repository) {
+      return c.json(
+        {
+          error: "invalid_coverage_query",
+          message: "repository query parameter is required",
+        },
+        400,
+      );
+    }
+    const issueNumber = Number(c.req.query("issue_number"));
+    const targets = maintenanceTargetStore.findByRepository(
+      repository,
+      Number.isInteger(issueNumber) ? issueNumber : undefined,
+    );
+    return c.json({
+      coverage: targets.map((target) => ({
+        target_id: target.target_id,
+        loop_id: target.loop_id,
+        state: target.state,
+        repository: (target.adapter_data as { repository?: unknown })
+          ?.repository,
+        issue_number: (target.adapter_data as { issue_number?: unknown })
+          ?.issue_number,
+        pr_number: (target.adapter_data as { pr_number?: unknown })?.pr_number,
+        updated_at: target.updated_at,
+      })),
     });
   });
 
