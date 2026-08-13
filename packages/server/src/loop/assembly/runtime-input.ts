@@ -434,25 +434,12 @@ export function assembleRuntimeInput(
     discovery.source ? `- 发现来源：${discovery.source}` : null,
     discovery.query ? `- 发现查询：${discovery.query}` : null,
     maxItems !== undefined ? `- 最多报告 ${maxItems} 项。` : null,
-    ...(taskPlan && currentSubtask
+    ...(taskPlan
       ? [
           "",
           "任务分解（多轮执行）：",
           `- 总子任务数：${taskPlan.subtasks.length}`,
           ...taskPlan.subtasks.map((s) => `  - ${s.id}: ${s.description}`),
-          "",
-          `当前子任务（第 ${turn} 轮）：${currentSubtask.id}`,
-          `- 描述：${currentSubtask.description}`,
-          "- 成功标准：",
-          ...currentSubtask.success_criteria.map((c) => `  - ${c}`),
-          ...(currentSubtask.target_artifacts.length > 0
-            ? [
-                "- 目标产物：",
-                ...currentSubtask.target_artifacts.map((a) => `  - ${a}`),
-              ]
-            : []),
-          "",
-          "重要：本轮只应完成当前子任务，不要开始或完成后续子任务。",
         ]
       : []),
     "",

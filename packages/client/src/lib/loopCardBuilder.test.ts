@@ -63,6 +63,21 @@ function testBuildsGithubPromptLoop(): void {
     type: "schedule",
     cron: "0 9 * * *",
   });
+  assertDeepEqual(card.loop.verification.required, []);
+}
+
+function testGithubPromptLoopDoesNotDefaultStaticRuntime(): void {
+  const card = buildLoopCard({
+    ...DEFAULT_LOOP_CREATE_FORM,
+    kind: "github_prompt",
+    id: "github-no-code-defaults",
+    task: "fix a bug",
+    verifyStatic: true,
+    verifyRuntime: true,
+    verifyInteraction: true,
+  });
+
+  assertDeepEqual(card.loop.verification.required, ["interaction"]);
 }
 
 function testBuildsWorkspaceLoop(): void {
@@ -96,6 +111,7 @@ function testBuildsWorkspaceLoopWithWorktreeStrategy(): void {
 }
 
 testBuildsGithubPromptLoop();
+testGithubPromptLoopDoesNotDefaultStaticRuntime();
 testBuildsWorkspaceLoop();
 testBuildsWorkspaceLoopWithWorktreeStrategy();
 

@@ -84,10 +84,15 @@ export function buildLoopCard(form: LoopCreateFormState): LoopCard {
   // 06 偏差 #31: max_retries >= max_turns 合法 (预算同时生效、先触者停),
   // 不再强制 maxRetries < maxTurns。
   const maxRetries = parseNonNegativeInt(form.maxRetries, 0);
-  const required: LoopCard["loop"]["verification"]["required"] = [];
-  if (form.verifyStatic) required.push("static");
-  if (form.verifyRuntime) required.push("runtime");
-  if (form.verifyInteraction) required.push("interaction");
+  const buildRequired = (
+    includeCodeChecks: boolean,
+  ): LoopCard["loop"]["verification"]["required"] => {
+    const required: LoopCard["loop"]["verification"]["required"] = [];
+    if (includeCodeChecks && form.verifyStatic) required.push("static");
+    if (includeCodeChecks && form.verifyRuntime) required.push("runtime");
+    if (form.verifyInteraction) required.push("interaction");
+    return required;
+  };
   const runtime =
     form.modelProvider.trim() || form.model.trim()
       ? {
@@ -105,7 +110,7 @@ export function buildLoopCard(form: LoopCreateFormState): LoopCard {
         ? { type: "schedule" as const, cron: form.cron.trim() }
         : { type: "manual" as const },
     verification: {
-      required,
+      required: [],
       ...(form.verifyInteraction
         ? {
             interaction: {
@@ -135,6 +140,10 @@ export function buildLoopCard(form: LoopCreateFormState): LoopCard {
     return {
       loop: {
         ...base,
+        verification: {
+          ...base.verification,
+          required: buildRequired(false),
+        },
         discovery: {
           source: "github_prompt",
           query: task,
@@ -159,6 +168,10 @@ export function buildLoopCard(form: LoopCreateFormState): LoopCard {
   return {
     loop: {
       ...base,
+      verification: {
+        ...base.verification,
+        required: buildRequired(true),
+      },
       handoff: {
         default_task_type: "maintenance",
         task,

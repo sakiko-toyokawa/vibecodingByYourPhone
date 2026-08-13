@@ -432,8 +432,9 @@ test("assembleRuntimeInput injects current subtask into prompt when plan exists"
   const input = assembleRuntimeInput(card, contract, [], {}, 2);
   assert.equal(input.currentSubtask?.id, "subtask-2");
   assert.deepEqual(input.taskPlan, plan);
-  assert.match(input.prompt, /当前子任务（第 2 轮）：subtask-2/);
-  assert.match(input.prompt, /本轮只应完成当前子任务/);
+  assert.doesNotMatch(input.prompt, /当前子任务/);
+  assert.doesNotMatch(input.prompt, /本轮只应完成当前子任务/);
+  assert.match(input.prompt, /任务分解（多轮执行）/);
   assert.match(input.prompt, /子任务：当前完成的子任务 ID/);
 });
 

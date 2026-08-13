@@ -689,29 +689,36 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
                     <span className="[font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
                       {t("loopsCreateVerificationLabel")}
                     </span>
-                    <label className="flex items-center gap-2 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
-                      <input
-                        type="checkbox"
-                        checked={createForm.verifyStatic}
-                        onChange={(event) =>
-                          updateCreateForm("verifyStatic", event.target.checked)
-                        }
-                      />
-                      {t("loopsCreateVerifyStatic")}
-                    </label>
-                    <label className="flex items-center gap-2 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
-                      <input
-                        type="checkbox"
-                        checked={createForm.verifyRuntime}
-                        onChange={(event) =>
-                          updateCreateForm(
-                            "verifyRuntime",
-                            event.target.checked,
-                          )
-                        }
-                      />
-                      {t("loopsCreateVerifyRuntime")}
-                    </label>
+                    {createForm.kind !== "github_prompt" && (
+                      <label className="flex items-center gap-2 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                        <input
+                          type="checkbox"
+                          checked={createForm.verifyStatic}
+                          onChange={(event) =>
+                            updateCreateForm(
+                              "verifyStatic",
+                              event.target.checked,
+                            )
+                          }
+                        />
+                        {t("loopsCreateVerifyStatic")}
+                      </label>
+                    )}
+                    {createForm.kind !== "github_prompt" && (
+                      <label className="flex items-center gap-2 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                        <input
+                          type="checkbox"
+                          checked={createForm.verifyRuntime}
+                          onChange={(event) =>
+                            updateCreateForm(
+                              "verifyRuntime",
+                              event.target.checked,
+                            )
+                          }
+                        />
+                        {t("loopsCreateVerifyRuntime")}
+                      </label>
+                    )}
                     <label className="flex items-center gap-2 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
                       <input
                         type="checkbox"

@@ -13,6 +13,7 @@ function makeContext(
     turn?: number;
     pendingContext?: string | null;
     taskPlan?: RunExecutionContext["taskPlan"];
+    currentSubtaskIndex?: number;
   } = {},
 ): RunExecutionContext {
   return {
@@ -64,7 +65,7 @@ function makeContext(
     policyEscalations: [],
     permissionEvents: [],
     taskPlan: overrides.taskPlan ?? null,
-    currentSubtaskIndex: 0,
+    currentSubtaskIndex: overrides.currentSubtaskIndex ?? 0,
     recentTurnOutputHashes: [],
     recentTurnDiffStatHashes: [],
     recentBlockerFingerprints: [],
@@ -151,6 +152,49 @@ test("buildLoopTurnStartPrompt marks missing handoff artifacts explicitly", asyn
   assert.match(prompt, /handoff_available: false/);
   assert.match(prompt, /\(previous AU2 human report not available\)/);
   assert.match(prompt, /resume after pause/);
+});
+
+test("buildLoopTurnStartPrompt injects one current subtask for plan turns", async () => {
+  const plan = {
+    plan_id: "plan-1",
+    created_at: "2026-08-08T00:00:00.000Z",
+    subtasks: [
+      {
+        id: "subtask-1",
+        description: "Discover the target",
+        success_criteria: ["target selected"],
+        target_artifacts: [],
+      },
+      {
+        id: "subtask-2",
+        description: "Implement the fix",
+        success_criteria: ["fix applied"],
+        target_artifacts: [],
+      },
+    ],
+  } as RunExecutionContext["taskPlan"];
+
+  const turn1 = await buildLoopTurnStartPrompt(
+    makeContext({
+      turn: 1,
+      taskPlan: plan,
+      currentSubtaskIndex: 0,
+    }),
+    makeStore({}),
+  );
+  assert.equal(turn1.match(/Current subtask \(subtask-\d\):/g)?.length ?? 0, 1);
+  assert.match(turn1, /Current subtask \(subtask-1\):/);
+
+  const turn2 = await buildLoopTurnStartPrompt(
+    makeContext({
+      turn: 2,
+      taskPlan: plan,
+      currentSubtaskIndex: 1,
+    }),
+    makeStore({}),
+  );
+  assert.equal(turn2.match(/Current subtask \(subtask-\d\):/g)?.length ?? 0, 1);
+  assert.match(turn2, /Current subtask \(subtask-2\):/);
 });
 
 test("resolveDirectWriteAllowlist: GitHub prompt loop owns the whole managed workspace", () => {
