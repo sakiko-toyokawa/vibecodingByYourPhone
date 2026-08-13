@@ -79,6 +79,11 @@ export interface VerifyRunInput {
   reviewReport?: VerifierReport;
   /** Per-command timeout; defaults to 120s (subprocess-verifier). */
   timeoutMs?: number;
+  /** Static/runtime phases to skip for this turn. Used for non-code
+   *  subtasks where no project has been materialized yet. Skipped phases
+   *  are written as not_applicable and do not enter the strategy pipeline
+   *  or the aggregate. */
+  skipExecutablePhases?: { phase: "static" | "runtime"; reason: string }[];
 }
 
 /**
@@ -193,6 +198,26 @@ export async function verifyRun(
             verifier_phase: phase,
             status: "not_applicable",
             note: `short-circuited: phase '${shortCircuitedBy}' hard-failed and this phase cannot change the aggregate outcome (四段验证模型.md 短路规则)`,
+          },
+          null,
+          2,
+        )}\n`,
+      );
+      continue;
+    }
+
+    const skippedPhase = input.skipExecutablePhases?.find(
+      (item) => item.phase === phase,
+    );
+    if (skippedPhase) {
+      await store.writeArtifact(
+        runId,
+        verificationArtifactName(`verifier-report-${phase}.json`, turn),
+        `${JSON.stringify(
+          {
+            verifier_phase: phase,
+            status: "not_applicable",
+            note: `skipped: ${skippedPhase.reason}`,
           },
           null,
           2,

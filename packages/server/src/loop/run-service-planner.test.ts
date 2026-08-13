@@ -21,7 +21,10 @@ import { RunStateStore } from "./control-plane/run-state-store.js";
 import { LoopRunService } from "./run-service.js";
 import { LoopCardStore } from "./state/loop-card-store.js";
 import { RunLedgerStore } from "./state/run-ledger-store.js";
-import type { VerifyRunResult } from "./verification/verify-run.js";
+import type {
+  VerifyRunInput,
+  VerifyRunResult,
+} from "./verification/verify-run.js";
 
 let sessionCounter = 0;
 
@@ -622,6 +625,90 @@ test("requires_human judgment does not advance to the next subtask", async () =>
       supervisor.calls.filter((c) => c.method === "resume").length,
       0,
       "the run stops at the first subtask until a human decides",
+    );
+  } finally {
+    await rm(dataDir, { recursive: true, force: true, maxRetries: 5 });
+  }
+});
+
+test("discovery subtask skips executable verification phases", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "planner-discovery-skip-"));
+  try {
+    const loopCardStore = new LoopCardStore({ dataDir });
+    await loopCardStore.initialize();
+    const runLedgerStore = new RunLedgerStore({ dataDir });
+    const runStateStore = new RunStateStore({ dataDir });
+    const controlPlane = new ControlPlane({
+      runStateStore,
+      runLedgerStore,
+    });
+
+    const plan: TaskPlan = {
+      plan_id: "plan-discovery",
+      created_at: "2026-08-13T00:00:00.000Z",
+      subtasks: [
+        {
+          id: "subtask-discovery",
+          description: "Select target",
+          success_criteria: ["target selected"],
+          target_artifacts: [],
+        },
+        {
+          id: "subtask-fix",
+          description: "Apply the fix",
+          success_criteria: ["fix applied"],
+          target_artifacts: ["plan.md"],
+        },
+      ],
+    };
+
+    let seenInput: VerifyRunInput | undefined;
+    const supervisor = new FakeSupervisor();
+    const service = new LoopRunService({
+      supervisor: supervisor as never,
+      loopCardStore,
+      runLedgerStore,
+      controlPlane,
+      planner: {
+        planTask: async () => plan,
+      } as never,
+      verifyRunFn: async (input) => {
+        seenInput ??= input;
+        return {
+          judgment: passedJudgment(),
+          refs: {
+            verification_input: "artifact://run/verification-input.json",
+            verifier_runtime: "artifact://run/verifier-report.json",
+            verifier_report: "artifact://run/verifier-reports.json",
+            judgment_report: "artifact://run/judgment-report.json",
+          },
+        } as VerifyRunResult;
+      },
+    });
+
+    const card = makeCard(plan);
+    card.loop.verification = { required: ["static", "runtime"] };
+    await loopCardStore.createLoop(card);
+
+    const run = await service.startRun(card.loop.id, "manual");
+    const runId = run.run_id;
+
+    for (let i = 0; i < 100; i++) {
+      const state = controlPlane.currentStateOf(runId);
+      if (
+        state &&
+        ["complete", "failed", "budget_limited", "needs_human"].includes(state)
+      ) {
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    assert.equal(controlPlane.currentStateOf(runId), "complete");
+    assert.ok(seenInput, "verifyRun should be called");
+    assert.deepEqual(
+      seenInput?.skipExecutablePhases?.map((item) => item.phase),
+      ["static", "runtime"],
     );
   } finally {
     await rm(dataDir, { recursive: true, force: true, maxRetries: 5 });

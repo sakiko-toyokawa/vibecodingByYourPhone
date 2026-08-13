@@ -233,6 +233,57 @@ test("短路规则: static 硬失败后 runtime 段跳过且注明原因 (四段
   });
 });
 
+test("skipExecutablePhases: non-code subtask skips static/runtime without unverified", async () => {
+  await withStore(async ({ store, workspace, runId }) => {
+    const card = makeCard(workspace);
+    card.loop.verification = {
+      required: ["static", "runtime"],
+      commands: {
+        static: ['node -e "process.exit(1)"'],
+        runtime: ['node -e "process.exit(1)"'],
+      },
+    };
+    const contract = buildIntentContract(card, { runId, source: "manual" });
+
+    const result = await verifyRun(
+      {
+        card,
+        contract,
+        runId,
+        workspacePath: workspace,
+        exitStatus: 0,
+        stdoutRef: null,
+        skipExecutablePhases: [
+          {
+            phase: "static",
+            reason: "non-code subtask, no clone materialized",
+          },
+          {
+            phase: "runtime",
+            reason: "non-code subtask, no clone materialized",
+          },
+        ],
+      },
+      { store },
+    );
+
+    assert.equal(result.reports.length, 0);
+    assert.equal(result.judgment.overall, "passed");
+    for (const phase of ["static", "runtime"] as const) {
+      const report = JSON.parse(
+        (await store.readArtifact(runId, `verifier-report-${phase}.json`)) ??
+          "",
+      );
+      assert.equal(report.status, "not_applicable");
+      assert.match(report.note, /non-code subtask/);
+    }
+    assert.equal(
+      await store.readArtifact(runId, "verifier-output-runtime-1.log"),
+      undefined,
+    );
+  });
+});
+
 test("P0: rule/structural 走策略管线; rule 無規則 inconclusive, structural 無 checker unverified", async () => {
   await withStore(async ({ store, workspace, runId }) => {
     const card = makeCard(workspace);

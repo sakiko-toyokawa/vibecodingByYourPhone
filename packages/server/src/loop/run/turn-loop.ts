@@ -55,6 +55,7 @@ import type { ProposalStore } from "../state/proposal-store.js";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
 import { runInteractionAgent } from "../verification/agent/run-interaction-agent.js";
 import { runVerifierAgent } from "../verification/agent/run-verifier-agent.js";
+import { detectProjectType } from "../verification/project-type.js";
 import { checkRequiredArtifacts } from "../verification/required-artifacts.js";
 import {
   type VerificationRefs,
@@ -647,9 +648,11 @@ export async function runTurns(
       }
 
       let diffRef: string | null = null;
-      const workspacePath = ctx.card.loop.workspace.path;
-      if (workspacePath) {
-        const diff = await captureGitDiff(workspacePath);
+      const verificationWorkspacePath =
+        ctx.workingState?.selected_subject?.clone_path ??
+        ctx.card.loop.workspace.path;
+      if (verificationWorkspacePath) {
+        const diff = await captureGitDiff(verificationWorkspacePath);
         if (diff) {
           const diffName =
             ctx.turn === 1 ? "diff.patch" : `diff-turn${ctx.turn}.patch`;
@@ -734,18 +737,43 @@ export async function runTurns(
       let verifierFailureTags: FailureTag[] = [];
       let missingFinalReport = false;
       let preVerifySnapshot: WorkspaceSnapshot | null = null;
+      let skipExecutablePhases: {
+        phase: "static" | "runtime";
+        reason: string;
+      }[] = [];
 
       const requiredPhases = ctx.card.loop.verification.required;
-      if (requiredPhases.length > 0 && ctx.contract && workspacePath) {
+      if (
+        requiredPhases.length > 0 &&
+        ctx.contract &&
+        verificationWorkspacePath
+      ) {
         const policyIntentRef = ctx.input?.policyProjection
           ? `artifact://${runId}/policy-projection.json`
           : null;
         const knownFailurePatterns = (deps.failurePatternStore?.list() ?? [])
           .filter((pattern) => pattern.status === "open")
           .map((pattern) => pattern.pattern_id);
+        const currentSubtask = ctx.taskPlan?.subtasks[ctx.currentSubtaskIndex];
+        const nonCodeSubtask =
+          currentSubtask?.target_artifacts.length === 0 &&
+          (await detectProjectType(verificationWorkspacePath)) === "unknown" &&
+          diffRef === null;
+        if (nonCodeSubtask) {
+          skipExecutablePhases = requiredPhases
+            .filter(
+              (phase): phase is "static" | "runtime" =>
+                phase === "static" || phase === "runtime",
+            )
+            .map((phase) => ({
+              phase,
+              reason: "non-code subtask, no clone materialized",
+            }));
+        }
         preVerifySnapshot =
-          ctx.card.loop.workspace.strategy === "direct" && workspacePath
-            ? await captureWorkspaceSnapshot(workspacePath)
+          ctx.card.loop.workspace.strategy === "direct" &&
+          verificationWorkspacePath
+            ? await captureWorkspaceSnapshot(verificationWorkspacePath)
             : null;
         try {
           const reviewInChain = requiredPhases.includes("review");
@@ -759,7 +787,7 @@ export async function runTurns(
               contract: ctx.contract,
               runId,
               turn: ctx.turn,
-              workspacePath,
+              workspacePath: verificationWorkspacePath,
               exitStatus: outcome.ok ? 0 : 1,
               stdoutRef: `artifact://${runId}/${stdoutName}`,
               diffRef,
@@ -768,6 +796,7 @@ export async function runTurns(
               permissionEventRefs,
               policyIntentRef,
               knownFailurePatterns,
+              skipExecutablePhases,
             },
             {
               store,
@@ -893,10 +922,11 @@ export async function runTurns(
         judgment &&
         judgmentRef &&
         preVerifySnapshot &&
-        workspacePath
+        verificationWorkspacePath
       ) {
-        const postVerifySnapshot =
-          await captureWorkspaceSnapshot(workspacePath);
+        const postVerifySnapshot = await captureWorkspaceSnapshot(
+          verificationWorkspacePath,
+        );
         const verificationPassed =
           judgment.overall === "passed" && judgment.next_action === "complete";
         if (
@@ -1053,9 +1083,9 @@ export async function runTurns(
       const outputHash = hashNormalizedOutput(
         normalizeTurnOutput(outcome.finalText || outcome.error || ""),
       );
-      const diffStat = workspacePath
+      const diffStat = verificationWorkspacePath
         ? ((await captureGitDiffStat(
-            workspacePath,
+            verificationWorkspacePath,
             ctx.workspaceEvidence?.baseSha,
           )) ?? "")
         : "";
@@ -1155,9 +1185,9 @@ export async function runTurns(
       if (deps.controlPlane && ctx.contract && shouldAdvanceSubtask) {
         finalStatus = "active";
       } else if (deps.controlPlane && ctx.contract) {
-        const diffSummary = workspacePath
+        const diffSummary = verificationWorkspacePath
           ? ((await captureGitDiffStat(
-              workspacePath,
+              verificationWorkspacePath,
               ctx.workspaceEvidence?.baseSha,
             )) ?? undefined)
           : undefined;
@@ -1274,8 +1304,8 @@ export async function runTurns(
         if (runRecord && runRecord.run_id === runId) {
           const previousCheckpoint =
             await deps.runStateStore.latestCheckpoint(loopId);
-          const workspaceSnapshot = workspacePath
-            ? await captureWorkspaceSnapshot(workspacePath)
+          const workspaceSnapshot = verificationWorkspacePath
+            ? await captureWorkspaceSnapshot(verificationWorkspacePath)
             : null;
           const dual = await writeDualTrackHandoff(
             { runLedgerStore: deps.runLedgerStore },
