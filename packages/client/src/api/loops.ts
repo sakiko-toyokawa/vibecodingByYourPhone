@@ -84,8 +84,11 @@ export interface InteractionDepsStatus {
   installCommand?: string;
 }
 
+const LOOP_LIST_LIMIT = 500;
+
 export const loopsApi = {
-  listLoops: () => fetchJSON<{ loops: StoredLoop[] }>("/loops"),
+  listLoops: (limit = LOOP_LIST_LIMIT) =>
+    fetchJSON<{ loops: StoredLoop[] }>(`/loops?limit=${limit}`),
 
   createLoop: (card: LoopCard) =>
     fetchJSON<{ loop: StoredLoop }>("/loops", {
