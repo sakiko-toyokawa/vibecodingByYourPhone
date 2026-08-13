@@ -85,7 +85,6 @@ import {
 } from "./context.js";
 import {
   buildHumanResumeContext,
-  buildNextSubtaskContext,
   buildRetryContext,
   drainPolicyEscalation,
   executeTurn,
@@ -1183,12 +1182,13 @@ export async function runTurns(
 
       // --- subtask-driven turn control ---
       const subtaskHadNoExecutableVerification =
-        skipExecutablePhases.length > 0 &&
-        requiredPhases.every(
-          (phase) =>
-            phase === "interaction" ||
-            skipExecutablePhases.some((item) => item.phase === phase),
-        );
+        requiredPhases.length === 0 ||
+        (skipExecutablePhases.length > 0 &&
+          requiredPhases.every(
+            (phase) =>
+              phase === "interaction" ||
+              skipExecutablePhases.some((item) => item.phase === phase),
+          ));
       const subtaskPassed =
         outcome.ok &&
         (judgment?.overall === "passed" || subtaskHadNoExecutableVerification);
@@ -1469,10 +1469,7 @@ export async function runTurns(
         }
         ctx.turn += 1;
         ctx.currentSubtaskIndex += 1;
-        ctx.pendingContext = buildNextSubtaskContext(
-          ctx.currentSubtaskIndex,
-          taskPlan,
-        );
+        ctx.pendingContext = null;
         if (deps.controlPlane && ctx.contract) {
           const advanced = await deps.controlPlane.advanceSubtaskTurn(
             runId,
@@ -1510,12 +1507,6 @@ export async function runTurns(
         await sleep(backoff);
         ctx.turn += 1;
         ctx.pendingContext = buildRetryContext(ctx.turn, judgment, judgmentRef);
-        if (taskPlan) {
-          ctx.pendingContext += `\n\n${buildNextSubtaskContext(
-            ctx.currentSubtaskIndex,
-            taskPlan,
-          )}`;
-        }
         const begin = await deps.controlPlane?.beginTurn(runId, ctx.turn);
         if (begin && !begin.ok) {
           blocked = true;
@@ -1855,9 +1846,7 @@ export async function continueRun(
       ctx.lastJudgment,
       ctx.lastJudgmentRef,
     );
-    ctx.pendingContext = ctx.taskPlan
-      ? `${resumeContext}\n\n${buildNextSubtaskContext(ctx.currentSubtaskIndex, ctx.taskPlan)}`
-      : resumeContext;
+    ctx.pendingContext = resumeContext;
   }
   const begin = await controlPlane.beginTurn(signal.runId, ctx.turn);
   if (!begin.ok) {
@@ -1931,12 +1920,6 @@ export async function resumeAfterRestart(
       ctx.lastJudgment,
       ctx.lastJudgmentRef,
     );
-    if (ctx.taskPlan) {
-      ctx.pendingContext += `\n\n${buildNextSubtaskContext(
-        ctx.currentSubtaskIndex,
-        ctx.taskPlan,
-      )}`;
-    }
     const begin = await controlPlane.beginTurn(ctx.active.runId, ctx.turn);
     if (!begin.ok) {
       state.suspended.set(ctx.active.runId, ctx);

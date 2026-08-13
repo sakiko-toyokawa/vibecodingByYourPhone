@@ -32,6 +32,8 @@ function testBuildsGithubPromptLoop(): void {
     maxTurns: "3",
     maxRetries: "1",
     maxTimeMinutes: "60",
+    verifyStatic: false,
+    verifyRuntime: false,
     modelProvider: "claude",
     model: "claude-sonnet-4-5",
   });
@@ -54,7 +56,7 @@ function testBuildsGithubPromptLoop(): void {
   );
   assertEqual(card.loop.policy?.profile, "github_issue_local_fix");
   assertEqual(card.loop.policy?.approval_mode, "bypass");
-  assertEqual(card.loop.stop_rules.max_turns, 5);
+  assertEqual(card.loop.stop_rules.max_turns, 3);
   const runtime = (
     card.loop as { runtime?: { provider?: string; model?: string } }
   ).runtime;
@@ -67,18 +69,22 @@ function testBuildsGithubPromptLoop(): void {
   assertDeepEqual(card.loop.verification.required, []);
 }
 
-function testGithubPromptLoopDoesNotDefaultStaticRuntime(): void {
+function testGithubPromptLoopRespectsExplicitStaticRuntime(): void {
   const card = buildLoopCard({
     ...DEFAULT_LOOP_CREATE_FORM,
     kind: "github_prompt",
-    id: "github-no-code-defaults",
+    id: "github-explicit-checks",
     task: "fix a bug",
     verifyStatic: true,
     verifyRuntime: true,
     verifyInteraction: true,
   });
 
-  assertDeepEqual(card.loop.verification.required, ["interaction"]);
+  assertDeepEqual(card.loop.verification.required, [
+    "static",
+    "runtime",
+    "interaction",
+  ]);
 }
 
 function testBuildsWorkspaceLoop(): void {
@@ -113,7 +119,7 @@ function testBuildsWorkspaceLoopWithWorktreeStrategy(): void {
 }
 
 testBuildsGithubPromptLoop();
-testGithubPromptLoopDoesNotDefaultStaticRuntime();
+testGithubPromptLoopRespectsExplicitStaticRuntime();
 testBuildsWorkspaceLoop();
 testBuildsWorkspaceLoopWithWorktreeStrategy();
 

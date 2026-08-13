@@ -714,3 +714,76 @@ test("discovery subtask skips executable verification phases", async () => {
     await rm(dataDir, { recursive: true, force: true, maxRetries: 5 });
   }
 });
+
+test("no verification phases still advances through planner subtasks", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "planner-no-verify-"));
+  try {
+    const loopCardStore = new LoopCardStore({ dataDir });
+    await loopCardStore.initialize();
+    const runLedgerStore = new RunLedgerStore({ dataDir });
+    const runStateStore = new RunStateStore({ dataDir });
+    const controlPlane = new ControlPlane({
+      runStateStore,
+      runLedgerStore,
+    });
+
+    const plan: TaskPlan = {
+      plan_id: "plan-no-verify",
+      created_at: "2026-08-13T00:00:00.000Z",
+      subtasks: [
+        {
+          id: "subtask-one",
+          description: "First subtask",
+          success_criteria: ["first done"],
+          target_artifacts: [],
+        },
+        {
+          id: "subtask-two",
+          description: "Second subtask",
+          success_criteria: ["second done"],
+          target_artifacts: [],
+        },
+      ],
+    };
+
+    const supervisor = new FakeSupervisor();
+    const service = new LoopRunService({
+      supervisor: supervisor as never,
+      loopCardStore,
+      runLedgerStore,
+      controlPlane,
+      planner: {
+        planTask: async () => plan,
+      } as never,
+    });
+
+    const card = makeCard(plan);
+    card.loop.verification = { required: [] };
+    await loopCardStore.createLoop(card);
+
+    const run = await service.startRun(card.loop.id, "manual");
+    const runId = run.run_id;
+
+    for (let i = 0; i < 100; i++) {
+      const state = controlPlane.currentStateOf(runId);
+      if (
+        state &&
+        ["complete", "failed", "budget_limited", "needs_human"].includes(state)
+      ) {
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    assert.equal(controlPlane.currentStateOf(runId), "complete");
+    const runState = await controlPlane.getRunState(card.loop.id);
+    assert.equal(runState?.turn, 2);
+    const decisions = await runLedgerStore.readDecisionEntries(runId);
+    assert.equal(
+      decisions.filter((d) => d.decision === "subtask_advance").length,
+      1,
+    );
+  } finally {
+    await rm(dataDir, { recursive: true, force: true, maxRetries: 5 });
+  }
+});

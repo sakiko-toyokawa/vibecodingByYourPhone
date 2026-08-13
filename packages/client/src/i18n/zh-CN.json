@@ -955,6 +955,7 @@
   "loopsCreateManagedWorkspaceValue": "服务器数据目录 / github-workspaces / prompt-loops / {loopId}",
   "loopsCreateTaskLabel": "任务",
   "loopsCreateTaskPlaceholder": "汇总最近变更并报告风险。",
+  "loopsCreateMultiTurnHint": "多子任务计划每轮推进一个子任务，max_turns 需 ≥ 子任务数",
   "loopsCreateGithubPromptLabel": "GitHub 修复目标",
   "loopsCreateGithubPromptPlaceholder": "去寻找 agent 项目的 bug 修复，注意查看提交 PR 规范，同时优先找比较容易合 PR 的。",
   "loopsCreateTriggerLabel": "触发方式",

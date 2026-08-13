@@ -955,6 +955,7 @@
   "loopsCreateManagedWorkspaceValue": "Server data dir / github-workspaces / prompt-loops / {loopId}",
   "loopsCreateTaskLabel": "タスク",
   "loopsCreateTaskPlaceholder": "最近の変更を要約し、リスクを報告する。",
+  "loopsCreateMultiTurnHint": "各ターンでプランナーのサブタスクを1つ進めます。max_turns はサブタスク数以上にしてください。",
   "loopsCreateGithubPromptLabel": "GitHub repair goal",
   "loopsCreateGithubPromptPlaceholder": "Find bug fixes in agent projects, read PR rules, and prefer issues likely to merge.",
   "loopsCreateTriggerLabel": "トリガー",

@@ -772,6 +772,15 @@ test("waive_phases → active and persists waived verification phases", async ()
     controlPlane.onResumeRequested((signal) => resumes.push(signal));
     await controlPlane.applyJudgment(applyInput());
 
+    await assert.rejects(
+      () =>
+        controlPlane.submitDecision("run-1", "waive_phases", undefined, [
+          "interaction",
+        ]),
+      (error: unknown) =>
+        error instanceof ControlPlaneError && error.code === "invalid_decision",
+    );
+
     const runState = await controlPlane.submitDecision(
       "run-1",
       "waive_phases",

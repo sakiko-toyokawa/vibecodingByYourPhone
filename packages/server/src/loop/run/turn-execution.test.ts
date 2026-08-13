@@ -187,6 +187,7 @@ test("buildLoopTurnStartPrompt injects one current subtask for plan turns", asyn
   );
   assert.equal(turn1.match(/Current subtask \(subtask-\d\):/g)?.length ?? 0, 1);
   assert.match(turn1, /Current subtask \(subtask-1\):/);
+  assert.doesNotMatch(turn1, /## Loop turn handoff \(fresh session\)/);
 
   const turn2 = await buildLoopTurnStartPrompt(
     makeContext({

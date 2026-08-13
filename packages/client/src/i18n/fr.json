@@ -955,6 +955,7 @@
   "loopsCreateManagedWorkspaceValue": "Server data dir / github-workspaces / prompt-loops / {loopId}",
   "loopsCreateTaskLabel": "Tâche",
   "loopsCreateTaskPlaceholder": "Résumer les changements récents et signaler les risques.",
+  "loopsCreateMultiTurnHint": "Chaque tour avance d'une sous-tâche du plan ; max_turns doit être >= nombre de sous-tâches.",
   "loopsCreateGithubPromptLabel": "GitHub repair goal",
   "loopsCreateGithubPromptPlaceholder": "Find bug fixes in agent projects, read PR rules, and prefer issues likely to merge.",
   "loopsCreateTriggerLabel": "Déclencheur",

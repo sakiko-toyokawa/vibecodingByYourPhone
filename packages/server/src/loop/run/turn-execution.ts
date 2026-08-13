@@ -375,8 +375,14 @@ export async function buildLoopTurnStartPrompt(
     return "Continue the loop task and finish with a text report.";
   }
   const base = ctx.input.prompt;
-  if (ctx.turn <= 1 && !ctx.taskPlan) {
-    return base;
+  if (ctx.turn <= 1) {
+    if (!ctx.taskPlan) {
+      return base;
+    }
+    return `${base}\n\n### Current subtask\n${buildNextSubtaskContext(
+      ctx.currentSubtaskIndex,
+      ctx.taskPlan,
+    )}`;
   }
 
   const { runId } = ctx.active;

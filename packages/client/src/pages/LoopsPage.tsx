@@ -284,6 +284,9 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
                 setCreateForm((current) => ({
                   ...current,
                   kind: githubMode ? "github_prompt" : "workspace",
+                  ...(githubMode
+                    ? { verifyStatic: false, verifyRuntime: false }
+                    : {}),
                 }));
                 setCreateOpen((open) => !open);
               }}
@@ -650,7 +653,7 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
                     />
                     {createForm.kind === "github_prompt" && (
                       <span className="[font-size:var(--font-size-xs)] text-[var(--text-muted)]">
-                        多子任務計劃每輪推進一個子任務，max_turns 需 ≥ 子任務數
+                        {t("loopsCreateMultiTurnHint")}
                       </span>
                     )}
                   </label>

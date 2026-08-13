@@ -795,6 +795,12 @@ export class ControlPlane {
           "phases are required for waive_phases",
         );
       }
+      if (!phases.every((phase) => phase === "static" || phase === "runtime")) {
+        throw new ControlPlaneError(
+          "invalid_decision",
+          "waive_phases only supports static and runtime",
+        );
+      }
       const updated = await transition(this.deps, this.state, {
         loopId,
         runId,

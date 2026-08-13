@@ -142,7 +142,7 @@ export function buildLoopCard(form: LoopCreateFormState): LoopCard {
         ...base,
         verification: {
           ...base.verification,
-          required: buildRequired(false),
+          required: buildRequired(true),
         },
         discovery: {
           source: "github_prompt",
