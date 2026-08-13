@@ -9,6 +9,7 @@ import {
   githubApi,
 } from "../api/github";
 import { type LoopRunSummary, type StoredLoop, loopsApi } from "../api/loops";
+import { GitHubRelationCard } from "../components/GitHubRelationCard";
 import { PageHeader } from "../components/PageHeader";
 import { useRemoteBasePath } from "../hooks/useRemoteBasePath";
 import { useI18n } from "../i18n";
@@ -18,6 +19,7 @@ import {
   type LoopCreateFormState,
   buildLoopCard,
 } from "../lib/loopCardBuilder";
+import { humanizeDecision, humanizeRelationState } from "../lib/loopHumanText";
 import { runStateBadgeClass } from "../lib/loopStateStyle";
 
 interface LoopListEntry {
@@ -109,6 +111,15 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
     }
   }, [mode]);
 
+  const loadRelations = useCallback(async () => {
+    try {
+      const { relations } = await githubApi.listRelations();
+      setRelations(relations);
+    } catch {
+      setRelations([]);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -121,11 +132,8 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
   }, []);
 
   useEffect(() => {
-    githubApi
-      .listRelations()
-      .then(({ relations }) => setRelations(relations))
-      .catch(() => setRelations([]));
-  }, []);
+    void loadRelations();
+  }, [loadRelations]);
 
   useEffect(() => {
     api
@@ -415,27 +423,12 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
                 ) : (
                   <div className="flex flex-col gap-2">
                     {relations.map((relation) => (
-                      <div
+                      <GitHubRelationCard
                         key={relation.relation_id}
-                        className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-4"
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
-                            {relation.subject.repository}#
-                            {relation.subject.pr_number ?? "?"}
-                          </span>
-                          <span className="rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
-                            {relation.state}
-                          </span>
-                          <span className="text-xs text-[var(--text-muted)]">
-                            feedback {relation.feedback_count} · repair{" "}
-                            {relation.repair_count}
-                          </span>
-                        </div>
-                        <div className="mt-1 font-mono text-xs text-[var(--text-dimmed)]">
-                          {relation.relation_id} · {relation.loop_id}
-                        </div>
-                      </div>
+                        relation={relation}
+                        showLoop
+                        onChanged={() => void loadRelations()}
+                      />
                     ))}
                   </div>
                 )}
@@ -473,12 +466,20 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
                     <select
                       className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--focus-border)]"
                       value={createForm.kind}
-                      onChange={(event) =>
-                        updateCreateForm(
-                          "kind",
-                          event.target.value as LoopCreateFormState["kind"],
-                        )
-                      }
+                      onChange={(event) => {
+                        const next = event.target
+                          .value as LoopCreateFormState["kind"];
+                        setCreateForm((current) =>
+                          next === "github_prompt"
+                            ? {
+                                ...current,
+                                kind: next,
+                                verifyStatic: false,
+                                verifyRuntime: false,
+                              }
+                            : { ...current, kind: next },
+                        );
+                      }}
                     >
                       {!githubMode && (
                         <option value="workspace">
@@ -647,6 +648,11 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
                           : t("loopsCreateTaskPlaceholder")
                       }
                     />
+                    {createForm.kind === "github_prompt" && (
+                      <span className="[font-size:var(--font-size-xs)] text-[var(--text-muted)]">
+                        多子任務計劃每輪推進一個子任務，max_turns 需 ≥ 子任務數
+                      </span>
+                    )}
                   </label>
 
                   <label className="flex flex-col gap-1">
@@ -689,36 +695,29 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
                     <span className="[font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
                       {t("loopsCreateVerificationLabel")}
                     </span>
-                    {createForm.kind !== "github_prompt" && (
-                      <label className="flex items-center gap-2 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
-                        <input
-                          type="checkbox"
-                          checked={createForm.verifyStatic}
-                          onChange={(event) =>
-                            updateCreateForm(
-                              "verifyStatic",
-                              event.target.checked,
-                            )
-                          }
-                        />
-                        {t("loopsCreateVerifyStatic")}
-                      </label>
-                    )}
-                    {createForm.kind !== "github_prompt" && (
-                      <label className="flex items-center gap-2 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
-                        <input
-                          type="checkbox"
-                          checked={createForm.verifyRuntime}
-                          onChange={(event) =>
-                            updateCreateForm(
-                              "verifyRuntime",
-                              event.target.checked,
-                            )
-                          }
-                        />
-                        {t("loopsCreateVerifyRuntime")}
-                      </label>
-                    )}
+                    <label className="flex items-center gap-2 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                      <input
+                        type="checkbox"
+                        checked={createForm.verifyStatic}
+                        onChange={(event) =>
+                          updateCreateForm("verifyStatic", event.target.checked)
+                        }
+                      />
+                      {t("loopsCreateVerifyStatic")}
+                    </label>
+                    <label className="flex items-center gap-2 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                      <input
+                        type="checkbox"
+                        checked={createForm.verifyRuntime}
+                        onChange={(event) =>
+                          updateCreateForm(
+                            "verifyRuntime",
+                            event.target.checked,
+                          )
+                        }
+                      />
+                      {t("loopsCreateVerifyRuntime")}
+                    </label>
                     <label className="flex items-center gap-2 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
                       <input
                         type="checkbox"
@@ -894,7 +893,7 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
                             <span
                               className={`shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium ${runStateBadgeClass(lastRun.state)}`}
                             >
-                              {lastRun.state}
+                              {humanizeDecision(lastRun.state)}
                             </span>
                           )}
                         </div>
@@ -917,7 +916,7 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
                           <div className="mt-1 [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
                             {relation.subject.repository}#
                             {relation.subject.pr_number ?? "?"} ·{" "}
-                            {relation.state} · feedback{" "}
+                            {humanizeRelationState(relation.state)} · feedback{" "}
                             {relation.feedback_count}
                           </div>
                         )}

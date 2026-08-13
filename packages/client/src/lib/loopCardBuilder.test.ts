@@ -54,6 +54,7 @@ function testBuildsGithubPromptLoop(): void {
   );
   assertEqual(card.loop.policy?.profile, "github_issue_local_fix");
   assertEqual(card.loop.policy?.approval_mode, "bypass");
+  assertEqual(card.loop.stop_rules.max_turns, 5);
   const runtime = (
     card.loop as { runtime?: { provider?: string; model?: string } }
   ).runtime;
@@ -93,6 +94,7 @@ function testBuildsWorkspaceLoop(): void {
   assertEqual(card.loop.workspace.path, "E:/projects/my-app");
   assertEqual(card.loop.workspace.strategy, "direct");
   assertEqual(card.loop.policy, undefined);
+  assertEqual(card.loop.stop_rules.max_turns, 5);
 }
 
 function testBuildsWorkspaceLoopWithWorktreeStrategy(): void {

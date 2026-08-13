@@ -48,6 +48,7 @@ import {
   extractPrPublishPayload,
   readGitIdentity,
 } from "../relation/pr-publish.js";
+import type { RelationStore } from "../relation/relation-store.js";
 import type { FailurePatternStore } from "../state/failure-pattern-store.js";
 import { writeDualTrackHandoff } from "../state/handoff.js";
 import type { LoopCardStore } from "../state/loop-card-store.js";
@@ -1306,6 +1307,19 @@ export async function runTurns(
         finalStatus = "failed";
       }
 
+      if (
+        !ctx.relation &&
+        deps.relationStore &&
+        ctx.card.loop.discovery?.source === "github_prompt"
+      ) {
+        await registerGithubPrPublish(
+          loopId,
+          runId,
+          outcome.finalText,
+          deps.relationStore,
+        );
+      }
+
       const handoffRef = await writeTurnHandoff(
         { runLedgerStore: deps.runLedgerStore },
         ctx,
@@ -1522,68 +1536,6 @@ export async function runTurns(
         return;
       }
 
-      // complete / failed: terminal.
-      if (
-        status === "complete" &&
-        !ctx.relation &&
-        deps.relationStore &&
-        ctx.card.loop.discovery?.source === "github_prompt"
-      ) {
-        const pendingPublish = extractPrPublishPayload(outcome.finalText);
-        if (pendingPublish) {
-          const now = new Date().toISOString();
-          const gitIdentity = await readGitIdentity(pendingPublish.cwd);
-          const existing = deps.relationStore
-            .list()
-            .find(
-              (relation) =>
-                relation.loop_id === loopId &&
-                relation.subject.type === "github_pr" &&
-                relation.subject.repository === pendingPublish.repository &&
-                relation.subject.branch === pendingPublish.branch,
-            );
-          if (!existing || existing.state === "pr_pending_approval") {
-            const relationId =
-              existing?.relation_id ?? `rel-${loopId}-${runId}`;
-            const subject =
-              existing?.subject.type === "github_pr"
-                ? {
-                    ...existing.subject,
-                    repository: pendingPublish.repository,
-                    branch: pendingPublish.branch,
-                  }
-                : {
-                    type: "github_pr" as const,
-                    repository: pendingPublish.repository,
-                    branch: pendingPublish.branch,
-                  };
-            await deps.relationStore.upsert({
-              ...(existing ?? {}),
-              relation_id: relationId,
-              loop_id: loopId,
-              subject,
-              state: "pr_pending_approval",
-              last_processed: existing?.last_processed ?? {},
-              feedback_count: existing?.feedback_count ?? 0,
-              repair_count: existing?.repair_count ?? 0,
-              pending_publish: {
-                ...pendingPublish,
-                ...(gitIdentity
-                  ? {
-                      author_name: gitIdentity.name,
-                      author_email: gitIdentity.email,
-                      identity_source: "git_config",
-                    }
-                  : {}),
-                run_id: runId,
-                created_at: now,
-              },
-              created_at: existing?.created_at ?? now,
-              updated_at: now,
-            });
-          }
-        }
-      }
       if (ctx.relation && deps.relationStore) {
         const current = deps.relationStore.findById(ctx.relation.relation_id);
         if (current) {
@@ -1678,6 +1630,69 @@ async function registerMaintenanceTarget(
       ...request.context_payload,
       registered_by_run: runId,
     },
+    updated_at: now,
+  });
+}
+
+async function registerGithubPrPublish(
+  loopId: string,
+  runId: string,
+  finalText: string,
+  relationStore: RelationStore,
+): Promise<void> {
+  const pendingPublish = extractPrPublishPayload(finalText);
+  if (!pendingPublish) {
+    return;
+  }
+  const now = new Date().toISOString();
+  const gitIdentity = await readGitIdentity(pendingPublish.cwd);
+  const existing = relationStore
+    .list()
+    .find(
+      (relation) =>
+        relation.loop_id === loopId &&
+        relation.subject.type === "github_pr" &&
+        relation.subject.repository === pendingPublish.repository &&
+        relation.subject.branch === pendingPublish.branch,
+    );
+  if (existing && existing.state !== "pr_pending_approval") {
+    return;
+  }
+  const relationId = existing?.relation_id ?? `rel-${loopId}-${runId}`;
+  const subject =
+    existing?.subject.type === "github_pr"
+      ? {
+          ...existing.subject,
+          repository: pendingPublish.repository,
+          branch: pendingPublish.branch,
+        }
+      : {
+          type: "github_pr" as const,
+          repository: pendingPublish.repository,
+          branch: pendingPublish.branch,
+        };
+  await relationStore.upsert({
+    ...(existing ?? {}),
+    relation_id: relationId,
+    loop_id: loopId,
+    subject,
+    state: "pr_pending_approval",
+    last_processed: existing?.last_processed ?? {},
+    feedback_count: existing?.feedback_count ?? 0,
+    repair_count: existing?.repair_count ?? 0,
+    pending_publish: {
+      ...pendingPublish,
+      ...(gitIdentity
+        ? {
+            author_name: gitIdentity.name,
+            author_email: gitIdentity.email,
+            identity_source: "git_config",
+          }
+        : {}),
+      run_id: runId,
+      created_at: now,
+    },
+    created_at: existing?.created_at ?? now,
     updated_at: now,
   });
 }

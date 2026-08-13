@@ -41,7 +41,7 @@ export const DEFAULT_LOOP_CREATE_FORM: LoopCreateFormState = {
   verifyInteraction: false,
   interactionUrl: "http://localhost:3400",
   interactionStartCommand: "",
-  maxTurns: "1",
+  maxTurns: "5",
   maxRetries: "0",
   maxTimeMinutes: "30",
   modelProvider: "",
