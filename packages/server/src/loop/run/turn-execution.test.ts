@@ -4,6 +4,7 @@ import type { IntentContract, LoopCard } from "@yep-anywhere/shared";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
 import {
   buildLoopTurnStartPrompt,
+  drainPolicyEscalation,
   resolveDirectWriteAllowlist,
 } from "./turn-execution.js";
 import type { RunExecutionContext } from "./types.js";
@@ -65,6 +66,7 @@ function makeContext(
     policyEscalations: [],
     permissionEvents: [],
     taskPlan: overrides.taskPlan ?? null,
+    workingState: null,
     currentSubtaskIndex: overrides.currentSubtaskIndex ?? 0,
     recentTurnOutputHashes: [],
     recentTurnDiffStatHashes: [],
@@ -195,6 +197,82 @@ test("buildLoopTurnStartPrompt injects one current subtask for plan turns", asyn
   );
   assert.equal(turn2.match(/Current subtask \(subtask-\d\):/g)?.length ?? 0, 1);
   assert.match(turn2, /Current subtask \(subtask-2\):/);
+});
+
+test("buildLoopTurnStartPrompt injects authoritative working state", async () => {
+  const store = makeStore({
+    "working-state.json": JSON.stringify({
+      schema_version: 1,
+      run_id: "run-1",
+      updated_at: "2026-08-13T00:00:00.000Z",
+      turn: 1,
+      selected_subject: {
+        repository: "owner/repo",
+        clone_path: "E:/data/repo",
+      },
+      subtask_status: [],
+    }),
+  });
+  const prompt = await buildLoopTurnStartPrompt(makeContext(), store);
+  assert.match(prompt, /### Authoritative working state \(machine\)/);
+  assert.match(prompt, /"repository":"owner\/repo"/);
+  assert.match(
+    prompt,
+    /working_state: artifact:\/\/run-1\/working-state\.json/,
+  );
+});
+
+test("github prompt with selected subject forbids re-searching issues", async () => {
+  const ctx = makeContext();
+  ctx.card = {
+    loop: {
+      id: "github-loop",
+      discovery: { source: "github_prompt" },
+      workspace: { strategy: "direct", path: "/tmp/github" },
+    },
+  } as unknown as RunExecutionContext["card"];
+  const store = makeStore({
+    "working-state.json": JSON.stringify({
+      schema_version: 1,
+      run_id: "run-1",
+      updated_at: "2026-08-13T00:00:00.000Z",
+      turn: 1,
+      selected_subject: {
+        repository: "owner/repo",
+        clone_path: "E:/data/repo",
+      },
+      subtask_status: [],
+    }),
+  });
+  const prompt = await buildLoopTurnStartPrompt(ctx, store);
+  assert.match(prompt, /禁止重新搜尋新 issue/);
+  assert.match(prompt, /從 clone_path 繼續/);
+});
+
+test("drainPolicyEscalation carries release only when exact blocked call matches", () => {
+  const ctx = makeContext();
+  ctx.policyEscalations = [
+    {
+      action: "close",
+      reason: "hard gate 'close' hit",
+      summary: "gh issue close 12",
+      toolName: "Bash",
+      input: { command: "gh issue close 12 --repo owner/repo" },
+      policyRef: "policy://loop_bypass",
+    },
+  ];
+
+  const matching = {
+    tool: "Bash",
+    input: { command: "gh issue close 12 --repo owner/repo" },
+  };
+  assert.deepEqual(drainPolicyEscalation(ctx, matching)?.toolCall, matching);
+
+  const modified = {
+    tool: "Bash",
+    input: { command: "gh issue close 13 --repo owner/repo" },
+  };
+  assert.equal(drainPolicyEscalation(ctx, modified)?.toolCall, undefined);
 });
 
 test("resolveDirectWriteAllowlist: GitHub prompt loop owns the whole managed workspace", () => {

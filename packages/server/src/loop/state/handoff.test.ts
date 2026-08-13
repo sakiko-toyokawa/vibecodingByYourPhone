@@ -100,6 +100,7 @@ function makeCtx(): RunExecutionContext {
     memoryPacketJson: null,
     workspaceEvidence: null,
     taskPlan: null,
+    workingState: null,
     currentSubtaskIndex: 0,
     recentTurnOutputHashes: [],
     recentTurnDiffStatHashes: [],
@@ -155,7 +156,39 @@ test("dual-track handoff writes AU2 eight sections and machine state", async () 
     const machine = MachineStateSchema.parse(JSON.parse(machineJson));
     assert.equal(machine.record.run_id, "run-1");
     assert.equal(machine.checkpoint_event_id, "checkpoint-1");
+    assert.equal(machine.working_state_ref, null);
     assert.equal(refs.humanReportRef, "artifact://run-1/human-report.md");
     assert.equal(refs.machineStateRef, "artifact://run-1/machine-state.json");
+  });
+});
+
+test("dual-track handoff references working-state.json when present", async () => {
+  await withTempDir(async (dataDir) => {
+    const store = new RunLedgerStore({ dataDir });
+    const ctx = makeCtx();
+    ctx.workingState = {
+      schema_version: 1,
+      run_id: "run-1",
+      updated_at: "2026-08-13T00:00:00.000Z",
+      turn: 2,
+      selected_subject: {
+        repository: "owner/repo",
+        clone_path: "C:/data/repo",
+      },
+      subtask_status: [],
+    };
+    await writeDualTrackHandoff({ runLedgerStore: store }, ctx, {
+      runStateRecord: makeRunState(),
+      checkpointEventId: null,
+      workspaceSnapshot: null,
+      executionError: null,
+    });
+    const machineJson = await store.readArtifact("run-1", "machine-state.json");
+    assert.ok(machineJson);
+    const machine = MachineStateSchema.parse(JSON.parse(machineJson));
+    assert.equal(
+      machine.working_state_ref,
+      "artifact://run-1/working-state.json",
+    );
   });
 });

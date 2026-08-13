@@ -7,16 +7,20 @@
 
 import type {
   CollectorReport,
+  HumanReason,
   IntentContract,
   JudgmentReport,
   LoopCard,
+  PendingToolCall,
   RunLedgerEntry,
   RunState,
+  RunWorkingState,
   TaskPlan,
 } from "@yep-anywhere/shared";
 import type { AdapterError } from "../../sdk/adapter-error.js";
 import type { RuntimeInput } from "../assembly/runtime-input.js";
 import type { ContractSource } from "../contract/intent-contract.js";
+import type { MaintenanceTarget } from "../maintenance/types.js";
 import type {
   PermissionEvent,
   PolicyEscalation,
@@ -37,6 +41,7 @@ export interface ActiveRun {
   source: ContractSource;
   createdAt: string;
   relationId?: string;
+  maintenanceId?: string;
 }
 
 export interface ExecutionOutcome {
@@ -97,6 +102,8 @@ export interface RunExecutionContext {
    *  turn (02 §5 permission_event_refs 的证据载体). Reset at each turn
    *  start; persisted as the turn's permission-events artifact. */
   permissionEvents: PermissionEvent[];
+  /** One-shot tool calls approved by a human for the next turn only. */
+  approvedToolCalls?: PendingToolCall[];
   /** Set when contract/assembly setup failed before turn 1 could start. */
   setupError?: Error;
   /** 02 §3 memory packet 的 artifact 内容 (turn 1 落盘; 无 open 模式时
@@ -112,6 +119,8 @@ export interface RunExecutionContext {
   } | null;
   /** Planner 生成的多轮任务分解计划（无 plan 时为 null）。 */
   taskPlan: TaskPlan | null;
+  /** 最新一轮 executor 输出的 run 级领域工作记忆；无则 null。 */
+  workingState: RunWorkingState | null;
   /** 当前执行的子任务索引（0-based）。 */
   currentSubtaskIndex: number;
   /** Hashes of the most recent turn outputs, used for stagnation detection. */
@@ -124,6 +133,9 @@ export interface RunExecutionContext {
   /** Durable external relationship this run is maintaining, when started
    *  from a relation-aware trigger. */
   relation?: RelationRecord | null;
+  /** Generic maintenance target this run is maintaining, when started from
+   *  an external event. */
+  maintenanceTarget?: MaintenanceTarget | null;
 }
 
 /** Public projection of a run for routes; kept here to share with ledger-summary. */
@@ -144,7 +156,11 @@ export interface LedgerSummary {
   max_turns: number | null;
   max_retries: number | null;
   /** 最新一条决策（decision kind + reason），解释 run 为何处于当前状态 */
-  last_decision: { decision: string; reason: string } | null;
+  last_decision: {
+    decision: string;
+    reason: string;
+    human_reasons?: HumanReason[];
+  } | null;
   verifier_report_refs: string[];
   judgment_report_ref: string | null;
   collector_report_ref: string | null;

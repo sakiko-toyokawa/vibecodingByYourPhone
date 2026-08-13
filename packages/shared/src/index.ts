@@ -490,6 +490,8 @@ export {
   RunStateSchema,
 } from "./loop-schema/run-ledger.js";
 export {
+  type HumanReason,
+  HumanReasonSchema,
   type JudgmentNextAction,
   JudgmentNextActionSchema,
   type JudgmentReport,
@@ -532,6 +534,8 @@ export {
   LoopActionRequestSchema,
 } from "./loop-schema/decision.js";
 export {
+  type PendingToolCall,
+  PendingToolCallSchema,
   type PendingApproval,
   PendingApprovalSchema,
   type RunStateSnapshotEvent,
@@ -547,6 +551,14 @@ export {
   type RunStateRecord,
   RunStateRecordSchema,
 } from "./loop-schema/run-state.js";
+export {
+  type SelectedSubject,
+  SelectedSubjectSchema,
+  type SubtaskStatus,
+  SubtaskStatusSchema,
+  type RunWorkingState,
+  RunWorkingStateSchema,
+} from "./loop-schema/working-state.js";
 export {
   type HumanHandoffDecision,
   HumanHandoffDecisionSchema,

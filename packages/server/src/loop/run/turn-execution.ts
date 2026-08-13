@@ -13,6 +13,7 @@ import {
   type JudgmentReport,
   type LoopCard,
   MachineStateSchema,
+  RunWorkingStateSchema,
   type TaskPlan,
 } from "@yep-anywhere/shared";
 import type { ProviderName } from "@yep-anywhere/shared";
@@ -27,6 +28,10 @@ import {
   type PermissionEvent,
   createLoopToolApprovalHook,
 } from "../policy/approval-hook.js";
+import {
+  type ApprovedToolCall,
+  isSameToolCall,
+} from "../policy/restriction-release.js";
 import { runPolicyReviewAgent } from "../policy/reviewer.js";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
 import type { ExecutionOutcome, RunExecutionContext } from "./types.js";
@@ -174,11 +179,27 @@ export function buildNextSubtaskContext(
  */
 export function drainPolicyEscalation(
   ctx: RunExecutionContext,
-): { action: string; reason: string; policyRef: string } | undefined {
+  releaseRequest?: ApprovedToolCall | null,
+):
+  | {
+      action: string;
+      reason: string;
+      policyRef: string;
+      toolCall?: ApprovedToolCall;
+    }
+  | undefined {
   const [first, ...rest] = ctx.policyEscalations;
   if (!first) {
     return undefined;
   }
+  const toolCall =
+    releaseRequest &&
+    isSameToolCall(releaseRequest, {
+      tool: first.toolName,
+      input: first.input,
+    })
+      ? releaseRequest
+      : undefined;
   return {
     action: first.action,
     reason:
@@ -186,6 +207,7 @@ export function drainPolicyEscalation(
         ? first.reason
         : `${first.reason} (+${rest.length} more policy block(s) this turn, see policy_blocked decision entries)`,
     policyRef: first.policyRef,
+    ...(toolCall ? { toolCall } : {}),
   };
 }
 
@@ -215,6 +237,15 @@ export function buildHumanResumeContext(
         "This loop run's budget was supplemented by a human; continue the task.",
       );
       break;
+  }
+  if (signal.approvedToolCall) {
+    lines.push(
+      "",
+      "The human approved one exact tool override for this next turn.",
+      `- tool: ${signal.approvedToolCall.tool}`,
+      `- call: ${signal.approvedToolCall.summary ?? JSON.stringify(signal.approvedToolCall.input)}`,
+      "- You MAY execute this exact call once. Do not execute variants or retry it more than once.",
+    );
   }
   if (signal.feedback?.trim()) {
     lines.push("", `Human feedback: ${signal.feedback.trim()}`);
@@ -299,6 +330,7 @@ function machineStateProjection(raw: string | undefined): string {
       `artifact_manifest=${machine.artifact_manifest_ref}`,
       `checkpoint_event_id=${machine.checkpoint_event_id ?? "null"}`,
       `workspace_snapshot=${JSON.stringify(machine.workspace_snapshot ?? null)}`,
+      `working_state_ref=${machine.working_state_ref ?? "null"}`,
       `budget=${JSON.stringify(machine.record.budget ?? null)}`,
     ].join("\n");
   } catch {
@@ -339,6 +371,7 @@ export async function buildLoopTurnStartPrompt(
   const previousTurn = Math.max(1, ctx.turn - 1);
   const humanReportName = "human-report.md";
   const machineStateName = "machine-state.json";
+  const workingStateName = "working-state.json";
   const turnHandoffName = turnSuffixedArtifactName(
     "turn-handoff.json",
     previousTurn,
@@ -352,13 +385,19 @@ export async function buildLoopTurnStartPrompt(
     previousTurn,
   );
 
-  const [humanReport, machineState, turnHandoff, executorSummary] =
-    await Promise.all([
-      store.readArtifact(runId, humanReportName),
-      store.readArtifact(runId, machineStateName),
-      store.readArtifact(runId, turnHandoffName),
-      store.readArtifact(runId, executorSummaryName),
-    ]);
+  const [
+    humanReport,
+    machineState,
+    workingState,
+    turnHandoff,
+    executorSummary,
+  ] = await Promise.all([
+    store.readArtifact(runId, humanReportName),
+    store.readArtifact(runId, machineStateName),
+    store.readArtifact(runId, workingStateName),
+    store.readArtifact(runId, turnHandoffName),
+    store.readArtifact(runId, executorSummaryName),
+  ]);
   const handoffRefs = turnHandoffRefs(turnHandoff);
   const judgmentSummary = previousJudgmentSummary(ctx, handoffRefs);
 
@@ -370,6 +409,7 @@ export async function buildLoopTurnStartPrompt(
     `- handoff_available: ${humanReport && machineState ? "true" : "false"}`,
     `- human_report: ${artifactRef(runId, humanReportName)}`,
     `- machine_state: ${artifactRef(runId, machineStateName)}`,
+    `- working_state: ${artifactRef(runId, workingStateName)}`,
     `- turn_handoff: ${artifactRef(runId, turnHandoffName)}`,
     `- previous_judgment: ${judgmentSummary}`,
     `- previous_executor_summary: ${artifactRef(runId, executorSummaryName)}`,
@@ -380,6 +420,14 @@ export async function buildLoopTurnStartPrompt(
     "",
     "### Machine state projection",
     machineStateProjection(machineState),
+    "",
+    ...(workingState
+      ? [
+          "### Authoritative working state (machine)",
+          workingState,
+          ...(githubWorkingStateInstruction(ctx.card, workingState) ?? []),
+        ]
+      : []),
     "",
     "### Previous executor summary",
     executorSummary ?? "(previous executor summary not available)",
@@ -398,6 +446,28 @@ export async function buildLoopTurnStartPrompt(
   }
 
   return `${base}\n\n${lines.join("\n")}`;
+}
+
+function githubWorkingStateInstruction(
+  card: LoopCard,
+  workingStateJson: string,
+): string[] | null {
+  if (!card.loop || !isGitHubManagedLoop(card)) {
+    return null;
+  }
+  try {
+    const parsed = RunWorkingStateSchema.safeParse(
+      JSON.parse(workingStateJson),
+    );
+    if (!parsed.success || !parsed.data.selected_subject) {
+      return null;
+    }
+    return [
+      "- working state 已有 selected_subject 時，禁止重新搜尋新 issue；從 clone_path 繼續，或報告為什麼無法繼續。",
+    ];
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -446,8 +516,10 @@ export async function executeTurn(
         store: deps.runLedgerStore,
         escalations: ctx.policyEscalations,
         permissionEvents: ctx.permissionEvents,
+        approvedToolCalls: ctx.approvedToolCalls,
         directWriteAllowlist,
         relation: ctx.relation,
+        maintenanceTarget: ctx.maintenanceTarget,
         contract: ctx.contract,
         policyReviewer: (request) =>
           runPolicyReviewAgent(

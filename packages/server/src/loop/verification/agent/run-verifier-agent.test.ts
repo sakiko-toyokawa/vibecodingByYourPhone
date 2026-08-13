@@ -40,6 +40,7 @@ function makeCtx(workspacePath: string, runId: string): RunExecutionContext {
     policyEscalations: [],
     permissionEvents: [],
     taskPlan: null,
+    workingState: null,
     currentSubtaskIndex: 0,
     recentTurnOutputHashes: [],
     recentTurnDiffStatHashes: [],
@@ -209,6 +210,70 @@ test("runVerifierAgent: invalid JSON 會帶 validation error 重新生成一次"
     assert.equal(prompts.length, 2);
     assert.ok(prompts[1]?.includes("Previous output was rejected"));
     assert.ok(prompts[1]?.includes("no JSON object found"));
+    assert.ok(
+      (await store.readArtifact(runId, "verifier-agent-output-retry1.log")) !==
+        undefined,
+    );
+  } finally {
+    await rm(dataDir, { recursive: true, force: true, maxRetries: 5 });
+    await rm(workspace, { recursive: true, force: true, maxRetries: 5 });
+  }
+});
+
+test("runVerifierAgent: transient reconnect error still gets one corrective retry", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-agent-reconnect-"));
+  const workspace = await mkdtemp(join(tmpdir(), "yep-agent-reconnect-ws-"));
+  try {
+    const store = new RunLedgerStore({ dataDir });
+    const runId = "run-agent-reconnect-1";
+    const ctx = makeCtx(workspace, runId);
+    ctx.input = {
+      cwd: workspace,
+      permissions: {},
+      env: {},
+      adapterPolicy: undefined,
+      nativeInvocation: { timeout_seconds: null },
+    } as never;
+    let attempts = 0;
+    const report = await runVerifierAgent(
+      {
+        supervisor: {
+          startSession: async () => ({ fake: true }),
+        } as never,
+        runLedgerStore: store,
+        watchProcess: async () => {
+          attempts += 1;
+          if (attempts === 1) {
+            return { ok: false, finalText: "", error: "Reconnecting... 1/5" };
+          }
+          return {
+            ok: true,
+            finalText: JSON.stringify({
+              status: "passed",
+              recommendation: "stop",
+              confidence: 0.9,
+            }),
+          };
+        },
+      },
+      ctx,
+      {
+        contract: ctx.contract as never,
+        runId,
+        turn: 1,
+        workspacePath: workspace,
+        priorReports: [],
+        evidenceRefs: {
+          diff: null,
+          stdout: null,
+          runtime_events: null,
+          executor_summary: null,
+        },
+      },
+    );
+    assert.equal(attempts, 2);
+    assert.equal(report.status, "passed");
+    assert.equal(report.recommendation, "stop");
     assert.ok(
       (await store.readArtifact(runId, "verifier-agent-output-retry1.log")) !==
         undefined,

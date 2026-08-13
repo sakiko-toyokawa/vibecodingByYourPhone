@@ -250,6 +250,9 @@ export async function writeDualTrackHandoff(
     checkpoint_event_id: options.checkpointEventId,
     artifact_manifest_ref: `artifact://${runId}/manifest.jsonl`,
     workspace_snapshot: options.workspaceSnapshot,
+    working_state_ref: ctx.workingState
+      ? `artifact://${runId}/working-state.json`
+      : null,
     created_at: new Date().toISOString(),
   };
   const machineState = MachineStateSchema.parse({

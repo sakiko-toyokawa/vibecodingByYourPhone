@@ -10,12 +10,16 @@ import {
   type JudgmentReport,
   type LoopCard,
   type RunStateRecord,
+  type RunWorkingState,
+  RunWorkingStateSchema,
 } from "@yep-anywhere/shared";
 import { assembleRuntimeInput } from "../assembly/runtime-input.js";
 import { buildIntentContract } from "../contract/intent-contract.js";
 import type { ResumeSignal } from "../control-plane/control-plane.js";
 import type { ControlPlane } from "../control-plane/control-plane.js";
 import type { RunStateStore } from "../control-plane/run-state-store.js";
+import type { MaintenanceTargetStore } from "../maintenance/maintenance-target-store.js";
+import type { MaintenanceTarget } from "../maintenance/types.js";
 import type {
   RelationRecord,
   RelationStore,
@@ -47,6 +51,7 @@ export interface RunContextDeps {
   githubToolProvisioner?: GithubToolProvisioner;
   dataDir?: string;
   relationStore?: RelationStore;
+  maintenanceTargetStore?: MaintenanceTargetStore;
 }
 
 /**
@@ -179,6 +184,27 @@ export async function rebuildContext(
     if (relation) {
       runtimeContext.relation = relation;
     }
+    const maintenanceJson = await store
+      .readArtifact(signal.runId, "maintenance-target.json")
+      .catch(() => undefined);
+    const maintenanceTarget = maintenanceJson
+      ? (JSON.parse(maintenanceJson) as MaintenanceTarget)
+      : null;
+    if (maintenanceTarget) {
+      runtimeContext.maintenanceTarget = maintenanceTarget;
+    }
+    const workingStateJson = await store
+      .readArtifact(signal.runId, "working-state.json")
+      .catch(() => undefined);
+    let workingState: RunWorkingState | null = null;
+    if (workingStateJson) {
+      const parsed = RunWorkingStateSchema.safeParse(
+        JSON.parse(workingStateJson),
+      );
+      if (parsed.success) {
+        workingState = parsed.data;
+      }
+    }
     const memoryPacket = buildMemoryPacket(
       executableCard,
       deps.failurePatternStore,
@@ -264,13 +290,16 @@ export async function rebuildContext(
       pendingContext: null,
       policyEscalations: [],
       permissionEvents: [],
+      approvedToolCalls: [],
       memoryPacketJson,
       taskPlan,
+      workingState,
       currentSubtaskIndex,
       recentTurnOutputHashes: [],
       recentTurnDiffStatHashes: [],
       recentBlockerFingerprints: [],
       relation,
+      maintenanceTarget,
     };
   } catch (error) {
     console.error(

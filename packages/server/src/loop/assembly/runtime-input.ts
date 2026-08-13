@@ -45,10 +45,18 @@ import {
   type PolicyProfile,
   type PolicyProjection,
   type ProviderName,
+  type RunWorkingState,
+  RunWorkingStateSchema,
   type SubTask,
   type TaskPlan,
 } from "@yep-anywhere/shared";
+import type { MaintenanceTarget } from "../maintenance/types.js";
 import { resolvePolicyProfile } from "../policy/profiles.js";
+import {
+  RESTRICTION_RELEASE_BEGIN,
+  RESTRICTION_RELEASE_END,
+} from "../policy/restriction-release.js";
+import { PR_PUBLISH_BEGIN, PR_PUBLISH_END } from "../relation/pr-publish.js";
 import type { RelationRecord } from "../relation/relation-store.js";
 import { describeAdapter } from "./adapter-info.js";
 import { resolveAdapterPolicy } from "./adapter-policy.js";
@@ -66,6 +74,8 @@ import {
  */
 export const EXECUTOR_SUMMARY_BEGIN = "<<<EXECUTOR-SUMMARY>>>";
 export const EXECUTOR_SUMMARY_END = "<<<END-EXECUTOR-SUMMARY>>>";
+export const LOOP_STATE_BEGIN = "<<<LOOP-STATE>>>";
+export const LOOP_STATE_END = "<<<END-LOOP-STATE>>>";
 
 /**
  * Extract the structured executor self-summary from a turn's final text.
@@ -82,6 +92,32 @@ export function extractExecutorSummary(finalText: string): string | null {
     .slice(start + EXECUTOR_SUMMARY_BEGIN.length, end)
     .trim();
   return summary.length > 0 ? summary : null;
+}
+
+/**
+ * Extract run-level structured working state from a turn's final text.
+ * Returns null on missing/invalid blocks. This channel is fail-open: a
+ * missing block must not affect judgment or retry behavior.
+ */
+export function extractLoopState(finalText: string): RunWorkingState | null {
+  const start = finalText.indexOf(LOOP_STATE_BEGIN);
+  const end = finalText.indexOf(
+    LOOP_STATE_END,
+    start === -1 ? 0 : start + LOOP_STATE_BEGIN.length,
+  );
+  if (start === -1 || end === -1 || end <= start) {
+    return null;
+  }
+  const raw = finalText.slice(start + LOOP_STATE_BEGIN.length, end).trim();
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = RunWorkingStateSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface RuntimeInput {
@@ -190,6 +226,8 @@ export interface RuntimeAssemblyContext {
   budgetRemaining?: BudgetLimits;
   /** Durable external relationship this run is maintaining. */
   relation?: RelationRecord;
+  /** Generic external-driven maintenance target this run is serving. */
+  maintenanceTarget?: MaintenanceTarget | null;
 }
 
 /** File-mutating tools denied outright in legacy read-only runs. */
@@ -210,6 +248,7 @@ function policyPromptLines(profile: PolicyProfile): string[] {
     "策略规则（由运行时强制执行；违规将被拒绝）：",
     "- 本地、可逆的工作空间内操作 —— 编辑工作区文件、运行测试/构建/lint —— 自动通过，且每次自动通过都会被审计。",
     "- 硬闸门动作（merge、deploy、删除外部资源、publish、bill、notify、close）会被拦截并升级为人工复核。不要尝试执行；请在报告中记录。",
+    `- 如果某个被拦截的硬闸门动作确实必要，请勿重试；在最终报告中输出 ${RESTRICTION_RELEASE_BEGIN} JSON（包含 tool、input、reason）${RESTRICTION_RELEASE_END}。人类批准后，下一轮只能执行完全相同的 tool call 一次。`,
     "- 高风险或超出工作区的动作会被拒绝或升级。请始终待在工作区内。",
     "- 不要调用 ExitPlanMode 或 AskUserQuestion —— 本轮无人值守；以纯文本报告结束任务。",
   ];
@@ -235,10 +274,24 @@ function githubPromptLines(github: RuntimeAssemblyContext["github"]): string[] {
     "- 每次最多选择 1 个 issue。",
     "- 优先选择容易合并的 issue：维护者近期活跃、复现步骤清晰、带有 bug/help wanted/good first issue 标签、影响面小、有可见的贡献或 PR 规范，并且你能在本地运行测试。",
     "- 编辑前阅读 issue、仓库 README、贡献指南以及 PR 规范（如果有的话）。",
+    "- 选定 issue 前，先检查 open PR、remote branches 与 issue comments，确认没有同范围的已有修复；若已存在重复 PR，改选其他 issue。",
     "- 将当前工作目录视为服务端管理的主工作区；把选中的仓库克隆到它的子目录中。",
     "- 在工作区内克隆选中仓库，创建分支，做出最小合理修复，运行相关检查，并创建本地 git 提交。",
+    "- 提交时必须使用 clone 内已配置的 verified git identity；不要用 `-c user.name` / `-c user.email` 或 `git config` 覆盖，也不要在 PR-PUBLISH 中填写 author_name/author_email。",
     "- 不要 fork、push、创建 pull request、评论、关闭 issue、release、deploy 或删除外部资源。",
-    "- 结束时提供：选中的仓库和 issue URL、分支、本地提交哈希、验证命令与结果、残留风险，以及 PR 标题和正文草稿。",
+    "- 结束时提供：选中的仓库和 issue URL、分支、本地提交哈希、验证命令与结果、重複 PR 检查结果、残留风险，以及 PR 标题和正文草稿。",
+    "- 如果已完成本地修复并提交，必须在报告末尾输出 PR 发布交接块，供人工批准后由 server 发布：",
+    PR_PUBLISH_BEGIN,
+    '{ "repository": "<owner/repo>", "branch": "<local branch>", "title": "<PR title>", "body": "<PR body>", "cwd": "<absolute clone repo path>" }',
+    PR_PUBLISH_END,
+    "- cwd 必须是实际 clone 出来、包含本地提交的仓库绝对路径；不要使用 managed workspace 根目录。",
+    "- 输出 PR-PUBLISH 前，再次检查 open PR、remote branches 与 issue comments；若已出现同范围重复 PR，不要输出 PR-PUBLISH，改在报告中标明并等待人工决定。",
+    "- 不要输出第二个 PR 发布块；没有可发布的本地提交时不要输出该块。",
+    "- 每輪結束時輸出 LOOP-STATE JSON 塊，承載供下一輪使用的領域狀態：",
+    LOOP_STATE_BEGIN,
+    '{ "run_id": "<run id>", "updated_at": "<ISO timestamp>", "turn": <turn>, "selected_subject": { "repository": "<owner/repo>", "issue_url": "<issue url>", "issue_number": <issue number>, "clone_path": "<absolute clone repo root>", "branch": "<branch>", "base_sha": "<base sha>" }, "subtask_status": [{ "id": "<subtask id>", "status": "done", "outputs": "<one-line summary>" }] }',
+    LOOP_STATE_END,
+    "- 選定 issue 後 selected_subject 必填；clone_path 必須是實際 clone 出來的 repo 根絕對路徑。",
   ];
 }
 
@@ -266,6 +319,18 @@ function relationPromptLines(relation: RelationRecord): string[] {
     );
   }
   return lines;
+}
+
+function maintenanceTargetPromptLines(target: MaintenanceTarget): string[] {
+  return [
+    "外部維護模式",
+    `- target_id: ${target.target_id}`,
+    `- target_type: ${target.target_type}`,
+    `- state: ${target.state}`,
+    `- trigger_types: ${target.wake_policy.trigger_types.join(", ")}`,
+    "- 只處理這個維護目標的上下文與回饋，不要重新開始新任務。",
+    `- context_payload: ${JSON.stringify(target.context_payload)}`,
+  ];
 }
 
 export function assembleRuntimeInput(
@@ -403,6 +468,9 @@ export function assembleRuntimeInput(
       ? [...githubPromptLines(context.github), ""]
       : []),
     ...(context.relation ? [...relationPromptLines(context.relation), ""] : []),
+    ...(context.maintenanceTarget
+      ? [...maintenanceTargetPromptLines(context.maintenanceTarget), ""]
+      : []),
     ...(policyActive && profile
       ? policyPromptLines(profile)
       : [
@@ -467,6 +535,11 @@ export function assembleRuntimeInput(
     "1. 扫描范围",
     "2. 发现项（逐条列出）",
     "3. 建议人工复核的后续事项",
+    "",
+    "每輪結束時輸出 LOOP-STATE JSON 塊，承載可供下一輪使用的領域狀態；若本輪沒有可交接狀態則省略：",
+    LOOP_STATE_BEGIN,
+    '{ "run_id": "<run id>", "updated_at": "<ISO timestamp>", "turn": <turn>, "selected_subject": null, "subtask_status": [] }',
+    LOOP_STATE_END,
     "",
     "执行者摘要（必填；校验者会把它作为你的自述来辅助理解 —— 它只帮助理解，不能替代确定性证据）：",
     "在报告末尾用以下标记精确包裹结构化自述：",

@@ -5,6 +5,7 @@
  * Extracted from run-service.ts during Phase-3 refactoring.
  */
 
+import { createHash } from "node:crypto";
 import type {
   FailureTag,
   IntentContract,
@@ -26,6 +27,7 @@ import {
   AssemblyError,
   assembleRuntimeInput,
   extractExecutorSummary,
+  extractLoopState,
 } from "../assembly/runtime-input.js";
 import { buildIntentContract } from "../contract/intent-contract.js";
 import { buildIntentContractWithUnderstanding } from "../contract/intent-understanding-agent.js";
@@ -36,6 +38,16 @@ import type {
 } from "../control-plane/control-plane.js";
 import { retryBackoffMs } from "../control-plane/retry-backoff.js";
 import type { RunStateStore } from "../control-plane/run-state-store.js";
+import {
+  type MaintenanceRequest,
+  extractMaintenanceRequest,
+} from "../maintenance/maintenance-request.js";
+import type { MaintenanceTargetStore } from "../maintenance/maintenance-target-store.js";
+import { extractRestrictionRelease } from "../policy/restriction-release.js";
+import {
+  extractPrPublishPayload,
+  readGitIdentity,
+} from "../relation/pr-publish.js";
 import type { FailurePatternStore } from "../state/failure-pattern-store.js";
 import { writeDualTrackHandoff } from "../state/handoff.js";
 import type { LoopCardStore } from "../state/loop-card-store.js";
@@ -166,12 +178,15 @@ export async function executeRun(
     pendingContext: null,
     policyEscalations: [],
     permissionEvents: [],
+    approvedToolCalls: [],
     taskPlan: null,
+    workingState: null,
     currentSubtaskIndex: 0,
     recentTurnOutputHashes: [],
     recentTurnDiffStatHashes: [],
     recentBlockerFingerprints: [],
     relation: null,
+    maintenanceTarget: null,
   };
   try {
     const { card: executableCard, worktree } = await resolveExecutableCard(
@@ -285,6 +300,18 @@ export async function executeRun(
           runId,
           "relation.json",
           `${JSON.stringify(relation, null, 2)}\n`,
+        );
+      }
+    }
+    if (active.maintenanceId && deps.maintenanceTargetStore) {
+      const target = deps.maintenanceTargetStore.findById(active.maintenanceId);
+      if (target) {
+        ctx.maintenanceTarget = target;
+        runtimeContext.maintenanceTarget = target;
+        await deps.runLedgerStore.writeArtifact(
+          runId,
+          "maintenance-target.json",
+          `${JSON.stringify(target, null, 2)}\n`,
         );
       }
     }
@@ -483,6 +510,9 @@ export async function runTurns(
       if (outcome.sessionRef !== "none") {
         ctx.sessionRef = outcome.sessionRef;
       }
+      // One-shot restriction releases expire after the turn they were granted
+      // for, whether or not the agent used them.
+      ctx.approvedToolCalls = [];
       const timeMinutes = (Date.now() - turnStartedAt) / 60_000;
 
       // --- PATCH pause interception (主动暂停, 选项 A) ---
@@ -599,6 +629,21 @@ export async function runTurns(
         await store.writeArtifact(runId, summaryName, `${executorSummary}\n`);
         executorSummaryRef = `artifact://${runId}/${summaryName}`;
         artifactRefs.push(executorSummaryRef);
+      }
+
+      const loopState = extractLoopState(outcome.finalText);
+      if (loopState) {
+        ctx.workingState = {
+          ...loopState,
+          run_id: runId,
+          turn: ctx.turn,
+          updated_at: new Date().toISOString(),
+        };
+        await store.writeArtifact(
+          runId,
+          "working-state.json",
+          `${JSON.stringify(ctx.workingState, null, 2)}\n`,
+        );
       }
 
       let diffRef: string | null = null;
@@ -783,7 +828,11 @@ export async function runTurns(
           // P4 前 review-in-chain 時不合併是怕重複計票 —— 現在 review
           // verdict 由 Verifier Agent 產出, collector 純證據, 恆合併。
           judgment = collector?.reportRef
-            ? mergeEvidence(verification.judgment, [collector.reportRef])
+            ? mergeEvidence(
+                verification.judgment,
+                [collector.reportRef],
+                collector.report,
+              )
             : verification.judgment;
           judgmentRef = verification.refs.judgment_report;
           if (collector?.reportRef) {
@@ -1098,6 +1147,7 @@ export async function runTurns(
         ctx.policyEscalations.length === 0;
 
       // --- control decision ---
+      const restrictionRelease = extractRestrictionRelease(outcome.finalText);
       let finalStatus: RunState = outcome.ok ? "complete" : "failed";
       let retriesUsed = 0;
       let blockerFingerprint: string | undefined;
@@ -1126,7 +1176,7 @@ export async function runTurns(
           diffSummary,
           stopRules: ctx.contract.stop_rules,
           sessionRef: outcome.sessionRef,
-          policyEscalation: drainPolicyEscalation(ctx),
+          policyEscalation: drainPolicyEscalation(ctx, restrictionRelease),
           usage: {
             tokens: outcome.usage?.tokens ?? null,
             timeMinutes,
@@ -1401,6 +1451,67 @@ export async function runTurns(
       }
 
       // complete / failed: terminal.
+      if (
+        status === "complete" &&
+        !ctx.relation &&
+        deps.relationStore &&
+        ctx.card.loop.discovery?.source === "github_prompt"
+      ) {
+        const pendingPublish = extractPrPublishPayload(outcome.finalText);
+        if (pendingPublish) {
+          const now = new Date().toISOString();
+          const gitIdentity = await readGitIdentity(pendingPublish.cwd);
+          const existing = deps.relationStore
+            .list()
+            .find(
+              (relation) =>
+                relation.loop_id === loopId &&
+                relation.subject.type === "github_pr" &&
+                relation.subject.repository === pendingPublish.repository &&
+                relation.subject.branch === pendingPublish.branch,
+            );
+          if (!existing || existing.state === "pr_pending_approval") {
+            const relationId =
+              existing?.relation_id ?? `rel-${loopId}-${runId}`;
+            const subject =
+              existing?.subject.type === "github_pr"
+                ? {
+                    ...existing.subject,
+                    repository: pendingPublish.repository,
+                    branch: pendingPublish.branch,
+                  }
+                : {
+                    type: "github_pr" as const,
+                    repository: pendingPublish.repository,
+                    branch: pendingPublish.branch,
+                  };
+            await deps.relationStore.upsert({
+              ...(existing ?? {}),
+              relation_id: relationId,
+              loop_id: loopId,
+              subject,
+              state: "pr_pending_approval",
+              last_processed: existing?.last_processed ?? {},
+              feedback_count: existing?.feedback_count ?? 0,
+              repair_count: existing?.repair_count ?? 0,
+              pending_publish: {
+                ...pendingPublish,
+                ...(gitIdentity
+                  ? {
+                      author_name: gitIdentity.name,
+                      author_email: gitIdentity.email,
+                      identity_source: "git_config",
+                    }
+                  : {}),
+                run_id: runId,
+                created_at: now,
+              },
+              created_at: existing?.created_at ?? now,
+              updated_at: now,
+            });
+          }
+        }
+      }
       if (ctx.relation && deps.relationStore) {
         const current = deps.relationStore.findById(ctx.relation.relation_id);
         if (current) {
@@ -1412,6 +1523,43 @@ export async function runTurns(
                 ? { needs_human_reason: `relation run ended as ${status}` }
                 : {}),
             },
+          );
+        }
+      }
+      if (ctx.maintenanceTarget && deps.maintenanceTargetStore) {
+        const current = deps.maintenanceTargetStore.findById(
+          ctx.maintenanceTarget.target_id,
+        );
+        if (current) {
+          const failed = status !== "complete";
+          await deps.maintenanceTargetStore.updateState(
+            current.target_id,
+            failed ? "needs_human" : "waiting",
+            {
+              ...(failed
+                ? {
+                    repair_count: current.repair_count + 1,
+                    context_payload: {
+                      ...current.context_payload,
+                      last_maintenance_status: status,
+                    },
+                  }
+                : {}),
+            },
+          );
+        }
+      } else if (
+        status === "complete" &&
+        deps.maintenanceTargetStore &&
+        ctx.card.loop.discovery?.source !== "github_prompt"
+      ) {
+        const request = extractMaintenanceRequest(outcome.finalText);
+        if (request) {
+          await registerMaintenanceTarget(
+            loopId,
+            runId,
+            request,
+            deps.maintenanceTargetStore,
           );
         }
       }
@@ -1427,6 +1575,52 @@ export async function runTurns(
       state.suspended.delete(runId);
     }
   }
+}
+
+async function registerMaintenanceTarget(
+  loopId: string,
+  runId: string,
+  request: MaintenanceRequest,
+  store: MaintenanceTargetStore,
+): Promise<void> {
+  const targetId = maintenanceTargetId(loopId, request);
+  const existing = store.findById(targetId);
+  if (existing && existing.state !== "done") {
+    return;
+  }
+  const now = new Date().toISOString();
+  await store.upsert({
+    ...(existing ?? {
+      state: "waiting",
+      feedback_cursor: {},
+      feedback_count: 0,
+      repair_count: 0,
+      created_at: now,
+    }),
+    target_id: targetId,
+    loop_id: loopId,
+    target_type: request.target_type,
+    external_ref: request.external_ref,
+    wake_policy: request.wake_policy,
+    context_payload: {
+      ...request.context_payload,
+      registered_by_run: runId,
+    },
+    updated_at: now,
+  });
+}
+
+function maintenanceTargetId(
+  loopId: string,
+  request: MaintenanceRequest,
+): string {
+  const source = String(request.external_ref.source ?? "");
+  const subjectId = String(request.external_ref.subject_id ?? "");
+  const digest = createHash("sha1")
+    .update(`${source}:${subjectId}`)
+    .digest("hex")
+    .slice(0, 12);
+  return `mt-${loopId}-${digest}`;
 }
 
 /**
@@ -1461,6 +1655,9 @@ export async function continueRun(
       state.activeByRunId.set(signal.runId, ctx.active);
     }
   }
+  ctx.approvedToolCalls = signal.approvedToolCall
+    ? [signal.approvedToolCall]
+    : [];
 
   // --- 合并闸门批准 ---
   if (signal.cause === "human_approve") {

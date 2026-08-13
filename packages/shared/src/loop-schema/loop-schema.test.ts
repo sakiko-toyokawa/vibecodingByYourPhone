@@ -9,6 +9,7 @@ import {
   VerificationInputBundleSchema,
   VerifierReportSchema,
 } from "./verification.js";
+import { RunWorkingStateSchema } from "./working-state.js";
 
 // 示例照抄 docs/spec/02-schema契约.md（§1 LoopCard、§2 IntentContract、§8.1 run_ledger_entry）
 const loopCardExample = {
@@ -178,6 +179,36 @@ test("RunLedgerEntry: 缺必填字段 loop_id 应失败", () => {
     runLedgerEntryExample,
   );
   assert.equal(RunLedgerEntrySchema.safeParse(invalid).success, false);
+});
+
+test("RunWorkingState: executor 领域状态可解析且缺省向后兼容", () => {
+  const result = RunWorkingStateSchema.safeParse({
+    schema_version: 1,
+    run_id: "run-1",
+    updated_at: "2026-08-13T00:00:00.000Z",
+    turn: 1,
+    selected_subject: {
+      repository: "owner/repo",
+      issue_url: "https://github.com/owner/repo/issues/1",
+      issue_number: 1,
+      clone_path: "E:/data/github-workspaces/prompt-loops/loop-1/repo",
+      branch: "fix/issue-1",
+      base_sha: "abc123",
+    },
+    subtask_status: [
+      { id: "subtask-1", status: "done", outputs: "selected target" },
+    ],
+  });
+  assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+
+  const minimal = RunWorkingStateSchema.safeParse({
+    run_id: "run-2",
+    updated_at: "2026-08-13T00:00:00.000Z",
+    turn: 1,
+  });
+  assert.equal(minimal.success, true, JSON.stringify(minimal.error?.issues));
+  assert.equal(minimal.data?.selected_subject, null);
+  assert.deepEqual(minimal.data?.subtask_status, []);
 });
 
 // 示例照抄 docs/spec/02-schema契约.md §5 / §6

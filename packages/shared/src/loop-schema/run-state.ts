@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BudgetSchema } from "./budget.js";
 import { RunStateSchema } from "./run-ledger.js";
+import { HumanReasonSchema } from "./verification.js";
 
 /**
  * run_state — control-plane 维护的单 run 状态记录，落盘为
@@ -26,11 +27,21 @@ import { RunStateSchema } from "./run-ledger.js";
  * decision_id（即 run-decision-required 事件的 request_id），run_id 用于
  * 服务重启后按 run 找回等待中的审批。
  */
+export const PendingToolCallSchema = z.object({
+  tool: z.string(),
+  input: z.unknown(),
+  summary: z.string().optional(),
+  reason: z.string().optional(),
+});
+export type PendingToolCall = z.infer<typeof PendingToolCallSchema>;
+
 export const PendingApprovalSchema = z.object({
   request_id: z.string(),
   run_id: z.string(),
   reason: z.string(),
   entered_at: z.string().datetime(),
+  tool_call: PendingToolCallSchema.optional(),
+  human_reasons: z.array(HumanReasonSchema).optional(),
 });
 export type PendingApproval = z.infer<typeof PendingApprovalSchema>;
 
@@ -116,6 +127,7 @@ export const MachineStateSchema = z.object({
   checkpoint_event_id: z.string().nullable(),
   artifact_manifest_ref: z.string(),
   workspace_snapshot: WorkspaceSnapshotSchema.nullable(),
+  working_state_ref: z.string().nullable().default(null),
   checksum: z.string(),
   created_at: z.string().datetime(),
 });

@@ -2,12 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ImprovementProposal, LoopCard } from "@yep-anywhere/shared";
 import { buildIntentContract } from "../contract/intent-contract.js";
+import { PR_PUBLISH_BEGIN, PR_PUBLISH_END } from "../relation/pr-publish.js";
 import {
   AssemblyError,
   EXECUTOR_SUMMARY_BEGIN,
   EXECUTOR_SUMMARY_END,
+  LOOP_STATE_BEGIN,
+  LOOP_STATE_END,
   assembleRuntimeInput,
   extractExecutorSummary,
+  extractLoopState,
 } from "./runtime-input.js";
 
 function githubPromptCard(): LoopCard {
@@ -62,10 +66,19 @@ test("github_prompt loops assemble as agent-led GitHub repair runs", () => {
   assert.match(input.prompt, /GitHub CLI/);
   assert.match(input.prompt, /全 GitHub 公开仓库/);
   assert.match(input.prompt, /每次最多选择 1 个 issue/);
+  assert.match(input.prompt, /确认没有同范围的已有修复/);
+  assert.match(input.prompt, /再次检查 open PR/);
+  assert.match(input.prompt, /重複 PR 检查结果/);
   assert.match(input.prompt, /服务端管理的主工作区/);
   assert.match(input.prompt, /不要 fork、push、创建 pull request/);
   assert.match(input.prompt, /PR 标题和正文草稿/);
   assert.match(input.prompt, /去寻找 agent 项目的 bug 修复/);
+  assert.ok(input.prompt.includes(PR_PUBLISH_BEGIN));
+  assert.ok(input.prompt.includes(PR_PUBLISH_END));
+  assert.match(input.prompt, /"cwd": "<absolute clone repo path>"/);
+  assert.ok(input.prompt.includes(LOOP_STATE_BEGIN));
+  assert.ok(input.prompt.includes(LOOP_STATE_END));
+  assert.match(input.prompt, /selected_subject 必填/);
 });
 
 test("relation context switches prompt into maintenance mode", () => {
@@ -97,6 +110,35 @@ test("relation context switches prompt into maintenance mode", () => {
   assert.match(input.prompt, /relation_id: rel-1/);
   assert.match(input.prompt, /pr_number: 490/);
   assert.match(input.prompt, /不要重新搜尋新 issue/);
+});
+
+test("maintenance target context switches prompt into external maintenance mode", () => {
+  const card = githubPromptCard();
+  const contract = buildIntentContract(card, {
+    runId: "run-target",
+    source: "webhook",
+  });
+  const input = assembleRuntimeInput(card, contract, [], {
+    github: { ghPath: "E:/tools/gh/bin/gh.exe", token: "t" },
+    maintenanceTarget: {
+      target_id: "target-1",
+      loop_id: card.loop.id,
+      target_type: "generic_webhook",
+      external_ref: { source: "ops", subject_id: "deploy-42" },
+      state: "fixing",
+      feedback_cursor: {},
+      feedback_count: 0,
+      repair_count: 0,
+      wake_policy: { trigger_types: ["deploy_ready"], max_repairs: 3 },
+      context_payload: { allowed_commands: ["npm test"] },
+      created_at: "2026-08-12T00:00:00.000Z",
+      updated_at: "2026-08-12T00:00:00.000Z",
+    },
+  });
+  assert.match(input.prompt, /外部維護模式/);
+  assert.match(input.prompt, /target_id: target-1/);
+  assert.match(input.prompt, /deploy_ready/);
+  assert.match(input.prompt, /只處理這個維護目標/);
 });
 
 test("assembled prompt requires the marked executor summary block (02 §5)", () => {
@@ -136,6 +178,33 @@ test("extractExecutorSummary: extracts the marked block, null when absent", () =
     extractExecutorSummary(
       `${EXECUTOR_SUMMARY_BEGIN}   ${EXECUTOR_SUMMARY_END}`,
     ),
+    null,
+  );
+});
+
+test("extractLoopState: extracts valid structured state, null when invalid", () => {
+  const report = [
+    "report body",
+    LOOP_STATE_BEGIN,
+    JSON.stringify({
+      run_id: "run-1",
+      updated_at: "2026-08-13T00:00:00.000Z",
+      turn: 1,
+      selected_subject: {
+        repository: "owner/repo",
+        clone_path: "E:/data/repo",
+        issue_number: 42,
+      },
+      subtask_status: [],
+    }),
+    LOOP_STATE_END,
+  ].join("\n");
+  const state = extractLoopState(report);
+  assert.equal(state?.selected_subject?.repository, "owner/repo");
+  assert.equal(state?.selected_subject?.clone_path, "E:/data/repo");
+  assert.equal(extractLoopState("no markers"), null);
+  assert.equal(
+    extractLoopState(`${LOOP_STATE_BEGIN} not-json ${LOOP_STATE_END}`),
     null,
   );
 });

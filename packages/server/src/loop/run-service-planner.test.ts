@@ -10,6 +10,12 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { JudgmentReport, LoopCard, TaskPlan } from "@yep-anywhere/shared";
 import type { Process } from "../supervisor/Process.js";
+import {
+  EXECUTOR_SUMMARY_BEGIN,
+  EXECUTOR_SUMMARY_END,
+  LOOP_STATE_BEGIN,
+  LOOP_STATE_END,
+} from "./assembly/runtime-input.js";
 import { ControlPlane } from "./control-plane/control-plane.js";
 import { RunStateStore } from "./control-plane/run-state-store.js";
 import { LoopRunService } from "./run-service.js";
@@ -66,7 +72,29 @@ class FakeSupervisor {
             message: {
               type: "result",
               subtype: "success",
-              result: "subtask done",
+              result: [
+                "subtask done",
+                EXECUTOR_SUMMARY_BEGIN,
+                "- 已完成：subtask completed",
+                "- 風險：none",
+                "- 文件：none",
+                EXECUTOR_SUMMARY_END,
+                LOOP_STATE_BEGIN,
+                JSON.stringify({
+                  run_id: "run-1",
+                  updated_at: new Date().toISOString(),
+                  turn: 1,
+                  selected_subject: null,
+                  subtask_status: [
+                    {
+                      id: "subtask-1",
+                      status: "done",
+                      outputs: "completed",
+                    },
+                  ],
+                }),
+                LOOP_STATE_END,
+              ].join("\n"),
               is_error: false,
               usage: { input_tokens: 10, output_tokens: 5 },
             },
@@ -191,6 +219,24 @@ test("run with task plan advances through subtasks before completing", async () 
     const contract = JSON.parse(contractJson) as { plan?: TaskPlan };
     assert.ok(contract.plan, "contract should have a plan");
     assert.equal(contract.plan.subtasks.length, 3);
+
+    const workingStateJson = await runLedgerStore.readArtifact(
+      runId,
+      "working-state.json",
+    );
+    assert.ok(workingStateJson, "working-state.json should be written");
+    const workingState = JSON.parse(workingStateJson) as {
+      run_id: string;
+      selected_subject: unknown;
+    };
+    assert.equal(workingState.run_id, runId);
+    assert.equal(workingState.selected_subject, null);
+    const executorCalls = supervisor.calls.filter((call) => !call.isCollector);
+    assert.ok(executorCalls.length >= 2);
+    assert.match(
+      executorCalls[1]?.text ?? "",
+      /### Authoritative working state \(machine\)/,
+    );
 
     const state = controlPlane.currentStateOf(runId);
     assert.equal(state, "complete");
