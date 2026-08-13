@@ -41,6 +41,7 @@ function makeCtx(workspacePath: string, runId: string): RunExecutionContext {
     permissionEvents: [],
     taskPlan: null,
     workingState: null,
+    waivedPhases: [],
     currentSubtaskIndex: 0,
     recentTurnOutputHashes: [],
     recentTurnDiffStatHashes: [],

@@ -252,9 +252,12 @@ export async function rebuildContext(
     // 用 runState.turn - 1 推导)。budget 护栏挂起的 run 推进决策已落账,
     // 计数同样指向下一子任务, 与内存路径一致。
     const taskPlan = contract.plan ?? null;
+    const decisionEntries = await store.readDecisionEntries(signal.runId);
+    const waivedPhases = decisionEntries
+      .filter((entry) => entry.decision === "waive_phases")
+      .flatMap((entry) => entry.waived_phases ?? []);
     let currentSubtaskIndex = 0;
     if (taskPlan) {
-      const decisionEntries = await store.readDecisionEntries(signal.runId);
       const completedSubtasks = decisionEntries.filter(
         (e) => e.decision === "subtask_advance",
       ).length;
@@ -294,6 +297,7 @@ export async function rebuildContext(
       memoryPacketJson,
       taskPlan,
       workingState,
+      waivedPhases,
       currentSubtaskIndex,
       recentTurnOutputHashes: [],
       recentTurnDiffStatHashes: [],

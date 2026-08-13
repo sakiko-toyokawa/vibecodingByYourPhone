@@ -121,6 +121,8 @@ export interface RunExecutionContext {
   taskPlan: TaskPlan | null;
   /** 最新一轮 executor 输出的 run 级领域工作记忆；无则 null。 */
   workingState: RunWorkingState | null;
+  /** 人工豁免的 verification phases（waive_phases 决策后本 run 生效）。 */
+  waivedPhases: string[];
   /** 当前执行的子任务索引（0-based）。 */
   currentSubtaskIndex: number;
   /** Hashes of the most recent turn outputs, used for stagnation detection. */

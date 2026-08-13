@@ -11,6 +11,7 @@ import type {
   FailureTag,
   IntentContract,
   JudgmentReport,
+  PendingToolCall,
   RunState,
   RunStateRecord,
 } from "@yep-anywhere/shared";
@@ -105,6 +106,8 @@ export interface ApplyJudgmentInput {
     action: string;
     reason: string;
     policyRef: string;
+    /** Exact blocked tool call, included when the agent requests a release. */
+    toolCall?: PendingToolCall;
     /** Review_or_policy lanes are human-reviewable, not necessarily failures. */
     reviewable?: boolean;
   };
@@ -159,6 +162,12 @@ export interface ResumeSignal {
   restartRecoveryFromState?: "active" | "retry";
   /** Human feedback to inject into the next turn's context, when given. */
   feedback?: string;
+  /** Exact tool call approved by the human for one next-turn execution. */
+  approvedToolCall?: PendingToolCall;
+  /** Human confirmed the current subtask and asked the run to advance. */
+  advanceSubtask?: boolean;
+  /** Verification phases waived by the human for the remaining run. */
+  waivedPhases?: string[];
 }
 
 /**

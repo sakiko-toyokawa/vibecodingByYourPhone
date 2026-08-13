@@ -9,6 +9,7 @@ import type {
   DecisionEntry,
   DecisionKind,
   FailureTag,
+  HumanReason,
   LearningEvent,
   RunState,
   RunStateRecord,
@@ -38,8 +39,10 @@ export interface TransitionOptions {
   blockerFingerprint?: string;
   repeatedBlockerCount?: number;
   feedback?: string;
+  waivedPhases?: string[];
   override?: DecisionEntry["override"];
   patch?: Partial<RunStateRecord>;
+  humanReasons?: HumanReason[];
 }
 
 /** Deterministic decision_id = idempotency key (run_id + turn + target/cause). */
@@ -89,7 +92,9 @@ export async function transition(
     policy_refs: opts.policyRefs ?? [],
     next_action: opts.nextAction,
     feedback: opts.feedback,
+    waived_phases: opts.waivedPhases,
     override: opts.override,
+    human_reasons: opts.humanReasons,
     failure_tags: opts.failureTags,
     // 账本可见逐轮消耗：每条决策携带落账时的预算快照。
     budget: budget ?? undefined,

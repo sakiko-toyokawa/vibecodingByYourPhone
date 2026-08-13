@@ -67,6 +67,7 @@ function makeContext(
     permissionEvents: [],
     taskPlan: overrides.taskPlan ?? null,
     workingState: null,
+    waivedPhases: [],
     currentSubtaskIndex: overrides.currentSubtaskIndex ?? 0,
     recentTurnOutputHashes: [],
     recentTurnDiffStatHashes: [],

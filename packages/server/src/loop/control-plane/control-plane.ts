@@ -104,7 +104,14 @@ export class ControlPlaneError extends Error {
 }
 
 /** The options a needs_human run offers (03: full set). */
-const DECISION_OPTIONS = ["approve", "reject", "request_changes", "pause"];
+const DECISION_OPTIONS = [
+  "approve",
+  "reject",
+  "request_changes",
+  "pause",
+  "advance_subtask",
+  "waive_phases",
+];
 
 /**
  * judgment.next_action → run-decision-required 事件的 recommended 字段
@@ -346,6 +353,7 @@ export class ControlPlane {
       policyRefs: input.policyEscalation
         ? [input.policyEscalation.policyRef]
         : undefined,
+      humanReasons: decision.humanReasons,
       blockerFingerprint: fingerprint,
       repeatedBlockerCount,
       // 失败归因 (失败模式账本.md 8 值词汇; 修复计划 #21: 此前只挂
@@ -369,6 +377,12 @@ export class ControlPlane {
                 run_id: input.runId,
                 reason,
                 entered_at: now,
+                ...(decision.humanReasons.length > 0
+                  ? { human_reasons: decision.humanReasons }
+                  : {}),
+                ...(input.policyEscalation?.toolCall
+                  ? { tool_call: input.policyEscalation.toolCall }
+                  : {}),
               }
             : null,
       },
@@ -393,6 +407,8 @@ export class ControlPlane {
         risk: input.policyEscalation ? "critical" : "unrated",
         reason,
         evidence_refs: input.judgment?.evidence ?? [],
+        human_reasons: decision.humanReasons,
+        tool_call: input.policyEscalation?.toolCall,
         options: DECISION_OPTIONS,
         // recommended: 硬闸门升级是人工裁决场景, 不发推荐 (不给误导性
         // 默认动作, 字段缺省); 其余按 judgment.next_action 映射
@@ -507,6 +523,13 @@ export class ControlPlane {
     const now = new Date().toISOString();
     const requestId = `decision-${record.run_id}-t${record.turn}-restart-recovery`;
     const recoveryReason = `restart recovery requested for ${record.state} run: ${reason}`;
+    const recoveryHumanReasons = [
+      {
+        code: "restart_recovery",
+        message:
+          "Run requested confirmation after a restart; human review is required.",
+      },
+    ];
     const { record: updated } = await transition(this.deps, this.state, {
       loopId,
       runId: record.run_id,
@@ -515,6 +538,7 @@ export class ControlPlane {
       decision: "needs_human",
       decisionId: requestId,
       reason: recoveryReason,
+      humanReasons: recoveryHumanReasons,
       nextAction: "wait_for_approval",
       evidenceRefs: [],
       patch: {
@@ -523,6 +547,7 @@ export class ControlPlane {
           run_id: record.run_id,
           reason: recoveryReason,
           entered_at: now,
+          human_reasons: recoveryHumanReasons,
         },
         session_ref: record.session_ref,
       },
@@ -536,6 +561,7 @@ export class ControlPlane {
       action: "manual_review",
       risk: "unrated",
       reason: recoveryReason,
+      human_reasons: recoveryHumanReasons,
       evidence_refs: [],
       options: DECISION_OPTIONS,
       recommended: "manual_review",
@@ -716,6 +742,7 @@ export class ControlPlane {
     runId: string,
     action: import("@yep-anywhere/shared").RunDecisionAction,
     feedback?: string,
+    phases?: string[],
   ): Promise<RunStateRecord> {
     if (action === "request_changes" && !feedback?.trim()) {
       throw new ControlPlaneError(
@@ -736,6 +763,62 @@ export class ControlPlane {
     }
 
     const { loopId, record } = waiting;
+    const now = new Date().toISOString();
+    if (action === "advance_subtask") {
+      const updated = await transition(this.deps, this.state, {
+        loopId,
+        runId,
+        record,
+        to: "active",
+        decision: "subtask_advance",
+        decisionId: controlDecisionId(runId, record.turn, "subtask_advance"),
+        reason:
+          "human confirmed the current subtask and asked the run to advance to the next subtask",
+        nextAction: "resume_next_turn",
+        patch: { pending_approval: null },
+      });
+      this.state.pending.delete(runId);
+      notifyResume(this.resumeListeners, {
+        runId,
+        loopId,
+        cause: "human_approve",
+        feedback,
+        advanceSubtask: true,
+      });
+      return updated.record;
+    }
+
+    if (action === "waive_phases") {
+      if (!phases || phases.length === 0) {
+        throw new ControlPlaneError(
+          "invalid_decision",
+          "phases are required for waive_phases",
+        );
+      }
+      const updated = await transition(this.deps, this.state, {
+        loopId,
+        runId,
+        record,
+        to: "active",
+        decision: "waive_phases",
+        decisionId: controlDecisionId(runId, record.turn, "waive_phases"),
+        reason: `human waived verification phases: ${phases.join(", ")}`,
+        nextAction: "resume_next_turn",
+        feedback,
+        waivedPhases: phases,
+        patch: { pending_approval: null },
+      });
+      this.state.pending.delete(runId);
+      notifyResume(this.resumeListeners, {
+        runId,
+        loopId,
+        cause: "human_approve",
+        feedback,
+        waivedPhases: phases,
+      });
+      return updated.record;
+    }
+
     if (action === "approve" && !feedback?.trim()) {
       const entries = await this.deps.runLedgerStore.readDecisionEntries(runId);
       const currentDecision = entries.find(
@@ -757,7 +840,6 @@ export class ControlPlane {
           ? "failed"
           : "paused";
 
-    const now = new Date().toISOString();
     const reasonByAction: Record<
       import("@yep-anywhere/shared").RunDecisionAction,
       string
@@ -768,6 +850,9 @@ export class ControlPlane {
       request_changes:
         "human requested changes; feedback is injected into the next turn's context (03: needs_human → active)",
       pause: "human paused the run from needs_human",
+      advance_subtask:
+        "human advanced to the next planner subtask from a needs_human gate",
+      waive_phases: "human waived verification phases for the remaining run",
     };
     const restartFrom = record.pending_approval?.reason.startsWith(
       "restart recovery requested for active",
@@ -821,6 +906,8 @@ export class ControlPlane {
               : "human_request_changes",
         restartRecoveryFromState: restartFrom,
         feedback,
+        approvedToolCall:
+          action === "approve" ? record.pending_approval?.tool_call : undefined,
       });
     } else if (target === "failed") {
       notifyResolved(this.resolvedListeners, runId, target);

@@ -470,6 +470,10 @@ test("needs_human bridging: decision-required event; approve → active with ove
       waiting?.pending_approval?.request_id,
       "decision-run-1-t1-needs_human",
     );
+    assert.equal(
+      waiting?.pending_approval?.human_reasons?.[0]?.code,
+      "verifier_requires_human",
+    );
 
     // run-decision-required payload shape (03 WS 事件契约)
     const required = bus.ofType("run-decision-required");
@@ -483,11 +487,14 @@ test("needs_human bridging: decision-required event; approve → active with ove
     assert.deepEqual(payload.evidence_refs, [
       "artifact://run-1/verifier-reports.json",
     ]);
+    assert.equal(payload.human_reasons[0]?.code, "verifier_requires_human");
     assert.deepEqual(payload.options, [
       "approve",
       "reject",
       "request_changes",
       "pause",
+      "advance_subtask",
+      "waive_phases",
     ]);
 
     // Phase-2 完整迁移表：approve → active（携带人工响应恢复，feedback 进账本）
@@ -523,6 +530,42 @@ test("needs_human bridging: decision-required event; approve → active with ove
       [["run-1", "human_approve", "人工确认 lint 报错可接受"]],
     );
     assert.deepEqual(resolved, []);
+  });
+});
+
+test("hard-gate release approval carries exact tool call through pending and resume", async () => {
+  await withFixture(async ({ controlPlane, bus, stateStore }) => {
+    const resumes: ResumeSignal[] = [];
+    controlPlane.onResumeRequested((signal) => resumes.push(signal));
+    const toolCall = {
+      tool: "Bash",
+      input: { command: "gh issue close 12 --repo owner/repo" },
+      summary: "gh issue close 12 --repo owner/repo",
+    };
+
+    await controlPlane.applyJudgment(
+      applyInput({
+        judgment: makeJudgment({
+          overall: "passed",
+          next_action: "complete",
+          requires_human: false,
+        }),
+        policyEscalation: {
+          action: "close",
+          reason: "hard gate 'close' hit",
+          policyRef: "policy://loop_bypass",
+          toolCall,
+        },
+      }),
+    );
+
+    const waiting = await stateStore.load("loop-1");
+    assert.deepEqual(waiting?.pending_approval?.tool_call, toolCall);
+    const payload = at(bus.ofType("run-decision-required"), 0);
+    assert.deepEqual(payload.tool_call, toolCall);
+
+    await controlPlane.submitDecision("run-1", "approve");
+    assert.deepEqual(resumes[0]?.approvedToolCall, toolCall);
   });
 });
 
@@ -697,6 +740,56 @@ test("request_changes → active with feedback injected; feedback required", asy
     assert.deepEqual(
       resumes.map((s) => [s.cause, s.feedback]),
       [["human_request_changes", "请先修掉 lint 再交付"]],
+    );
+  });
+});
+
+test("advance_subtask → active with truthful subtask_advance ledger entry", async () => {
+  await withFixture(async ({ controlPlane, ledgerStore }) => {
+    const resumes: ResumeSignal[] = [];
+    controlPlane.onResumeRequested((signal) => resumes.push(signal));
+    await controlPlane.applyJudgment(applyInput());
+
+    const runState = await controlPlane.submitDecision(
+      "run-1",
+      "advance_subtask",
+    );
+    assert.equal(runState.state, "active");
+    assert.equal(resumes[0]?.advanceSubtask, true);
+
+    const decisions = await ledgerStore.readDecisionEntries("run-1");
+    const advance = decisions.find(
+      (entry) => entry.decision === "subtask_advance",
+    );
+    assert.ok(advance);
+    assert.equal(advance.next_action, "resume_next_turn");
+  });
+});
+
+test("waive_phases → active and persists waived verification phases", async () => {
+  await withFixture(async ({ controlPlane, ledgerStore }) => {
+    const resumes: ResumeSignal[] = [];
+    controlPlane.onResumeRequested((signal) => resumes.push(signal));
+    await controlPlane.applyJudgment(applyInput());
+
+    const runState = await controlPlane.submitDecision(
+      "run-1",
+      "waive_phases",
+      undefined,
+      ["static", "runtime"],
+    );
+    assert.equal(runState.state, "active");
+    assert.deepEqual(resumes[0]?.waivedPhases, ["static", "runtime"]);
+
+    const decisions = await ledgerStore.readDecisionEntries("run-1");
+    const waived = decisions.find((entry) => entry.decision === "waive_phases");
+    assert.ok(waived);
+    assert.deepEqual(waived.waived_phases, ["static", "runtime"]);
+
+    await assert.rejects(
+      () => controlPlane.submitDecision("run-2", "waive_phases"),
+      (error: unknown) =>
+        error instanceof ControlPlaneError && error.code === "run_not_found",
     );
   });
 });

@@ -192,6 +192,7 @@ export function createRunsRoutes(deps: RunsRoutesDeps): Hono {
         c.req.param("id"),
         parsed.data.decision,
         parsed.data.feedback,
+        parsed.data.phases,
       );
       return c.json({ run_state: runState }, 200);
     } catch (error) {

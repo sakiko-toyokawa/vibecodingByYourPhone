@@ -247,6 +247,18 @@ export function buildHumanResumeContext(
       "- You MAY execute this exact call once. Do not execute variants or retry it more than once.",
     );
   }
+  if (signal.advanceSubtask) {
+    lines.push(
+      "",
+      "The human advanced to the next subtask; do not redo the completed subtask.",
+    );
+  }
+  if (signal.waivedPhases?.length) {
+    lines.push(
+      "",
+      `The human waived verification phases for this run: ${signal.waivedPhases.join(", ")}. Do not rerun them.`,
+    );
+  }
   if (signal.feedback?.trim()) {
     lines.push("", `Human feedback: ${signal.feedback.trim()}`);
   }

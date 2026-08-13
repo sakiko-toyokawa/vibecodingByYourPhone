@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BudgetSchema } from "./budget.js";
 import { FailureTagSchema } from "./run-ledger.js";
+import { HumanReasonSchema } from "./verification.js";
 
 /**
  * decision_entry — 决策账本条目，记录 control-plane 为什么做出某个决策
@@ -52,6 +53,7 @@ export const DecisionKindSchema = z.enum([
   "bypass_used",
   "resumed",
   "subtask_advance",
+  "waive_phases",
   "discarded",
 ]);
 export type DecisionKind = z.infer<typeof DecisionKindSchema>;
@@ -86,6 +88,10 @@ export const DecisionEntrySchema = z.object({
   next_action: z.string(),
   // 人工随决策提交的反馈（POST /api/runs/:id/decision 的 feedback）
   feedback: z.string().optional(),
+  // 人读原因（供 UI 直接显示，raw reason 保留作审计）
+  human_reasons: z.array(HumanReasonSchema).optional(),
+  // 人工豁免的 verification phases（waive_phases 决策承载）
+  waived_phases: z.array(z.string()).optional(),
   // 人工强判通过 / 拒绝 / 要求修改时非空
   override: DecisionOverrideSchema.optional(),
   // adapter 硬错误（02 §4）终止 run 时的失败归因（失败模式账本词汇）
@@ -110,12 +116,15 @@ export const RunDecisionActionSchema = z.enum([
   "reject",
   "request_changes",
   "pause",
+  "advance_subtask",
+  "waive_phases",
 ]);
 export type RunDecisionAction = z.infer<typeof RunDecisionActionSchema>;
 
 export const RunDecisionRequestSchema = z.object({
   decision: RunDecisionActionSchema,
   feedback: z.string().optional(),
+  phases: z.array(z.string()).optional(),
 });
 export type RunDecisionRequest = z.infer<typeof RunDecisionRequestSchema>;
 

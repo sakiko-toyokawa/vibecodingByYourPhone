@@ -182,6 +182,7 @@ export async function executeRun(
     approvedToolCalls: [],
     taskPlan: null,
     workingState: null,
+    waivedPhases: [],
     currentSubtaskIndex: 0,
     recentTurnOutputHashes: [],
     recentTurnDiffStatHashes: [],
@@ -770,6 +771,18 @@ export async function runTurns(
               reason: "non-code subtask, no clone materialized",
             }));
         }
+        for (const phase of requiredPhases) {
+          if (
+            (phase === "static" || phase === "runtime") &&
+            ctx.waivedPhases.includes(phase) &&
+            !skipExecutablePhases.some((item) => item.phase === phase)
+          ) {
+            skipExecutablePhases.push({
+              phase,
+              reason: "waived by human decision",
+            });
+          }
+        }
         preVerifySnapshot =
           ctx.card.loop.workspace.strategy === "direct" &&
           verificationWorkspacePath
@@ -1168,7 +1181,16 @@ export async function runTurns(
       }
 
       // --- subtask-driven turn control ---
-      const subtaskPassed = outcome.ok && judgment?.overall === "passed";
+      const subtaskHadNoExecutableVerification =
+        skipExecutablePhases.length > 0 &&
+        requiredPhases.every(
+          (phase) =>
+            phase === "interaction" ||
+            skipExecutablePhases.some((item) => item.phase === phase),
+        );
+      const subtaskPassed =
+        outcome.ok &&
+        (judgment?.overall === "passed" || subtaskHadNoExecutableVerification);
       const shouldAdvanceSubtask =
         taskPlan !== null &&
         subtaskPassed &&
@@ -1411,6 +1433,26 @@ export async function runTurns(
       if (shouldAdvanceSubtask) {
         const completedTurn = ctx.turn;
         const completedSubtaskIndex = ctx.currentSubtaskIndex + 1;
+        if (ctx.workingState && taskPlan) {
+          const completedSubtask = taskPlan.subtasks[ctx.currentSubtaskIndex];
+          if (completedSubtask) {
+            ctx.workingState.subtask_status = [
+              ...ctx.workingState.subtask_status.filter(
+                (item) => item.id !== completedSubtask.id,
+              ),
+              {
+                id: completedSubtask.id,
+                status: "done",
+                outputs: "subtask completed and verified",
+              },
+            ];
+            await store.writeArtifact(
+              runId,
+              "working-state.json",
+              `${JSON.stringify(ctx.workingState, null, 2)}\n`,
+            );
+          }
+        }
         ctx.turn += 1;
         ctx.currentSubtaskIndex += 1;
         ctx.pendingContext = buildNextSubtaskContext(
@@ -1781,6 +1823,17 @@ export async function continueRun(
     // resumes that same turn instead of skipping it.
     ctx.pendingContext = null;
   } else {
+    if (signal.waivedPhases?.length) {
+      ctx.waivedPhases = Array.from(
+        new Set([...ctx.waivedPhases, ...signal.waivedPhases]),
+      );
+    }
+    if (signal.advanceSubtask && ctx.taskPlan) {
+      ctx.currentSubtaskIndex = Math.min(
+        ctx.currentSubtaskIndex + 1,
+        ctx.taskPlan.subtasks.length - 1,
+      );
+    }
     ctx.turn += 1;
     const resumeContext = buildHumanResumeContext(
       signal,
