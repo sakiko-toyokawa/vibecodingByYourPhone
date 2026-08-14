@@ -146,6 +146,83 @@ test("runVerifierAgent: 合法 JSON 輸出解析為 verdict", async () => {
   }
 });
 
+test("runVerifierAgent: verifier 專屬 provider/model 覆蓋 maker 配置", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-agent-verifier-cfg-"));
+  const workspace = await mkdtemp(join(tmpdir(), "yep-agent-verifier-ws-"));
+  try {
+    const store = new RunLedgerStore({ dataDir });
+    const runId = "run-agent-verifier-cfg";
+    const ctx = makeCtx(workspace, runId);
+    ctx.input = {
+      cwd: workspace,
+      permissions: {},
+      env: {},
+      adapterPolicy: {
+        model: "maker-model",
+        verifier_model: "kimi-k3-256k",
+        verifier_provider: "codex",
+      },
+      nativeInvocation: { timeout_seconds: null },
+    } as never;
+    const captured: Array<{
+      providerName?: string;
+      model?: string;
+      env?: Record<string, string>;
+    }> = [];
+    const report = await runVerifierAgent(
+      {
+        supervisor: {
+          startSession: async (
+            _cwd: string,
+            _message: object,
+            _mode: string,
+            options: {
+              providerName?: string;
+              model?: string;
+              env?: Record<string, string>;
+            },
+          ) => {
+            captured.push(options);
+            return { fake: true };
+          },
+        } as never,
+        runLedgerStore: store,
+        watchProcess: async () => ({
+          ok: true,
+          finalText: JSON.stringify({
+            status: "passed",
+            recommendation: "stop",
+            confidence: 0.9,
+          }),
+        }),
+      },
+      ctx,
+      {
+        contract: ctx.contract as never,
+        runId,
+        turn: 1,
+        workspacePath: workspace,
+        priorReports: [],
+        evidenceRefs: {
+          diff: null,
+          stdout: null,
+          runtime_events: null,
+          executor_summary: null,
+        },
+      },
+    );
+    assert.equal(report.status, "passed");
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0]?.providerName, "codex");
+    assert.equal(captured[0]?.model, "kimi-k3-256k");
+    const input = await store.readArtifact(runId, "verifier-agent-input.json");
+    assert.ok(input?.includes('"kimi-k3-256k"'));
+  } finally {
+    await rm(dataDir, { recursive: true, force: true, maxRetries: 5 });
+    await rm(workspace, { recursive: true, force: true, maxRetries: 5 });
+  }
+});
+
 test("runVerifierAgent: invalid JSON 會帶 validation error 重新生成一次", async () => {
   const dataDir = await mkdtemp(join(tmpdir(), "yep-agent-retry-"));
   const workspace = await mkdtemp(join(tmpdir(), "yep-agent-retry-ws-"));

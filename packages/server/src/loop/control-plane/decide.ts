@@ -77,6 +77,9 @@ function humanReasonsForDecision(
   const evidence = judgment?.evidence ?? [];
   switch (kind) {
     case "needs_human":
+      if (judgment?.human_reasons && judgment.human_reasons.length > 0) {
+        return judgment.human_reasons;
+      }
       return [
         {
           code: judgment?.requires_human

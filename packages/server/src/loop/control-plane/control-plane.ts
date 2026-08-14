@@ -50,6 +50,7 @@ import type {
   Budget,
   BudgetLimits,
   HumanGateSla,
+  PendingApproval,
   RunState,
   RunStateRecord,
 } from "@yep-anywhere/shared";
@@ -123,6 +124,34 @@ const DEFAULT_HUMAN_SLA: HumanGateSla = {
   abandon_after_minutes: 7 * 24 * 60,
   policy: "keep",
 };
+
+/**
+ * auto_approve_low_risk 只允許明確低風險的 human_reason code。
+ * verifier_inconclusive 是「無法給出確定裁決但沒有執行失敗/重複 PR 等
+ * 高風險信號」；execution_failed、duplicate_pr、policy gate 等永遠不進
+ * 白名單，保持 fail-closed。
+ */
+const AUTO_APPROVE_LOW_RISK_CODES = new Set(["verifier_inconclusive"]);
+
+function isLowRiskAutoApprovable(
+  entry: HumanSlaEntry,
+  pending: PendingApproval | null | undefined,
+): boolean {
+  if (
+    entry.state !== "needs_human" ||
+    !pending ||
+    pending.tool_call ||
+    pending.reason.startsWith("policy gate")
+  ) {
+    return false;
+  }
+  const humanReasons = entry.human_reasons ?? pending.human_reasons;
+  return (
+    humanReasons !== undefined &&
+    humanReasons.length > 0 &&
+    humanReasons.every((reason) => AUTO_APPROVE_LOW_RISK_CODES.has(reason.code))
+  );
+}
 
 function addMinutes(iso: string, minutes: number): string {
   return new Date(new Date(iso).getTime() + minutes * 60 * 1000).toISOString();
@@ -1253,12 +1282,7 @@ export class ControlPlane {
         } else if (entry.policy === "auto_approve_low_risk") {
           const record = await this.deps.runStateStore.load(entry.loop_id);
           const pending = record?.pending_approval;
-          if (
-            entry.state === "needs_human" &&
-            pending &&
-            !pending.tool_call &&
-            !pending.reason.startsWith("policy gate")
-          ) {
+          if (isLowRiskAutoApprovable(entry, pending)) {
             try {
               await this.submitDecision(entry.run_id, "approve");
               result.approved += 1;

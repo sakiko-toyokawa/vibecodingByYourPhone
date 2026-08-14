@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 const PORT = Number(process.env.PORT ?? 3400);
@@ -7,6 +9,14 @@ const TEST_REPO = process.env.GITHUB_TEST_REPO ?? "";
 const TEST_ISSUE = process.env.GITHUB_TEST_ISSUE ?? "";
 const TEST_PROVIDER = process.env.GITHUB_TEST_PROVIDER ?? "";
 const TEST_MODEL = process.env.GITHUB_TEST_MODEL ?? "";
+const TEST_VERIFIER_PROVIDER =
+  process.env.GITHUB_TEST_VERIFIER_PROVIDER ??
+  process.env.YEP_VERIFIER_PROVIDER ??
+  "";
+const TEST_VERIFIER_MODEL =
+  process.env.GITHUB_TEST_VERIFIER_MODEL ??
+  process.env.YEP_VERIFIER_MODEL ??
+  "";
 const TEST_TIMEOUT_MS = Number(
   process.env.GITHUB_TEST_TIMEOUT_MS ?? 10 * 60 * 1000,
 );
@@ -211,6 +221,17 @@ async function cleanup(prNumber: number): Promise<void> {
   }).catch((error) => console.warn("[cleanup] failed to close PR:", error));
 }
 
+async function writeResult(result: Record<string, unknown>): Promise<string> {
+  const dir = join(process.cwd(), "benchmarks", "loop-runtime-eval", "results");
+  await mkdir(dir, { recursive: true });
+  const file = join(
+    dir,
+    `pr-maintenance-${new Date().toISOString().replace(/[:.]/g, "-")}.json`,
+  );
+  await writeFile(file, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  return file;
+}
+
 async function main(): Promise<void> {
   await waitForServer();
   const loopId = await createLoop();
@@ -221,13 +242,21 @@ async function main(): Promise<void> {
     await approveAndReady(loopId);
   console.error(`Draft PR ready: #${prNumber}`);
   await triggerFeedbackAndWait(relationId);
-  console.log(
-    JSON.stringify(
-      { loopId, runId, relationId, prNumber, result: "pass" },
-      null,
-      2,
-    ),
-  );
+  const result = {
+    loopId,
+    runId,
+    relationId,
+    prNumber,
+    result: "pass",
+    timestamp: new Date().toISOString(),
+    verifier: {
+      provider: TEST_VERIFIER_PROVIDER || null,
+      model: TEST_VERIFIER_MODEL || null,
+    },
+  };
+  console.log(JSON.stringify(result, null, 2));
+  const resultFile = await writeResult(result);
+  console.error(`Result archived: ${resultFile}`);
   await cleanup(prNumber);
 }
 

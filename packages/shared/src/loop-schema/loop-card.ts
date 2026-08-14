@@ -2,7 +2,14 @@ import { z } from "zod";
 import { ApprovalModeSchema } from "./policy.js";
 import { VerificationRuleSchema } from "./verification-rules.js";
 
-/** 人工閘門 SLA：進入 blocking 狀態後無人回應的催辦/降級策略。 */
+/**
+ * 人工閘門 SLA：進入 blocking 狀態後無人回應的催辦/降級策略。
+ * - keep：只催辦，不自動處置（安全預設）。
+ * - auto_abandon：超時自動失敗，適合可重建、不需人工裁定的任務。
+ * - auto_approve_low_risk：僅對 human_reasons 白名單中的低風險
+ *   verification inconclusive 自動 approve；policy gate、tool call、
+ *   execution_failed、duplicate_pr 等一律保留人工。
+ */
 export const HumanGateSlaPolicySchema = z.enum([
   "keep",
   "auto_abandon",

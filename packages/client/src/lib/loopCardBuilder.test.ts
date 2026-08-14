@@ -87,6 +87,19 @@ function testGithubPromptLoopRespectsExplicitStaticRuntime(): void {
   ]);
 }
 
+function testGithubPromptLoopPassesHumanGateSlaPolicy(): void {
+  const card = buildLoopCard({
+    ...DEFAULT_LOOP_CREATE_FORM,
+    kind: "github_prompt",
+    id: "github-sla",
+    task: "fix docs",
+    humanGateSlaPolicy: "auto_approve_low_risk",
+  });
+
+  assertEqual(card.loop.human_gate?.sla?.policy, "auto_approve_low_risk");
+  assertEqual(card.loop.human_gate?.sla?.abandon_after_minutes, 7 * 24 * 60);
+}
+
 function testBuildsWorkspaceLoop(): void {
   const card = buildLoopCard({
     ...DEFAULT_LOOP_CREATE_FORM,
@@ -120,6 +133,7 @@ function testBuildsWorkspaceLoopWithWorktreeStrategy(): void {
 
 testBuildsGithubPromptLoop();
 testGithubPromptLoopRespectsExplicitStaticRuntime();
+testGithubPromptLoopPassesHumanGateSlaPolicy();
 testBuildsWorkspaceLoop();
 testBuildsWorkspaceLoopWithWorktreeStrategy();
 

@@ -118,6 +118,56 @@ async function withFixture(
   }
 }
 
+async function withSlaFixture(
+  policy: "keep" | "auto_abandon" | "auto_approve_low_risk",
+  fn: (ctx: {
+    dataDir: string;
+    controlPlane: ControlPlane;
+    bus: FakeEventBus;
+    ledgerStore: RunLedgerStore;
+    stateStore: RunStateStore;
+  }) => Promise<void>,
+): Promise<void> {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-control-plane-sla-"));
+  try {
+    const ledgerStore = new RunLedgerStore({ dataDir });
+    const stateStore = new RunStateStore({ dataDir });
+    const bus = new FakeEventBus();
+    const controlPlane = new ControlPlane({
+      runStateStore: stateStore,
+      runLedgerStore: ledgerStore,
+      eventBus: bus,
+      loopCardStore: {
+        getLoop: () => ({
+          id: "loop-1",
+          card: {
+            loop: {
+              id: "loop-1",
+              workspace: {
+                strategy: "direct",
+                path: join(dataDir, "sla-ws"),
+              },
+              persistence: {
+                state_file: "state/loop-1.json",
+              },
+              human_gate: {
+                sla: {
+                  reminder_after_minutes: 24 * 60,
+                  abandon_after_minutes: 7 * 24 * 60,
+                  policy,
+                },
+              },
+            },
+          },
+        }),
+      } as never,
+    });
+    await fn({ dataDir, controlPlane, bus, ledgerStore, stateStore });
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+}
+
 test("passed judgment → complete: state persisted, decision ledgered with budget snapshot, loop-state-changed emitted", async () => {
   await withFixture(async ({ controlPlane, bus, ledgerStore, stateStore }) => {
     const result = await controlPlane.applyJudgment(
@@ -206,6 +256,82 @@ test("human SLA: queue aggregates a blocked run, reminder fires once, unavailabl
     await controlPlane.sweepHumanSla();
     assert.equal(bus.ofType("loop-human-sla-reminder").length, 1);
   });
+});
+
+test("human SLA: verifier inconclusive is auto-approved only with low-risk policy", async () => {
+  await withSlaFixture(
+    "auto_approve_low_risk",
+    async ({ controlPlane, bus, stateStore }) => {
+      const judgment = makeJudgment({
+        overall: "inconclusive",
+        next_action: "escalate",
+        requires_human: false,
+        human_reasons: [
+          {
+            code: "verifier_inconclusive",
+            message: "verifier could not reach a clear verdict",
+          },
+        ],
+      });
+      await controlPlane.applyJudgment(applyInput({ judgment }));
+      const record = await stateStore.load("loop-1");
+      assert.ok(record);
+      const enteredAt = new Date(
+        Date.now() - 8 * 24 * 60 * 60 * 1000,
+      ).toISOString();
+      await stateStore.save("loop-1", {
+        ...record,
+        updated_at: enteredAt,
+        pending_approval: record.pending_approval
+          ? { ...record.pending_approval, entered_at: enteredAt }
+          : null,
+        blocked_sla: { last_reminder_at: null },
+      });
+
+      const result = await controlPlane.sweepHumanSla();
+      assert.equal(result.approved, 1);
+      assert.equal(bus.ofType("loop-human-sla-abandoned").length, 1);
+      assert.equal((await stateStore.load("loop-1"))?.state, "active");
+    },
+  );
+});
+
+test("human SLA: non-whitelisted reason is never auto-approved", async () => {
+  await withSlaFixture(
+    "auto_approve_low_risk",
+    async ({ controlPlane, bus, stateStore }) => {
+      const judgment = makeJudgment({
+        overall: "inconclusive",
+        next_action: "escalate",
+        requires_human: false,
+        human_reasons: [
+          {
+            code: "duplicate_pr",
+            message: "duplicate PR needs human decision",
+          },
+        ],
+      });
+      await controlPlane.applyJudgment(applyInput({ judgment }));
+      const record = await stateStore.load("loop-1");
+      assert.ok(record);
+      const enteredAt = new Date(
+        Date.now() - 8 * 24 * 60 * 60 * 1000,
+      ).toISOString();
+      await stateStore.save("loop-1", {
+        ...record,
+        updated_at: enteredAt,
+        pending_approval: record.pending_approval
+          ? { ...record.pending_approval, entered_at: enteredAt }
+          : null,
+        blocked_sla: { last_reminder_at: null },
+      });
+
+      const result = await controlPlane.sweepHumanSla();
+      assert.equal(result.approved, 0);
+      assert.equal(bus.ofType("loop-human-sla-abandoned").length, 0);
+      assert.equal((await stateStore.load("loop-1"))?.state, "needs_human");
+    },
+  );
 });
 
 test("discardRun: needs_human → discarded with decision entry and resolved listener", async () => {

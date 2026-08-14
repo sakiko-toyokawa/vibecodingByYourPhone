@@ -1,7 +1,11 @@
 import type { VerifierReport } from "@yep-anywhere/shared";
+import type { ProviderName } from "../../../sdk/providers/types.js";
 import type { Process } from "../../../supervisor/Process.js";
 import type { Supervisor } from "../../../supervisor/Supervisor.js";
-import { resolveAdapterPolicy } from "../../assembly/adapter-policy.js";
+import {
+  isKnownProviderName,
+  resolveAdapterPolicy,
+} from "../../assembly/adapter-policy.js";
 import type { RunExecutionContext } from "../../run/types.js";
 import { loopRuntime } from "../../run/workspace.js";
 import type { RunLedgerStore } from "../../state/run-ledger-store.js";
@@ -23,9 +27,9 @@ import {
  *   不給）——Verifier 不能修改 Maker 的輸出，這是硬約束。
  * - Fresh context：新 session，只帶 bundle 裡的最小判斷資訊，不帶
  *   Maker 的完整對話歷史。
- * - 模型：沿用 card runtime / adapter_policy 的 model 覆蓋；與 Maker
- *   不同家族的「交叉評判」是部署配置問題（card.loop.runtime 指定），
- *   不在此硬編碼。
+ * - 模型：優先 verifier 專屬 adapter_policy 鍵（verifier_provider /
+ *   verifier_model），其次通用 model 覆蓋，最後沿用 card runtime；
+ *   judge 可用 env 指到不同 endpoint，與 Maker 保持獨立。
  * - 輸出：先 repair / corrective retry 一次（parse.ts + recovery prompt）；
  *   agent 崩潰/逾時/無輸出或 retry 後仍無效 = inconclusive + escalate，
  *   絕不讓未驗證文本進賬本。
@@ -46,15 +50,85 @@ export interface RunVerifierAgentDeps {
   }>;
 }
 
+function resolveVerifierEnv(
+  base: Record<string, string> | undefined,
+): Record<string, string> {
+  const env: Record<string, string> = { ...(base ?? {}) };
+  // judge 可用獨立 endpoint/key；部署方經 env 提供，嚴禁寫入 repo。
+  const baseUrl = process.env.YEP_VERIFIER_OPENAI_BASE_URL;
+  const apiKey =
+    process.env.YEP_VERIFIER_OPENAI_API_KEY ??
+    process.env.KIMI_API_KEY ??
+    process.env.MOONSHOT_API_KEY;
+  if (baseUrl) {
+    env.OPENAI_BASE_URL = baseUrl;
+  }
+  if (apiKey) {
+    env.OPENAI_API_KEY = apiKey;
+  }
+  return env;
+}
+
+function diffFilePathsFromDiff(diff: string | undefined): string[] {
+  if (!diff) {
+    return [];
+  }
+  const paths: string[] = [];
+  for (const match of diff.matchAll(/^\+\+\+ b\/(.+)$/gm)) {
+    const filePath = match[1]?.trim();
+    if (filePath && !paths.includes(filePath)) {
+      paths.push(filePath);
+    }
+  }
+  return paths;
+}
+
+async function resolveDiffFilePaths(
+  store: RunLedgerStore,
+  runId: string,
+  diffRef: string | null,
+): Promise<string[]> {
+  if (!diffRef) {
+    return [];
+  }
+  const artifactName = diffRef.replace(`artifact://${runId}/`, "");
+  const content = await store.readArtifact(runId, artifactName);
+  return diffFilePathsFromDiff(content);
+}
+
 export async function runVerifierAgent(
   deps: RunVerifierAgentDeps,
   ctx: RunExecutionContext,
   agentCtx: ReviewAgentContext,
 ): Promise<VerifierReport> {
   const { runId } = agentCtx;
+  const adapterPolicy = ctx.input
+    ? resolveAdapterPolicy(ctx.input.adapterPolicy)
+    : { ignoredKeys: [] as string[] };
+  const envProvider = process.env.YEP_VERIFIER_PROVIDER;
+  const loopProvider = loopRuntime(ctx.card)?.provider;
+  const verifierProvider: ProviderName | undefined =
+    adapterPolicy.verifier_provider ??
+    (envProvider && isKnownProviderName(envProvider)
+      ? envProvider
+      : undefined) ??
+    (loopProvider && isKnownProviderName(loopProvider)
+      ? loopProvider
+      : undefined);
+  const verifierModel =
+    adapterPolicy.verifier_model ??
+    process.env.YEP_VERIFIER_MODEL ??
+    adapterPolicy.model ??
+    loopRuntime(ctx.card)?.model;
+  const verifierEnv = resolveVerifierEnv(ctx.input?.env);
   const suffix = agentCtx.turn === 1 ? "" : `-turn${agentCtx.turn}`;
   const inputName = `verifier-agent-input${suffix}.json`;
   const outputName = `verifier-agent-output${suffix}.log`;
+  const diffFilePaths = await resolveDiffFilePaths(
+    deps.runLedgerStore,
+    runId,
+    agentCtx.evidenceRefs.diff,
+  );
 
   const bundle = {
     run_id: runId,
@@ -64,6 +138,18 @@ export async function runVerifierAgent(
     previous_judgment: ctx.lastJudgment ?? null,
     evidence_refs: agentCtx.evidenceRefs,
     workspace_path: agentCtx.workspacePath,
+    diff_file_paths: diffFilePaths,
+    judge: {
+      provider: verifierProvider ?? null,
+      model: verifierModel ?? null,
+      env_override:
+        process.env.YEP_VERIFIER_OPENAI_BASE_URL ||
+        process.env.YEP_VERIFIER_OPENAI_API_KEY ||
+        process.env.KIMI_API_KEY ||
+        process.env.MOONSHOT_API_KEY
+          ? "env"
+          : null,
+    },
   };
   await deps.runLedgerStore.writeArtifact(
     runId,
@@ -86,7 +172,6 @@ export async function runVerifierAgent(
       if (!ctx.input) {
         output = "verifier agent could not start: no assembled runtime input";
       } else {
-        const adapterPolicy = resolveAdapterPolicy(ctx.input.adapterPolicy);
         const result = await deps.supervisor.startSession(
           ctx.input.cwd,
           {
@@ -96,11 +181,9 @@ export async function runVerifierAgent(
           "plan",
           {
             permissions: ctx.input.permissions,
-            env: ctx.input.env,
-            providerName: loopRuntime(ctx.card)?.provider as
-              | import("@yep-anywhere/shared").ProviderName
-              | undefined,
-            model: adapterPolicy.model ?? loopRuntime(ctx.card)?.model,
+            env: verifierEnv,
+            providerName: verifierProvider,
+            model: verifierModel,
           },
         );
         if ("error" in result || "queued" in result) {

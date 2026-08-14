@@ -1,4 +1,4 @@
-import type { LoopCard } from "@yep-anywhere/shared";
+import type { HumanGateSlaPolicy, LoopCard } from "@yep-anywhere/shared";
 
 export type LoopKind = "workspace" | "github_prompt";
 export type PolicyMode = "readonly" | "modify";
@@ -28,6 +28,8 @@ export interface LoopCreateFormState {
   maxTimeMinutes: string;
   modelProvider: string;
   model: string;
+  /** 可選人工閘門 SLA；github 類卡會透傳進 card.loop.human_gate.sla。 */
+  humanGateSlaPolicy?: HumanGateSlaPolicy;
 }
 
 export const DEFAULT_LOOP_CREATE_FORM: LoopCreateFormState = {
@@ -166,6 +168,17 @@ export function buildLoopCard(form: LoopCreateFormState): LoopCard {
           profile: "github_issue_local_fix",
           approval_mode: "bypass",
         },
+        ...(form.humanGateSlaPolicy
+          ? {
+              human_gate: {
+                sla: {
+                  reminder_after_minutes: 24 * 60,
+                  abandon_after_minutes: 7 * 24 * 60,
+                  policy: form.humanGateSlaPolicy,
+                },
+              },
+            }
+          : {}),
       },
     };
   }

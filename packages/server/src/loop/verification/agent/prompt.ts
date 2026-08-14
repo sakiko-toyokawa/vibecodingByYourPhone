@@ -38,6 +38,14 @@ export interface VerifierAgentBundle {
   /** 輸入包落盤後的 artifact:// 引用（供 agent 按需回讀）。 */
   input_ref: string;
   workspace_path: string;
+  /** 本輪 diff 觸及的檔案路徑清單；空陣列表示無 diff 或尚未判定。 */
+  diff_file_paths?: string[];
+  /** 本次 judge 實際使用的 provider/model，供審計與 prompt 確認。 */
+  judge?: {
+    provider: string | null;
+    model: string | null;
+    env_override: string | null;
+  };
 }
 
 const RUBRIC = [
@@ -49,6 +57,18 @@ const RUBRIC = [
 
 /** L4 prompt inline evidence cap. Larger evidence stays in artifacts. */
 export const MAX_VERIFIER_INPUT_CHARS = 64_000;
+
+const DOCS_ONLY_FILE_RE =
+  /(^|\/)(docs|documentation)\/|\.md$|\.markdown$|\.adoc$|\.rst$|\.txt$|(^|\/)(LICENSE|CHANGELOG|CHANGES|NOTICE|CONTRIBUTING|README)(\.|$)|\.editorconfig$|\.gitattributes$|\.gitignore$/i;
+
+export function isDocsOnlyFilePaths(paths: string[]): boolean {
+  if (paths.length === 0) {
+    return false;
+  }
+  return paths.every((filePath) =>
+    DOCS_ONLY_FILE_RE.test(filePath.replace(/\\/g, "/")),
+  );
+}
 
 function boundedJson(value: unknown, label: string): unknown {
   const raw = JSON.stringify(value, null, 2);
@@ -126,6 +146,23 @@ export function buildVerifierAgentPrompt(bundle: VerifierAgentBundle): string {
     "```",
     "",
     "裁決口徑：下層已 failed 的問題不重複判；你的職責是下層檢查看不到的語義層（需求對齊/邊界/風格/邏輯漏洞）。證據不足 = inconclusive，不要猜。",
+    "",
+    "## 任務類型分流",
+    `diff_file_paths: ${JSON.stringify(bundle.diff_file_paths ?? [])}`,
+    isDocsOnlyFilePaths(bundle.diff_file_paths ?? [])
+      ? [
+          "本輪變更僅觸及文檔/標記/許可證類檔案，沒有可執行代碼改動。",
+          "docs-only 裁決標準改為：",
+          "  1. 檔案確實落盤且位置符合意圖；",
+          "  2. 內容與 intent contract 的需求對齊；",
+          "  3. 沒有混入代碼語義改動。",
+          "三條滿足即可給 passed，不得以「沒有測試證據」為由給 inconclusive。",
+          "若你發現文件路徑分類不確定、包含代碼或無法確認三條，回到上方代碼口徑從嚴裁決。",
+        ].join("\n")
+      : [
+          "本輪包含代碼改動或無法確定為 docs-only。",
+          "維持代碼口徑：證據不足 = inconclusive，不要猜；絕不因檔案看起來像文檔就放寬。",
+        ].join("\n"),
   ].join("\n");
 }
 
