@@ -83,6 +83,8 @@ test("GitHubClient publish flow forks, pushes, and opens a draft PR", async () =
   });
 
   assert.deepEqual(calls, [
+    ["api", "user", "--jq", ".login"],
+    ["api", "user/emails", "--jq", ".[] | select(.verified == true) | .email"],
     [
       "repo",
       "fork",
@@ -92,11 +94,9 @@ test("GitHubClient publish flow forks, pushes, and opens a draft PR", async () =
       "--remote-name",
       "fork",
     ],
-    ["api", "user", "--jq", ".login"],
-    ["api", "user/emails", "--jq", ".[] | select(.verified == true) | .email"],
-    ["auth", "setup-git", "--hostname", "github.com"],
     ["git", "remote", "get-url", "fork"],
     ["git", "remote", "add", "fork", "https://github.com/contributor/repo.git"],
+    ["auth", "setup-git", "--hostname", "github.com"],
     ["git", "config", "user.name"],
     ["git", "config", "user.email"],
     ["git", "log", "-1", "--format=%ae"],
@@ -116,6 +116,81 @@ test("GitHubClient publish flow forks, pushes, and opens a draft PR", async () =
     ],
   ]);
   assert.equal(url, "https://github.com/owner/repo/pull/12");
+});
+
+test("GitHubClient publish flow pushes directly when repository belongs to viewer", async () => {
+  const calls: string[][] = [];
+  const client = new GitHubClient({
+    ghPath: "/tools/gh",
+    tokenProvider: async () => "secret-token",
+    runGh: async (args) => {
+      calls.push(args);
+      if (args[0] === "api" && args[1] === "user/emails") {
+        return { exitCode: 0, stdout: "owner@example.com\n", stderr: "" };
+      }
+      if (args[0] === "api") {
+        return { exitCode: 0, stdout: "owner\n", stderr: "" };
+      }
+      if (
+        args[0] === "git" &&
+        args[1] === "config" &&
+        args[2] === "user.name"
+      ) {
+        return { exitCode: 0, stdout: "owner\n", stderr: "" };
+      }
+      if (
+        args[0] === "git" &&
+        args[1] === "config" &&
+        args[2] === "user.email"
+      ) {
+        return { exitCode: 0, stdout: "owner@example.com\n", stderr: "" };
+      }
+      if (args[0] === "git" && args[1] === "log") {
+        return { exitCode: 0, stdout: "owner@example.com\n", stderr: "" };
+      }
+      if (args[0] === "pr") {
+        return {
+          exitCode: 0,
+          stdout: "https://github.com/owner/repo/pull/12\n",
+          stderr: "",
+        };
+      }
+      return { exitCode: 0, stdout: "", stderr: "" };
+    },
+  });
+
+  await client.publishDraftPr({
+    repository: "owner/repo",
+    branch: "yep/7-bug",
+    title: "Fix bug",
+    body: "Verification passed.",
+    cwd: "E:/work/owner/repo",
+  });
+
+  assert.ok(
+    !calls.some((args) => args[0] === "repo" && args[1] === "fork"),
+    "same-account publish must not fork",
+  );
+  assert.deepEqual(
+    calls.find((args) => args[0] === "git" && args[1] === "push"),
+    ["git", "push", "origin", "yep/7-bug"],
+  );
+  assert.deepEqual(
+    calls.find((args) => args[0] === "pr"),
+    [
+      "pr",
+      "create",
+      "--repo",
+      "owner/repo",
+      "--head",
+      "yep/7-bug",
+      "--title",
+      "Fix bug",
+      "--body",
+      "Verification passed.",
+      "--draft",
+    ],
+  );
 });
 
 test("GitHubClient publish flow opens a normal PR when draft is false", async () => {

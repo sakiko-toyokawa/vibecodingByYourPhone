@@ -121,33 +121,42 @@ export class GitHubClient {
   }
 
   async publishDraftPr(input: PublishDraftPrInput): Promise<string> {
-    await this.runChecked(
-      [
-        "repo",
-        "fork",
-        input.repository,
-        "--clone=false",
-        "--remote=true",
-        "--remote-name",
-        "fork",
-      ],
-      input.cwd,
-    );
     const identity = await this.getVerifiedIdentity();
+    const repositoryOwner = input.repository.split("/")[0]?.toLowerCase();
+    const sameAccount =
+      repositoryOwner !== undefined &&
+      identity.login.toLowerCase() === repositoryOwner;
+    if (!sameAccount) {
+      await this.runChecked(
+        [
+          "repo",
+          "fork",
+          input.repository,
+          "--clone=false",
+          "--remote=true",
+          "--remote-name",
+          "fork",
+        ],
+        input.cwd,
+      );
+      await this.ensureForkRemote(input.cwd, input.repository, identity.login);
+    }
     await this.runChecked(
       ["auth", "setup-git", "--hostname", "github.com"],
       input.cwd,
     );
-    await this.ensureForkRemote(input.cwd, input.repository, identity.login);
     await this.assertGitIdentity(input.cwd, identity);
-    await this.runChecked(["git", "push", "fork", input.branch], input.cwd);
+    await this.runChecked(
+      ["git", "push", sameAccount ? "origin" : "fork", input.branch],
+      input.cwd,
+    );
     const prArgs = [
       "pr",
       "create",
       "--repo",
       input.repository,
       "--head",
-      `${identity.login}:${input.branch}`,
+      sameAccount ? input.branch : `${identity.login}:${input.branch}`,
       "--title",
       input.title,
       "--body",

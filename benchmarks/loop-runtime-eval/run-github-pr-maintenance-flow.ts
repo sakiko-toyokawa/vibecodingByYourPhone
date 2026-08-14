@@ -5,6 +5,8 @@ const BASE_URL = process.env.SERVER_URL ?? `http://127.0.0.1:${PORT}`;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN ?? "";
 const TEST_REPO = process.env.GITHUB_TEST_REPO ?? "";
 const TEST_ISSUE = process.env.GITHUB_TEST_ISSUE ?? "";
+const TEST_PROVIDER = process.env.GITHUB_TEST_PROVIDER ?? "";
+const TEST_MODEL = process.env.GITHUB_TEST_MODEL ?? "";
 
 const REQUIRED = ["GITHUB_TOKEN", "GITHUB_TEST_REPO", "GITHUB_TEST_ISSUE"];
 
@@ -69,6 +71,14 @@ async function createLoop(): Promise<string> {
         persistence: { state_file: `state/${loopId}.json` },
         stop_rules: { max_turns: 5, max_retries: 2, max_time_minutes: 15 },
         policy: { approval_mode: "bypass", profile: "github_issue_local_fix" },
+        ...(TEST_PROVIDER || TEST_MODEL
+          ? {
+              runtime: {
+                ...(TEST_PROVIDER ? { provider: TEST_PROVIDER } : {}),
+                ...(TEST_MODEL ? { model: TEST_MODEL } : {}),
+              },
+            }
+          : {}),
       },
     }),
   });
