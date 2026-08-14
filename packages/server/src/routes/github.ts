@@ -8,10 +8,11 @@ import type {
   GitHubToolProvisioner,
   PublishDraftPrInput,
 } from "../github/index.js";
-import type {
-  RelationRecord,
-  RelationStore,
-  TriggerQueueStore,
+import {
+  type RelationRecord,
+  type RelationStore,
+  type TriggerQueueStore,
+  appendRelationStateLog,
 } from "../loop/index.js";
 import { isGitWorkTree } from "../loop/index.js";
 import { githubPromptWorkspacePath } from "../loop/run/workspace.js";
@@ -62,6 +63,13 @@ function optionalNumber(
   }
   return undefined;
 }
+
+const WEBHOOK_EVENT_WHITELIST = new Set([
+  "issue_comment",
+  "pull_request_review",
+  "pull_request_review_comment",
+  "pull_request",
+]);
 
 function prNumberFromUrl(url: string): number | undefined {
   const match = url.match(/\/pull\/(\d+)/);
@@ -461,6 +469,9 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
     } catch {
       return c.json({ error: "invalid_json" }, 400);
     }
+    if (!WEBHOOK_EVENT_WHITELIST.has(eventType)) {
+      return c.json({ ignored: "event" }, 202);
+    }
     const repository =
       typeof payload.repository === "object" &&
       payload.repository !== null &&
@@ -492,15 +503,6 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
     if (!relation) {
       return c.json({ accepted: false, reason: "relation_not_found" }, 202);
     }
-    if (
-      relation.state === "pr_pending_approval" ||
-      relation.state === "awaiting_review"
-    ) {
-      return c.json(
-        { accepted: false, reason: "relation_not_actionable" },
-        202,
-      );
-    }
     const comment =
       typeof payload.comment === "object" && payload.comment !== null
         ? (payload.comment as Record<string, unknown>)
@@ -509,6 +511,105 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
       typeof payload.review === "object" && payload.review !== null
         ? (payload.review as Record<string, unknown>)
         : undefined;
+    const action = getString(payload, "action") ?? "";
+    if (eventType === "pull_request_review" && action === "dismissed") {
+      await deps.relationStore.updateState(
+        relation.relation_id,
+        relation.state,
+        {
+          state_logs: appendRelationStateLog(
+            relation,
+            "review_dismissed",
+            `GitHub review dismissed on ${repository}#${prNumber}`,
+          ),
+        },
+      );
+      return c.json({ accepted: false, reason: "review_dismissed" }, 202);
+    }
+    if (eventType === "pull_request_review" && review?.state === "approved") {
+      await deps.relationStore.updateState(
+        relation.relation_id,
+        relation.state,
+        {
+          state_logs: appendRelationStateLog(
+            relation,
+            "review_approved",
+            `GitHub review approved on ${repository}#${prNumber}`,
+          ),
+        },
+      );
+      return c.json({ accepted: false, reason: "review_approved" }, 202);
+    }
+    if (eventType === "pull_request") {
+      if (action === "closed") {
+        const merged = pullRequest?.merged === true;
+        const terminalState = merged ? "merged" : "closed";
+        await deps.relationStore.updateState(
+          relation.relation_id,
+          terminalState,
+          {
+            state_logs: appendRelationStateLog(
+              relation,
+              terminalState,
+              `GitHub webhook observed PR ${repository}#${prNumber} ${merged ? "merged" : "closed"}`,
+            ),
+          },
+        );
+        return c.json({ accepted: false, reason: terminalState }, 202);
+      }
+      if (action === "reopened" && relation.state === "closed") {
+        await deps.relationStore.updateState(
+          relation.relation_id,
+          "awaiting_feedback",
+          {
+            state_logs: appendRelationStateLog(
+              relation,
+              "reopened",
+              `GitHub webhook observed PR ${repository}#${prNumber} reopened`,
+            ),
+          },
+        );
+        return c.json({ accepted: false, reason: "reopened" }, 202);
+      }
+      if (
+        action === "ready_for_review" &&
+        relation.state === "awaiting_review"
+      ) {
+        await deps.relationStore.updateState(
+          relation.relation_id,
+          "awaiting_feedback",
+          {
+            state_logs: appendRelationStateLog(
+              relation,
+              "ready_for_review",
+              `GitHub webhook observed PR ${repository}#${prNumber} ready for review`,
+            ),
+          },
+        );
+        return c.json({ accepted: false, reason: "ready_for_review" }, 202);
+      }
+      await deps.relationStore.updateState(
+        relation.relation_id,
+        relation.state,
+        {
+          state_logs: appendRelationStateLog(
+            relation,
+            "pull_request_event_ignored",
+            `GitHub pull_request event '${action}' did not require a maintenance wake for ${repository}#${prNumber}`,
+          ),
+        },
+      );
+      return c.json(
+        { accepted: false, reason: "pull_request_event_ignored", action },
+        202,
+      );
+    }
+    if (relation.state !== "awaiting_feedback" && relation.state !== "fixing") {
+      return c.json(
+        { accepted: false, reason: "relation_not_actionable" },
+        202,
+      );
+    }
     const commentId =
       typeof comment?.id === "number"
         ? comment.id
@@ -521,6 +622,31 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
         : typeof review?.id === "string" && review.id.trim() !== ""
           ? Number(review.id)
           : undefined;
+    const issueCommentId =
+      eventType === "issue_comment" ? commentId : undefined;
+    const lastProcessedPatch: Partial<RelationRecord["last_processed"]> = {};
+    const eventPayload: Record<string, unknown> = {};
+    if (eventType === "issue_comment") {
+      if (!issueCommentId) {
+        return c.json({ accepted: false, reason: "missing_comment" }, 202);
+      }
+      lastProcessedPatch.issue_comment_id = issueCommentId;
+      eventPayload.issue_comment_id = issueCommentId;
+    } else if (eventType === "pull_request_review_comment") {
+      if (!commentId) {
+        return c.json({ accepted: false, reason: "missing_comment" }, 202);
+      }
+      lastProcessedPatch.comment_id = commentId;
+      eventPayload.comment_id = commentId;
+    } else if (eventType === "pull_request_review") {
+      if (!reviewId) {
+        return c.json({ accepted: false, reason: "missing_review" }, 202);
+      }
+      lastProcessedPatch.review_id = reviewId;
+      eventPayload.review_id = reviewId;
+    } else {
+      return c.json({ accepted: false, reason: "event_ignored" }, 202);
+    }
     const nextRepairCount = relation.repair_count + 1;
     if (nextRepairCount > 3) {
       await deps.relationStore.updateState(
@@ -529,6 +655,10 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
         {
           needs_human_reason:
             "repeated relation feedback exceeded auto-repair limit",
+          last_processed: {
+            ...relation.last_processed,
+            ...lastProcessedPatch,
+          },
         },
       );
       return c.json({ accepted: false, reason: "repair_limit_reached" }, 202);
@@ -536,11 +666,15 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
     await deps.relationStore.updateState(relation.relation_id, "fixing", {
       last_processed: {
         ...relation.last_processed,
-        ...(commentId ? { comment_id: commentId } : {}),
-        ...(reviewId ? { review_id: reviewId } : {}),
+        ...lastProcessedPatch,
       },
       feedback_count: relation.feedback_count + 1,
       repair_count: nextRepairCount,
+      state_logs: appendRelationStateLog(
+        relation,
+        eventType,
+        `GitHub webhook ${eventType} woke maintenance for ${repository}#${prNumber}`,
+      ),
     });
     const eventId = delivery || `github-${eventType}-${repository}-${prNumber}`;
     await deps.triggerQueueStore.enqueue({
@@ -554,8 +688,7 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
         event_type: eventType,
         repository,
         pr_number: prNumber,
-        ...(commentId ? { comment_id: commentId } : {}),
-        ...(reviewId ? { review_id: reviewId } : {}),
+        ...eventPayload,
       },
     });
     await deps.drainPendingTriggers?.(relation.loop_id);

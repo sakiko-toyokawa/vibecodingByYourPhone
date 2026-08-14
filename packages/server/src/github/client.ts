@@ -45,10 +45,17 @@ export interface GitHubReview {
   submitted_at: string;
 }
 
+export interface GitHubCheckRun {
+  name: string;
+  status: string;
+  conclusion: string | null;
+}
+
 export interface GitHubPullRequestState {
   state: string;
   merged: boolean;
   head_sha: string;
+  draft: boolean;
 }
 
 export interface CommandResult {
@@ -321,6 +328,29 @@ export class GitHubClient {
     );
   }
 
+  async listIssueComments(
+    repository: string,
+    prNumber: number,
+  ): Promise<GitHubComment[]> {
+    const stdout = await this.runChecked([
+      "api",
+      `repos/${repository}/issues/${prNumber}/comments`,
+      "--jq",
+      ".",
+    ]);
+    return (JSON.parse(stdout || "[]") as Array<Record<string, unknown>>).map(
+      (item) => ({
+        id: Number(item.id),
+        body: String(item.body ?? ""),
+        user:
+          typeof item.user === "object" && item.user !== null
+            ? String((item.user as Record<string, unknown>).login ?? "")
+            : null,
+        created_at: String(item.created_at ?? ""),
+      }),
+    );
+  }
+
   async listPullRequestReviews(
     repository: string,
     prNumber: number,
@@ -345,6 +375,29 @@ export class GitHubClient {
     );
   }
 
+  async getCheckRuns(
+    repository: string,
+    sha: string,
+  ): Promise<GitHubCheckRun[]> {
+    const stdout = await this.runChecked([
+      "api",
+      `repos/${repository}/commits/${sha}/check-runs`,
+      "--jq",
+      ".check_runs",
+    ]);
+    const parsed = JSON.parse(stdout || "[]") as Array<
+      Record<string, unknown>
+    > | null;
+    return (parsed ?? []).map((item) => ({
+      name: String(item.name ?? ""),
+      status: String(item.status ?? ""),
+      conclusion:
+        typeof item.conclusion === "string" && item.conclusion.length > 0
+          ? item.conclusion
+          : null,
+    }));
+  }
+
   async getPullRequest(
     repository: string,
     prNumber: number,
@@ -353,13 +406,14 @@ export class GitHubClient {
       "api",
       `repos/${repository}/pulls/${prNumber}`,
       "--jq",
-      "{state,merged,head_sha:.head.sha}",
+      "{state,merged,head_sha:.head.sha,draft}",
     ]);
     const parsed = JSON.parse(stdout) as Record<string, unknown>;
     return {
       state: String(parsed.state ?? ""),
       merged: Boolean(parsed.merged),
       head_sha: String(parsed.head_sha ?? ""),
+      draft: Boolean(parsed.draft),
     };
   }
 

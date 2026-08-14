@@ -13,6 +13,35 @@ async function json(response: Response): Promise<Record<string, unknown>> {
   return (await response.json()) as Record<string, unknown>;
 }
 
+function makeWebhookApp(
+  relation: Record<string, unknown>,
+  relationUpdates: Array<{ id: string; state: string; patch?: object }>,
+  enqueued: Array<{ event_id: string; payload: object }>,
+) {
+  return new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {} as GitHubClient,
+      relationStore: {
+        findByGitHubPr: () => relation,
+        updateState: async (id: string, state: string, patch?: object) => {
+          relationUpdates.push({ id, state, patch });
+          return { ...relation, ...patch, state };
+        },
+      } as never,
+      triggerQueueStore: {
+        enqueue: async (input: { event_id: string; payload: object }) => {
+          enqueued.push(input);
+          return { ...input, state: "pending" };
+        },
+      } as never,
+      drainPendingTriggers: async () => {},
+    }),
+  );
+}
+
 test("GitHub routes store token without echoing it", async () => {
   let token: string | null = null;
   const credentialStore = {
@@ -188,6 +217,7 @@ test("GitHub webhook enqueues a trigger for a known relation", async () => {
     findByGitHubPr: () => ({
       relation_id: "rel-1",
       loop_id: "loop-maintainer",
+      state: "awaiting_feedback",
       feedback_count: 0,
       repair_count: 0,
       last_processed: {},
@@ -224,7 +254,7 @@ test("GitHub webhook enqueues a trigger for a known relation", async () => {
   const response = await app.request("/github/webhook", {
     method: "POST",
     headers: {
-      "x-github-event": "pull_request_review",
+      "x-github-event": "pull_request_review_comment",
       "x-github-delivery": "delivery-1",
       "content-type": "application/json",
     },
@@ -261,6 +291,325 @@ test("GitHub webhook enqueues a trigger for a known relation", async () => {
     )?.last_processed.comment_id,
     123,
   );
+});
+
+test("GitHub webhook writes issue_comment watermark separately", async () => {
+  const relationUpdates: Array<{
+    id: string;
+    state: string;
+    patch?: object;
+  }> = [];
+  const enqueued: Array<{ event_id: string; payload: object }> = [];
+  const app = makeWebhookApp(
+    {
+      relation_id: "rel-1",
+      loop_id: "loop-maintainer",
+      state: "awaiting_feedback",
+      feedback_count: 0,
+      repair_count: 0,
+      last_processed: { comment_id: 10 },
+    },
+    relationUpdates,
+    enqueued,
+  );
+
+  const response = await app.request("/github/webhook", {
+    method: "POST",
+    headers: {
+      "x-github-event": "issue_comment",
+      "x-github-delivery": "delivery-issue-1",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      repository: { full_name: "owner/repo" },
+      issue: { number: 12 },
+      comment: { id: 9 },
+    }),
+  });
+
+  assert.equal(response.status, 202);
+  assert.equal(enqueued.length, 1);
+  assert.equal(
+    (
+      relationUpdates[0]?.patch as {
+        last_processed: { issue_comment_id?: number; comment_id?: number };
+      }
+    )?.last_processed.issue_comment_id,
+    9,
+  );
+  assert.equal(
+    (
+      relationUpdates[0]?.patch as {
+        last_processed: { comment_id?: number };
+      }
+    )?.last_processed.comment_id,
+    10,
+  );
+});
+
+test("GitHub webhook routes pull_request.closed to terminal without repair", async () => {
+  const relationUpdates: Array<{
+    id: string;
+    state: string;
+    patch?: object;
+  }> = [];
+  const enqueued: Array<{ event_id: string; payload: object }> = [];
+  const app = makeWebhookApp(
+    {
+      relation_id: "rel-1",
+      loop_id: "loop-maintainer",
+      state: "awaiting_feedback",
+      feedback_count: 0,
+      repair_count: 2,
+      last_processed: {},
+    },
+    relationUpdates,
+    enqueued,
+  );
+
+  const response = await app.request("/github/webhook", {
+    method: "POST",
+    headers: {
+      "x-github-event": "pull_request",
+      "x-github-delivery": "delivery-close-1",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      repository: { full_name: "owner/repo" },
+      pull_request: { number: 12, merged: true },
+      action: "closed",
+    }),
+  });
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await json(response), {
+    accepted: false,
+    reason: "merged",
+  });
+  assert.equal(enqueued.length, 0);
+  assert.equal(relationUpdates[0]?.state, "merged");
+});
+
+test("GitHub webhook ignores review dismissal and approval", async () => {
+  const relationUpdates: Array<{
+    id: string;
+    state: string;
+    patch?: object;
+  }> = [];
+  const enqueued: Array<{ event_id: string; payload: object }> = [];
+  const app = makeWebhookApp(
+    {
+      relation_id: "rel-1",
+      loop_id: "loop-maintainer",
+      state: "awaiting_feedback",
+      feedback_count: 0,
+      repair_count: 0,
+      last_processed: {},
+    },
+    relationUpdates,
+    enqueued,
+  );
+
+  const dismissed = await app.request("/github/webhook", {
+    method: "POST",
+    headers: {
+      "x-github-event": "pull_request_review",
+      "x-github-delivery": "delivery-dismiss-1",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      repository: { full_name: "owner/repo" },
+      pull_request: { number: 12 },
+      review: { id: 20, state: "dismissed" },
+      action: "dismissed",
+    }),
+  });
+  assert.equal(dismissed.status, 202);
+  assert.equal((await json(dismissed)).reason, "review_dismissed");
+
+  const approved = await app.request("/github/webhook", {
+    method: "POST",
+    headers: {
+      "x-github-event": "pull_request_review",
+      "x-github-delivery": "delivery-approve-1",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      repository: { full_name: "owner/repo" },
+      pull_request: { number: 12 },
+      review: { id: 21, state: "approved" },
+      action: "submitted",
+    }),
+  });
+  assert.equal(approved.status, 202);
+  assert.equal((await json(approved)).reason, "review_approved");
+  assert.equal(enqueued.length, 0);
+});
+
+test("GitHub webhook ignores synchronize without repair", async () => {
+  const relationUpdates: Array<{
+    id: string;
+    state: string;
+    patch?: object;
+  }> = [];
+  const enqueued: Array<{ event_id: string; payload: object }> = [];
+  const app = makeWebhookApp(
+    {
+      relation_id: "rel-1",
+      loop_id: "loop-maintainer",
+      state: "awaiting_feedback",
+      feedback_count: 0,
+      repair_count: 2,
+      last_processed: {},
+    },
+    relationUpdates,
+    enqueued,
+  );
+
+  const response = await app.request("/github/webhook", {
+    method: "POST",
+    headers: {
+      "x-github-event": "pull_request",
+      "x-github-delivery": "delivery-sync-1",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      repository: { full_name: "owner/repo" },
+      pull_request: { number: 12 },
+      action: "synchronize",
+    }),
+  });
+
+  assert.equal(response.status, 202);
+  assert.equal((await json(response)).reason, "pull_request_event_ignored");
+  assert.equal(enqueued.length, 0);
+  assert.equal(
+    (
+      relationUpdates[0]?.patch as {
+        repair_count?: number;
+      }
+    )?.repair_count,
+    undefined,
+  );
+});
+
+test("GitHub webhook ignores non-whitelisted events", async () => {
+  const relationUpdates: Array<{
+    id: string;
+    state: string;
+    patch?: object;
+  }> = [];
+  const enqueued: Array<{ event_id: string; payload: object }> = [];
+  const app = makeWebhookApp(
+    {
+      relation_id: "rel-1",
+      loop_id: "loop-maintainer",
+      state: "awaiting_feedback",
+      feedback_count: 0,
+      repair_count: 0,
+      last_processed: {},
+    },
+    relationUpdates,
+    enqueued,
+  );
+
+  const response = await app.request("/github/webhook", {
+    method: "POST",
+    headers: {
+      "x-github-event": "check_run",
+      "x-github-delivery": "delivery-check-1",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      repository: { full_name: "owner/repo" },
+      check_run: { id: 1 },
+    }),
+  });
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await json(response), { ignored: "event" });
+  assert.equal(enqueued.length, 0);
+  assert.equal(relationUpdates.length, 0);
+});
+
+test("GitHub webhook advances awaiting_review on ready_for_review", async () => {
+  const relationUpdates: Array<{
+    id: string;
+    state: string;
+    patch?: object;
+  }> = [];
+  const enqueued: Array<{ event_id: string; payload: object }> = [];
+  const app = makeWebhookApp(
+    {
+      relation_id: "rel-1",
+      loop_id: "loop-maintainer",
+      state: "awaiting_review",
+      feedback_count: 0,
+      repair_count: 0,
+      last_processed: {},
+    },
+    relationUpdates,
+    enqueued,
+  );
+
+  const response = await app.request("/github/webhook", {
+    method: "POST",
+    headers: {
+      "x-github-event": "pull_request",
+      "x-github-delivery": "delivery-ready-1",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      repository: { full_name: "owner/repo" },
+      pull_request: { number: 12, draft: false },
+      action: "ready_for_review",
+    }),
+  });
+
+  assert.equal(response.status, 202);
+  assert.equal((await json(response)).reason, "ready_for_review");
+  assert.equal(enqueued.length, 0);
+  assert.equal(relationUpdates[0]?.state, "awaiting_feedback");
+});
+
+test("GitHub webhook revives a closed relation on reopen", async () => {
+  const relationUpdates: Array<{
+    id: string;
+    state: string;
+    patch?: object;
+  }> = [];
+  const enqueued: Array<{ event_id: string; payload: object }> = [];
+  const app = makeWebhookApp(
+    {
+      relation_id: "rel-1",
+      loop_id: "loop-maintainer",
+      state: "closed",
+      feedback_count: 0,
+      repair_count: 0,
+      last_processed: {},
+    },
+    relationUpdates,
+    enqueued,
+  );
+
+  const response = await app.request("/github/webhook", {
+    method: "POST",
+    headers: {
+      "x-github-event": "pull_request",
+      "x-github-delivery": "delivery-reopen-1",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      repository: { full_name: "owner/repo" },
+      pull_request: { number: 12, state: "open" },
+      action: "reopened",
+    }),
+  });
+
+  assert.equal(response.status, 202);
+  assert.equal((await json(response)).reason, "reopened");
+  assert.equal(enqueued.length, 0);
+  assert.equal(relationUpdates[0]?.state, "awaiting_feedback");
 });
 
 test("GitHub publish draft PR creates a relation when relation metadata is supplied", async () => {

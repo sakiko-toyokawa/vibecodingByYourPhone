@@ -34,10 +34,15 @@ export interface RelationRecord {
   subject: GithubRelationSubject;
   state: RelationState;
   last_processed: {
+    /** Pull request review comments (pulls/{n}/comments). */
     comment_id?: number;
     review_id?: number;
+    /** Issue comments on the PR conversation (issues/{n}/comments). */
+    issue_comment_id?: number;
     commit_sha?: string;
+    ci_failure_sha?: string;
   };
+  state_logs?: RelationStateLogEntry[];
   feedback_count: number;
   repair_count: number;
   pending_publish?: {
@@ -55,6 +60,21 @@ export interface RelationRecord {
   needs_human_reason?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface RelationStateLogEntry {
+  at: string;
+  event: string;
+  message: string;
+}
+
+export function appendRelationStateLog(
+  relation: RelationRecord,
+  event: string,
+  message: string,
+  at = new Date().toISOString(),
+): RelationStateLogEntry[] {
+  return [...(relation.state_logs ?? []), { at, event, message }].slice(-100);
 }
 
 interface LegacyRelationFile {
@@ -149,6 +169,7 @@ function relationToTarget(relation: RelationRecord): MaintenanceTarget {
       fork_owner: relation.subject.fork_owner,
       base_sha: relation.subject.base_sha,
       last_processed: relation.last_processed,
+      state_logs: relation.state_logs,
       pending_publish: relation.pending_publish,
       needs_human_reason: relation.needs_human_reason,
     },
@@ -176,6 +197,9 @@ function targetToRelation(target: MaintenanceTarget): RelationRecord | null {
     adapter.last_processed && typeof adapter.last_processed === "object"
       ? (adapter.last_processed as RelationRecord["last_processed"])
       : {};
+  const stateLogs = Array.isArray(adapter.state_logs)
+    ? (adapter.state_logs as RelationStateLogEntry[])
+    : undefined;
   return {
     relation_id: target.target_id,
     loop_id: target.loop_id,
@@ -198,6 +222,7 @@ function targetToRelation(target: MaintenanceTarget): RelationRecord | null {
     },
     state,
     last_processed: lastProcessed,
+    ...(stateLogs ? { state_logs: stateLogs } : {}),
     feedback_count: target.feedback_count,
     repair_count: target.repair_count,
     pending_publish:

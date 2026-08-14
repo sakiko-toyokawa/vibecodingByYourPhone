@@ -1,12 +1,31 @@
-import type { GitHubClient } from "../../github/index.js";
+import type { GitHubCheckRun, GitHubClient } from "../../github/index.js";
 import type { TriggerQueueStore } from "../state/trigger-queue-store.js";
-import type { RelationStore } from "./relation-store.js";
+import {
+  type RelationRecord,
+  type RelationStore,
+  appendRelationStateLog,
+} from "./relation-store.js";
 
 export interface RelationPollerDeps {
   relationStore: RelationStore;
   githubClient: GitHubClient;
   triggerQueueStore: TriggerQueueStore;
   drainPendingTriggers?: (loopId?: string) => Promise<void>;
+}
+
+const FAILED_CHECK_CONCLUSIONS = new Set([
+  "failure",
+  "timed_out",
+  "action_required",
+]);
+
+function hasFailedCheckRuns(checkRuns: GitHubCheckRun[]): boolean {
+  return checkRuns.some(
+    (run) =>
+      run.status === "completed" &&
+      run.conclusion !== null &&
+      FAILED_CHECK_CONCLUSIONS.has(run.conclusion),
+  );
 }
 
 export class RelationPoller {
@@ -42,11 +61,7 @@ export class RelationPoller {
       if (
         relation.subject.type !== "github_pr" ||
         !relation.subject.pr_number ||
-        relation.state === "merged" ||
-        relation.state === "closed" ||
-        relation.state === "needs_human" ||
-        relation.state === "pr_pending_approval" ||
-        relation.state === "awaiting_review"
+        relation.state === "merged"
       ) {
         continue;
       }
@@ -56,13 +71,64 @@ export class RelationPoller {
         prNumber,
       );
       if (pull.state === "closed" || pull.merged) {
+        const terminalState = pull.merged ? "merged" : "closed";
         await this.deps.relationStore.updateState(
           relation.relation_id,
-          pull.merged ? "merged" : "closed",
+          terminalState,
+          {
+            state_logs: appendRelationStateLog(
+              relation,
+              terminalState,
+              `GitHub PR ${repository}#${prNumber} ${pull.merged ? "merged" : "closed"}`,
+            ),
+          },
         );
         continue;
       }
+      if (relation.state === "closed") {
+        await this.deps.relationStore.updateState(
+          relation.relation_id,
+          "awaiting_feedback",
+          {
+            state_logs: appendRelationStateLog(
+              relation,
+              "reopened",
+              `GitHub PR ${repository}#${prNumber} was reopened`,
+            ),
+          },
+        );
+        continue;
+      }
+      if (
+        relation.state === "needs_human" ||
+        relation.state === "pr_pending_approval"
+      ) {
+        continue;
+      }
+      if (relation.state === "awaiting_review") {
+        if (!pull.draft) {
+          await this.deps.relationStore.updateState(
+            relation.relation_id,
+            "awaiting_feedback",
+            {
+              state_logs: appendRelationStateLog(
+                relation,
+                "ready_for_review",
+                `GitHub PR ${repository}#${prNumber} is no longer a draft`,
+              ),
+            },
+          );
+        }
+        continue;
+      }
+      if (relation.state !== "awaiting_feedback") {
+        continue;
+      }
       const comments = await this.deps.githubClient.listPullRequestComments(
+        repository,
+        prNumber,
+      );
+      const issueComments = await this.deps.githubClient.listIssueComments(
         repository,
         prNumber,
       );
@@ -70,7 +136,15 @@ export class RelationPoller {
         repository,
         prNumber,
       );
+      const checkRuns = await this.deps.githubClient.getCheckRuns(
+        repository,
+        pull.head_sha,
+      );
       const newestCommentId = comments.reduce(
+        (max, item) => Math.max(max, item.id),
+        0,
+      );
+      const newestIssueCommentId = issueComments.reduce(
         (max, item) => Math.max(max, item.id),
         0,
       );
@@ -78,14 +152,71 @@ export class RelationPoller {
         (max, item) => Math.max(max, item.id),
         0,
       );
-      const hasNewComment =
-        newestCommentId > (relation.last_processed.comment_id ?? 0);
-      const hasNewReview =
-        newestReviewId > (relation.last_processed.review_id ?? 0);
-      if (!hasNewComment && !hasNewReview) {
+      const lastProcessed = relation.last_processed;
+      const cursor: RelationRecord["last_processed"] = {
+        ...lastProcessed,
+      };
+      const signals: string[] = [];
+      if (lastProcessed.commit_sha !== pull.head_sha) {
+        cursor.commit_sha = pull.head_sha;
+        if (lastProcessed.commit_sha) {
+          signals.push("head_moved");
+        }
+      }
+      const hasFailure = hasFailedCheckRuns(checkRuns);
+      if (hasFailure) {
+        if (lastProcessed.ci_failure_sha !== pull.head_sha) {
+          cursor.ci_failure_sha = pull.head_sha;
+          signals.push("ci_failure");
+        }
+      } else if (lastProcessed.ci_failure_sha) {
+        cursor.ci_failure_sha = undefined;
+      }
+      const hasNewComment = newestCommentId > (lastProcessed.comment_id ?? 0);
+      const hasNewIssueComment =
+        newestIssueCommentId > (lastProcessed.issue_comment_id ?? 0);
+      const hasNewReview = newestReviewId > (lastProcessed.review_id ?? 0);
+      if (hasNewComment) {
+        cursor.comment_id = newestCommentId;
+        signals.push("pull_request_review_comment");
+      }
+      if (hasNewIssueComment) {
+        cursor.issue_comment_id = newestIssueCommentId;
+        signals.push("issue_comment");
+      }
+      if (hasNewReview) {
+        cursor.review_id = newestReviewId;
+        signals.push("pull_request_review");
+      }
+      if (signals.length === 0) {
+        if (
+          cursor.commit_sha !== lastProcessed.commit_sha ||
+          cursor.ci_failure_sha !== lastProcessed.ci_failure_sha
+        ) {
+          await this.deps.relationStore.updateState(
+            relation.relation_id,
+            relation.state,
+            {
+              last_processed: cursor,
+              ...(lastProcessed.ci_failure_sha && !hasFailure
+                ? {
+                    state_logs: appendRelationStateLog(
+                      relation,
+                      "checks_recovered",
+                      `GitHub PR ${repository}#${prNumber} checks recovered on ${pull.head_sha}`,
+                    ),
+                  }
+                : {}),
+            },
+          );
+        }
         continue;
       }
-      const newestId = Math.max(newestCommentId, newestReviewId);
+      const newestId = Math.max(
+        newestCommentId,
+        newestIssueCommentId,
+        newestReviewId,
+      );
       const nextRepairCount = relation.repair_count + 1;
       if (nextRepairCount > 3) {
         await this.deps.relationStore.updateState(
@@ -94,23 +225,31 @@ export class RelationPoller {
           {
             needs_human_reason:
               "repeated relation feedback exceeded auto-repair limit",
+            last_processed: cursor,
           },
         );
         continue;
       }
+      const primaryEventType = signals.includes("head_moved")
+        ? "head_moved"
+        : signals.includes("ci_failure")
+          ? "ci_failure"
+          : (signals[0] ?? "issue_comment");
+      const eventSuffix =
+        primaryEventType === "head_moved"
+          ? `head-${pull.head_sha}`
+          : primaryEventType === "ci_failure"
+            ? `ci-${pull.head_sha}`
+            : String(newestId);
+      const eventId = `github-poll-${relation.relation_id}-${eventSuffix}`;
       await this.deps.relationStore.updateState(
         relation.relation_id,
         "fixing",
         {
-          last_processed: {
-            ...relation.last_processed,
-            ...(newestCommentId ? { comment_id: newestCommentId } : {}),
-            ...(newestReviewId ? { review_id: newestReviewId } : {}),
-          },
+          last_processed: cursor,
           repair_count: nextRepairCount,
         },
       );
-      const eventId = `github-poll-${relation.relation_id}-${newestId}`;
       await this.deps.triggerQueueStore.enqueue({
         event_id: eventId,
         loop_id: relation.loop_id,
@@ -119,9 +258,11 @@ export class RelationPoller {
         payload: {
           relation_id: relation.relation_id,
           maintenance_id: relation.relation_id,
-          event_type: hasNewReview ? "pull_request_review" : "issue_comment",
+          event_type: primaryEventType,
+          event_types: signals,
           repository,
           pr_number: prNumber,
+          head_sha: pull.head_sha,
           polled_at: new Date().toISOString(),
         },
       });

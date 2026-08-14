@@ -58,12 +58,20 @@ test("RelationStore updateState preserves subject and cursor fields", async () =
     await store.initialize();
     await store.upsert(makeRelation());
     const updated = await store.updateState("rel-oma-488", "fixing", {
-      last_processed: { comment_id: 12 },
+      last_processed: {
+        comment_id: 12,
+        issue_comment_id: 13,
+        commit_sha: "sha1",
+        ci_failure_sha: "sha1",
+      },
       feedback_count: 1,
     });
     assert.ok(updated);
     assert.equal(updated?.state, "fixing");
     assert.equal(updated?.last_processed.comment_id, 12);
+    assert.equal(updated?.last_processed.issue_comment_id, 13);
+    assert.equal(updated?.last_processed.commit_sha, "sha1");
+    assert.equal(updated?.last_processed.ci_failure_sha, "sha1");
     assert.equal(updated?.feedback_count, 1);
     assert.equal(updated?.subject.pr_number, 490);
   } finally {

@@ -66,6 +66,52 @@ test("GitHubClient searches issues with token isolated in environment", async ()
   assert.equal(issues[0]?.repository, "owner/repo");
 });
 
+test("GitHubClient lists issue comments and check runs", async () => {
+  const calls: string[][] = [];
+  const client = new GitHubClient({
+    ghPath: "/tools/gh",
+    tokenProvider: async () => "secret-token",
+    runGh: async (args) => {
+      calls.push(args);
+      if (args[1]?.includes("/issues/12/comments")) {
+        return {
+          exitCode: 0,
+          stdout:
+            '[{"id":7,"body":"please fix","user":{"login":"reviewer"},"created_at":"now"}]',
+          stderr: "",
+        };
+      }
+      return {
+        exitCode: 0,
+        stdout: '[{"name":"ci","status":"completed","conclusion":"failure"}]',
+        stderr: "",
+      };
+    },
+  });
+
+  const comments = await client.listIssueComments("owner/repo", 12);
+  assert.deepEqual(calls[0], [
+    "api",
+    "repos/owner/repo/issues/12/comments",
+    "--jq",
+    ".",
+  ]);
+  assert.deepEqual(comments, [
+    { id: 7, body: "please fix", user: "reviewer", created_at: "now" },
+  ]);
+
+  const checkRuns = await client.getCheckRuns("owner/repo", "sha1");
+  assert.deepEqual(calls[1], [
+    "api",
+    "repos/owner/repo/commits/sha1/check-runs",
+    "--jq",
+    ".check_runs",
+  ]);
+  assert.deepEqual(checkRuns, [
+    { name: "ci", status: "completed", conclusion: "failure" },
+  ]);
+});
+
 test("GitHubClient publish flow forks, pushes, and opens a draft PR", async () => {
   const calls: string[][] = [];
   const client = new GitHubClient({
