@@ -7,6 +7,9 @@ const TEST_REPO = process.env.GITHUB_TEST_REPO ?? "";
 const TEST_ISSUE = process.env.GITHUB_TEST_ISSUE ?? "";
 const TEST_PROVIDER = process.env.GITHUB_TEST_PROVIDER ?? "";
 const TEST_MODEL = process.env.GITHUB_TEST_MODEL ?? "";
+const TEST_TIMEOUT_MS = Number(
+  process.env.GITHUB_TEST_TIMEOUT_MS ?? 10 * 60 * 1000,
+);
 
 const REQUIRED = ["GITHUB_TOKEN", "GITHUB_TEST_REPO", "GITHUB_TEST_ISSUE"];
 
@@ -90,7 +93,7 @@ async function triggerAndWait(loopId: string): Promise<string> {
     `/loops/${loopId}/runs`,
     { method: "POST", body: "{}" },
   );
-  const deadline = Date.now() + 10 * 60 * 1000;
+  const deadline = Date.now() + TEST_TIMEOUT_MS;
   while (Date.now() < deadline) {
     const detail = await api<{
       run: { state: string };
