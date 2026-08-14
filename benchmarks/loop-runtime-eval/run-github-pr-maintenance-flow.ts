@@ -74,7 +74,7 @@ async function createLoop(): Promise<string> {
         handoff: {
           default_task_type: "github_issue_repair",
           max_items_per_run: 1,
-          task: `Fix issue ${TEST_ISSUE} in ${TEST_REPO}. Clone the repo under the managed workspace, create a branch, make a minimal fix, run tests, commit, and emit the PR-PUBLISH block with the absolute clone path.`,
+          task: `Fix issue ${TEST_ISSUE} in ${TEST_REPO}. This is a simple, atomic docs-only task that must be completed in a single turn: clone the repo under the managed workspace, create a branch, add the requested marker file, verify it, commit it, and emit the PR-PUBLISH block with the absolute clone path. Do not split this into subtasks and do not defer commit or PR-PUBLISH to a later turn. max_items_per_run=1 limits the run to one issue, not one subtask.`,
         },
         workspace: {
           strategy: "direct",
@@ -167,7 +167,10 @@ async function approveAndReady(
   return { relation_id: pending.relation_id, pr_number: prNumber };
 }
 
-async function triggerFeedbackAndWait(relationId: string): Promise<void> {
+async function triggerFeedbackAndWait(
+  relationId: string,
+  prNumber: number,
+): Promise<void> {
   const eventId = `maintenance-e2e-${Date.now()}`;
   const response = await fetch(`${BASE_URL}/api/github/webhook`, {
     method: "POST",
@@ -179,7 +182,8 @@ async function triggerFeedbackAndWait(relationId: string): Promise<void> {
     },
     body: JSON.stringify({
       repository: { full_name: TEST_REPO },
-      issue: { number: Number(TEST_ISSUE) },
+      pull_request: { number: prNumber },
+      issue: { number: prNumber },
       comment: { id: Date.now() },
       action: "created",
     }),
@@ -188,6 +192,22 @@ async function triggerFeedbackAndWait(relationId: string): Promise<void> {
     throw new Error(
       `Webhook trigger failed: ${response.status} ${await response.text()}`,
     );
+  }
+  const wakeDeadline = Date.now() + 60 * 1000;
+  let woke = false;
+  while (Date.now() < wakeDeadline) {
+    const { relation } = await api<{
+      relation: { state: string; repair_count: number };
+    }>(`/github/relations/${relationId}`);
+    if (relation.state === "fixing" || relation.repair_count > 0) {
+      console.error(`  maintenance woke: state=${relation.state}`);
+      woke = true;
+      break;
+    }
+    await sleep(1000);
+  }
+  if (!woke) {
+    throw new Error("Webhook did not wake maintenance run");
   }
   const deadline = Date.now() + 10 * 60 * 1000;
   while (Date.now() < deadline) {
@@ -241,7 +261,7 @@ async function main(): Promise<void> {
   const { relation_id: relationId, pr_number: prNumber } =
     await approveAndReady(loopId);
   console.error(`Draft PR ready: #${prNumber}`);
-  await triggerFeedbackAndWait(relationId);
+  await triggerFeedbackAndWait(relationId, prNumber);
   const result = {
     loopId,
     runId,

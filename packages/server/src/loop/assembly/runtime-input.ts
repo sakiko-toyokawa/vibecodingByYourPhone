@@ -301,6 +301,9 @@ function relationPromptLines(relation: RelationRecord): string[] {
     `- relation_id: ${relation.relation_id}`,
     `- state: ${relation.state}`,
     "- 只處理這個 relation 的目標與回饋，不要重新搜尋新 issue。",
+    "- 這個 relation 對應的 open PR 是本次維護目標，不是重複 PR；不要把它當成 duplicate。",
+    "- 維護模式不輸出 PR-PUBLISH；不要建立、更新或替換 PR。",
+    "- 先判斷 comments / reviews / CI 是否需要修復；不需要時回報 idle 並結束。",
   ];
   if (relation.subject.type === "github_pr") {
     lines.push(
@@ -329,6 +332,8 @@ function maintenanceTargetPromptLines(target: MaintenanceTarget): string[] {
     `- state: ${target.state}`,
     `- trigger_types: ${target.wake_policy.trigger_types.join(", ")}`,
     "- 只處理這個維護目標的上下文與回饋，不要重新開始新任務。",
+    "- 目標已存在是維護模式的正常狀態，不是重複；不要因此 needs_human。",
+    "- 維護模式不輸出 PR-PUBLISH；不需要修復時回報 idle。",
     `- context_payload: ${JSON.stringify(target.context_payload)}`,
   ];
 }

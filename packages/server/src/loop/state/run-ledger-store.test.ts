@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  rename as renameFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -7,7 +13,7 @@ import {
   type RunLedgerEntry,
   RunLedgerEntrySchema,
 } from "@yep-anywhere/shared";
-import { RunLedgerStore } from "./run-ledger-store.js";
+import { RunLedgerStore, replaceArtifact } from "./run-ledger-store.js";
 
 function makeEntry(runId: string, loopId = "test-loop"): RunLedgerEntry {
   return {
@@ -144,6 +150,31 @@ test("artifacts round-trip; missing artifacts read as undefined", async () => {
       "report text",
     );
     assert.equal(await store.readArtifact("run-1", "missing.log"), undefined);
+  });
+});
+
+test("replaceArtifact retries transient Windows EPERM", async () => {
+  await withTempDir(async (dataDir) => {
+    const artifactDir = join(dataDir, "loops", "artifacts", "run-1");
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(artifactDir, { recursive: true });
+    const tmpPath = join(artifactDir, "report.json.tmp");
+    const filePath = join(artifactDir, "report.json");
+    await writeFile(tmpPath, "v2");
+    let attempts = 0;
+    await replaceArtifact(tmpPath, filePath, async (from, to) => {
+      attempts += 1;
+      if (attempts === 1) {
+        const error = new Error(
+          "operation not permitted",
+        ) as NodeJS.ErrnoException;
+        error.code = "EPERM";
+        throw error;
+      }
+      await renameFile(from, to);
+    });
+    assert.equal(attempts, 2);
+    assert.equal(await readFile(filePath, "utf-8"), "v2");
   });
 });
 

@@ -55,16 +55,28 @@ function resolveVerifierEnv(
 ): Record<string, string> {
   const env: Record<string, string> = { ...(base ?? {}) };
   // judge 可用獨立 endpoint/key；部署方經 env 提供，嚴禁寫入 repo。
-  const baseUrl = process.env.YEP_VERIFIER_OPENAI_BASE_URL;
-  const apiKey =
+  const openaiBaseUrl = process.env.YEP_VERIFIER_OPENAI_BASE_URL;
+  const openaiApiKey =
     process.env.YEP_VERIFIER_OPENAI_API_KEY ??
     process.env.KIMI_API_KEY ??
     process.env.MOONSHOT_API_KEY;
-  if (baseUrl) {
-    env.OPENAI_BASE_URL = baseUrl;
+  if (openaiBaseUrl) {
+    env.OPENAI_BASE_URL = openaiBaseUrl;
   }
-  if (apiKey) {
-    env.OPENAI_API_KEY = apiKey;
+  if (openaiApiKey) {
+    env.OPENAI_API_KEY = openaiApiKey;
+  }
+
+  const anthropicBaseUrl = process.env.YEP_VERIFIER_ANTHROPIC_BASE_URL;
+  const anthropicApiKey =
+    process.env.YEP_VERIFIER_ANTHROPIC_API_KEY ??
+    process.env.KIMI_API_KEY ??
+    process.env.MOONSHOT_API_KEY;
+  if (anthropicBaseUrl) {
+    env.ANTHROPIC_BASE_URL = anthropicBaseUrl;
+  }
+  if (anthropicApiKey) {
+    env.ANTHROPIC_API_KEY = anthropicApiKey;
   }
   return env;
 }
@@ -143,12 +155,12 @@ export async function runVerifierAgent(
       provider: verifierProvider ?? null,
       model: verifierModel ?? null,
       env_override:
-        process.env.YEP_VERIFIER_OPENAI_BASE_URL ||
-        process.env.YEP_VERIFIER_OPENAI_API_KEY ||
-        process.env.KIMI_API_KEY ||
-        process.env.MOONSHOT_API_KEY
-          ? "env"
-          : null,
+        [
+          process.env.YEP_VERIFIER_OPENAI_BASE_URL ? "openai" : null,
+          process.env.YEP_VERIFIER_ANTHROPIC_BASE_URL ? "anthropic" : null,
+        ]
+          .filter(Boolean)
+          .join("+") || null,
     },
   };
   await deps.runLedgerStore.writeArtifact(

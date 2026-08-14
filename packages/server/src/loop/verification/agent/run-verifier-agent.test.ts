@@ -223,6 +223,102 @@ test("runVerifierAgent: verifier 專屬 provider/model 覆蓋 maker 配置", asy
   }
 });
 
+test("runVerifierAgent: anthropic judge env 注入 claude provider", async () => {
+  const prevBaseUrl = process.env.YEP_VERIFIER_ANTHROPIC_BASE_URL;
+  const prevApiKey = process.env.YEP_VERIFIER_ANTHROPIC_API_KEY;
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-agent-anthropic-"));
+  const workspace = await mkdtemp(join(tmpdir(), "yep-agent-anthropic-ws-"));
+  try {
+    process.env.YEP_VERIFIER_ANTHROPIC_BASE_URL =
+      "https://api.kimi.com/coding/";
+    process.env.YEP_VERIFIER_ANTHROPIC_API_KEY = "sk-test";
+    const store = new RunLedgerStore({ dataDir });
+    const runId = "run-agent-anthropic";
+    const ctx = makeCtx(workspace, runId);
+    ctx.input = {
+      cwd: workspace,
+      permissions: {},
+      env: {},
+      adapterPolicy: {
+        verifier_model: "k3-256k",
+        verifier_provider: "claude",
+      },
+      nativeInvocation: { timeout_seconds: null },
+    } as never;
+    const captured: Array<{
+      providerName?: string;
+      model?: string;
+      env?: Record<string, string>;
+    }> = [];
+    const report = await runVerifierAgent(
+      {
+        supervisor: {
+          startSession: async (
+            _cwd: string,
+            _message: object,
+            _mode: string,
+            options: {
+              providerName?: string;
+              model?: string;
+              env?: Record<string, string>;
+            },
+          ) => {
+            captured.push(options);
+            return { fake: true };
+          },
+        } as never,
+        runLedgerStore: store,
+        watchProcess: async () => ({
+          ok: true,
+          finalText: JSON.stringify({
+            status: "passed",
+            recommendation: "stop",
+            confidence: 0.9,
+          }),
+        }),
+      },
+      ctx,
+      {
+        contract: ctx.contract as never,
+        runId,
+        turn: 1,
+        workspacePath: workspace,
+        priorReports: [],
+        evidenceRefs: {
+          diff: null,
+          stdout: null,
+          runtime_events: null,
+          executor_summary: null,
+        },
+      },
+    );
+    assert.equal(report.status, "passed");
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0]?.providerName, "claude");
+    assert.equal(captured[0]?.model, "k3-256k");
+    assert.equal(
+      captured[0]?.env?.ANTHROPIC_BASE_URL,
+      "https://api.kimi.com/coding/",
+    );
+    assert.equal(captured[0]?.env?.ANTHROPIC_API_KEY, "sk-test");
+    const input = await store.readArtifact(runId, "verifier-agent-input.json");
+    assert.ok(input?.includes('"env_override": "anthropic"'));
+  } finally {
+    if (prevBaseUrl === undefined) {
+      process.env.YEP_VERIFIER_ANTHROPIC_BASE_URL = undefined;
+    } else {
+      process.env.YEP_VERIFIER_ANTHROPIC_BASE_URL = prevBaseUrl;
+    }
+    if (prevApiKey === undefined) {
+      process.env.YEP_VERIFIER_ANTHROPIC_API_KEY = undefined;
+    } else {
+      process.env.YEP_VERIFIER_ANTHROPIC_API_KEY = prevApiKey;
+    }
+    await rm(dataDir, { recursive: true, force: true, maxRetries: 5 });
+    await rm(workspace, { recursive: true, force: true, maxRetries: 5 });
+  }
+});
+
 test("runVerifierAgent: invalid JSON 會帶 validation error 重新生成一次", async () => {
   const dataDir = await mkdtemp(join(tmpdir(), "yep-agent-retry-"));
   const workspace = await mkdtemp(join(tmpdir(), "yep-agent-retry-ws-"));

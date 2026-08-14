@@ -110,6 +110,8 @@ test("relation context switches prompt into maintenance mode", () => {
   assert.match(input.prompt, /relation_id: rel-1/);
   assert.match(input.prompt, /pr_number: 490/);
   assert.match(input.prompt, /不要重新搜尋新 issue/);
+  assert.match(input.prompt, /不是重複 PR/);
+  assert.match(input.prompt, /維護模式不輸出 PR-PUBLISH/);
 });
 
 test("maintenance target context switches prompt into external maintenance mode", () => {
@@ -139,6 +141,8 @@ test("maintenance target context switches prompt into external maintenance mode"
   assert.match(input.prompt, /target_id: target-1/);
   assert.match(input.prompt, /deploy_ready/);
   assert.match(input.prompt, /只處理這個維護目標/);
+  assert.match(input.prompt, /不是重複/);
+  assert.match(input.prompt, /維護模式不輸出 PR-PUBLISH/);
 });
 
 test("assembled prompt requires the marked executor summary block (02 §5)", () => {

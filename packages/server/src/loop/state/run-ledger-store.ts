@@ -17,6 +17,7 @@
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   type ArtifactManifestEntry,
   ArtifactManifestEntrySchema,
@@ -30,6 +31,31 @@ import { UriResolutionError, resolveUri } from "./uri.js";
 
 /** run_id / artifact file names must stay inside their directory. */
 const SAFE_NAME = /^[A-Za-z0-9._-]+$/;
+
+type RenameFile = (from: string, to: string) => Promise<void>;
+
+export async function replaceArtifact(
+  tmpPath: string,
+  filePath: string,
+  rename: RenameFile = fs.rename,
+): Promise<void> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await rename(tmpPath, filePath);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EPERM" && code !== "EBUSY" && code !== "EEXIST") {
+        throw error;
+      }
+      lastError = error instanceof Error ? error : new Error(String(error));
+      // Windows 上防毒/索引器可能短暫占用目的檔，重試後再保留原始錯誤。
+      await sleep(100 * (attempt + 1));
+    }
+  }
+  throw lastError ?? new Error("artifact replace failed");
+}
 
 function addLedgerChecksum<T extends Record<string, unknown>>(
   entry: T,
@@ -300,7 +326,7 @@ export class RunLedgerStore {
     const filePath = path.join(dir, name);
     const tmpPath = `${filePath}.tmp`;
     await fs.writeFile(tmpPath, content, "utf-8");
-    await fs.rename(tmpPath, filePath);
+    await replaceArtifact(tmpPath, filePath);
     const expectedHash = sha256Hex(content);
     const idempotencyKey = sha256Hex(`${runId}:${name}:${expectedHash}`);
     await this.enqueueArtifactManifest(runId, {
