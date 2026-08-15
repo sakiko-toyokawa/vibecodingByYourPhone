@@ -137,6 +137,14 @@ function buildDisplayEntries(events: RuntimeEvent[]): DisplayEntry[] {
 
   for (const event of events) {
     const msg = event.message;
+    // SDK 信封解包：runtime 事件的真实内容在 msg.message.content
+    // （{role, content} 结构），扁平事件才在 msg.content。统一取 content，
+    // 让下面的 assistant/user 分支两种形状都能渲染。
+    const innerMessage =
+      msg.message && typeof msg.message === "object"
+        ? (msg.message as { role?: string; content?: unknown })
+        : null;
+    const content = innerMessage?.content ?? msg.content;
 
     if (msg.error) {
       flushStream();
@@ -201,8 +209,8 @@ function buildDisplayEntries(events: RuntimeEvent[]): DisplayEntry[] {
     // Non-stream events
     flushStream();
 
-    if (msg.type === "assistant" && Array.isArray(msg.content)) {
-      for (const raw of msg.content as unknown[]) {
+    if (msg.type === "assistant" && Array.isArray(content)) {
+      for (const raw of content as unknown[]) {
         const block = raw as RuntimeContentBlock;
         if (block.type === "tool_use" && block.name) {
           const toolId = typeof block.id === "string" ? block.id : block.name;
@@ -222,7 +230,7 @@ function buildDisplayEntries(events: RuntimeEvent[]): DisplayEntry[] {
             text: blockText(block.content),
           });
         } else {
-          const text = blockText(block.content ?? block.text);
+          const text = blockText(block.content ?? block.text ?? block.thinking);
           if (text.trim().length > 0) {
             entries.push({ at: event.at, kind: "assistant", text });
           }
@@ -231,8 +239,8 @@ function buildDisplayEntries(events: RuntimeEvent[]): DisplayEntry[] {
       continue;
     }
 
-    if (msg.type === "user" && Array.isArray(msg.content)) {
-      for (const raw of msg.content as unknown[]) {
+    if (msg.type === "user" && Array.isArray(content)) {
+      for (const raw of content as unknown[]) {
         const block = raw as RuntimeContentBlock;
         if (block.type === "tool_result") {
           const toolName = toolNames.get(block.tool_use_id ?? "") ?? "tool";
@@ -258,10 +266,14 @@ function buildDisplayEntries(events: RuntimeEvent[]): DisplayEntry[] {
         kind: "system",
         text: `session initialized (cwd: ${msg.cwd ?? "unknown"})`,
       });
-    } else if (msg.type === "user" && msg.content) {
-      entries.push({ at: event.at, kind: "user", text: msg.content });
-    } else if (msg.type === "assistant" && msg.content) {
-      entries.push({ at: event.at, kind: "assistant", text: msg.content });
+    } else if (msg.type === "user" && content) {
+      entries.push({ at: event.at, kind: "user", text: blockText(content) });
+    } else if (msg.type === "assistant" && content) {
+      entries.push({
+        at: event.at,
+        kind: "assistant",
+        text: blockText(content),
+      });
     } else if (msg.type === "result") {
       entries.push({ at: event.at, kind: "result", text: "turn finished" });
     } else if (msg.type === "system" && msg.subtype === "status") {
