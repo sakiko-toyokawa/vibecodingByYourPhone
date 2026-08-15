@@ -13,6 +13,8 @@ import { RunStateStore } from "../../../../packages/server/src/loop/control-plan
 import { LoopRunService } from "../../../../packages/server/src/loop/run-service.js";
 import { LoopCardStore } from "../../../../packages/server/src/loop/state/loop-card-store.js";
 import { RunLedgerStore } from "../../../../packages/server/src/loop/state/run-ledger-store.js";
+import { TriggerQueueStore } from "../../../../packages/server/src/loop/state/trigger-queue-store.js";
+import { drainPendingTriggers } from "../../../../packages/server/src/loop/trigger/trigger-dispatcher.js";
 import type { VerifyRunResult } from "../../../../packages/server/src/loop/verification/verify-run.js";
 import { createLoopsRoutes } from "../../../../packages/server/src/routes/loops.js";
 import { createRunsRoutes } from "../../../../packages/server/src/routes/runs.js";
@@ -101,10 +103,22 @@ async function withFixture(
         },
       })) as never,
     });
+    const triggerQueueStore = new TriggerQueueStore({ dataDir });
     const loopsApp = createLoopsRoutes({
       loopCardStore,
       runService: service,
       controlPlane,
+      triggerQueueStore,
+      drainPendingTriggers: (loopId, options) =>
+        drainPendingTriggers(
+          {
+            queueStore: triggerQueueStore,
+            runService: service,
+            controlPlane,
+          },
+          loopId,
+          options,
+        ),
     });
     const runsApp = createRunsRoutes({
       runService: service,

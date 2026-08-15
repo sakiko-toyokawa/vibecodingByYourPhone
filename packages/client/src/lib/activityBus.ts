@@ -189,6 +189,80 @@ export interface LoopStateChangedEvent {
   timestamp: string;
 }
 
+export interface RunStartedEvent {
+  type: "run-started";
+  loop_id: string;
+  run_id: string;
+  source: string;
+  timestamp: string;
+}
+
+export interface TurnStartedEvent {
+  type: "turn-started";
+  loop_id: string;
+  run_id: string;
+  turn: number;
+  session_ref: string;
+  timestamp: string;
+}
+
+export interface TurnCompletedEvent {
+  type: "turn-completed";
+  loop_id: string;
+  run_id: string;
+  turn: number;
+  session_ref: string;
+  ok: boolean;
+  error?: string;
+  timestamp: string;
+}
+
+export interface VerificationStartedEvent {
+  type: "verification-started";
+  loop_id: string;
+  run_id: string;
+  turn: number;
+  session_ref: string;
+  attempt: number;
+  timestamp: string;
+}
+
+export interface VerificationCompletedEvent {
+  type: "verification-completed";
+  loop_id: string;
+  run_id: string;
+  turn: number;
+  session_ref: string;
+  attempt: number;
+  ok: boolean;
+  verdict?: string;
+  output_ref?: string;
+  error?: string;
+  timestamp: string;
+}
+
+export interface RelationStateChangedEvent {
+  type: "relation-state-changed";
+  relation_id: string;
+  loop_id: string;
+  from_state: string | null;
+  to_state: string;
+  event?: string;
+  message?: string;
+  relation: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface FeedbackReceivedEvent {
+  type: "feedback-received";
+  relation_id: string;
+  loop_id: string;
+  event_type: string;
+  repair_count: number;
+  repair_limit_reached: boolean;
+  timestamp: string;
+}
+
 // Map event names to their data types
 interface ActivityEventMap {
   "file-change": FileChangeEvent;
@@ -201,6 +275,13 @@ interface ActivityEventMap {
   // Loop events
   "run-decision-required": RunDecisionRequiredEvent;
   "loop-state-changed": LoopStateChangedEvent;
+  "run-started": RunStartedEvent;
+  "turn-started": TurnStartedEvent;
+  "turn-completed": TurnCompletedEvent;
+  "verification-started": VerificationStartedEvent;
+  "verification-completed": VerificationCompletedEvent;
+  "relation-state-changed": RelationStateChangedEvent;
+  "feedback-received": FeedbackReceivedEvent;
   // Connection events
   "browser-tab-connected": BrowserTabConnectedEvent;
   "browser-tab-disconnected": BrowserTabDisconnectedEvent;
@@ -457,6 +538,13 @@ class ActivityBus {
       "session-metadata-changed",
       "run-decision-required",
       "loop-state-changed",
+      "run-started",
+      "turn-started",
+      "turn-completed",
+      "verification-started",
+      "verification-completed",
+      "relation-state-changed",
+      "feedback-received",
       "browser-tab-connected",
       "browser-tab-disconnected",
       "source-change",

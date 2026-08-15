@@ -9,10 +9,10 @@ import type {
   PublishDraftPrInput,
 } from "../github/index.js";
 import {
+  RelationLifecycleService,
   type RelationRecord,
   type RelationStore,
   type TriggerQueueStore,
-  appendRelationStateLog,
 } from "../loop/index.js";
 import { isGitWorkTree } from "../loop/index.js";
 import { githubPromptWorkspacePath } from "../loop/run/workspace.js";
@@ -24,6 +24,7 @@ export interface GitHubRoutesDeps {
   /** Required to validate that pending PR publish cwd stays in the managed workspace. */
   dataDir?: string;
   relationStore?: RelationStore;
+  relationLifecycle?: RelationLifecycleService;
   triggerQueueStore?: TriggerQueueStore;
   drainPendingTriggers?: (loopId?: string) => Promise<void>;
 }
@@ -79,6 +80,10 @@ function prNumberFromUrl(url: string): number | undefined {
 export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
   const app = new Hono();
   const { credentialStore, toolProvisioner, githubClient } = deps;
+  const lifecycle = deps.relationStore
+    ? (deps.relationLifecycle ??
+      new RelationLifecycleService({ relationStore: deps.relationStore }))
+    : undefined;
 
   app.get("/credentials", (c) => {
     return c.json({ credential: credentialStore.getStatus() });
@@ -210,7 +215,10 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
-        await deps.relationStore.upsert(relation);
+        await lifecycle?.upsert(relation, {
+          event: "awaiting_feedback",
+          message: `Draft PR published for ${publishInput.repository}:${publishInput.branch}`,
+        });
       }
       return c.json({ prUrl });
     } catch (error) {
@@ -285,7 +293,10 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
       repair_count: existing?.repair_count ?? 0,
       updated_at: now,
     };
-    const saved = await deps.relationStore.upsert(relation);
+    const saved = await lifecycle?.upsert(relation);
+    if (!saved) {
+      return c.json({ error: "relation_store_unavailable" }, 503);
+    }
     return c.json({ relation: saved }, 200);
   });
 
@@ -368,7 +379,7 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
       if (!prNumber) {
         throw new Error(`GitHub returned an invalid PR URL: ${prUrl}`);
       }
-      const updated = await deps.relationStore.updateState(
+      const updated = await lifecycle?.transition(
         relation.relation_id,
         "awaiting_review",
         {
@@ -379,6 +390,10 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
             pr_number: prNumber,
           },
           pending_publish: undefined,
+        },
+        {
+          event: "awaiting_review",
+          message: `Draft PR published as ${pending.repository}#${prNumber}`,
         },
       );
       if (!updated) {
@@ -425,9 +440,14 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
         relation.subject.repository,
         prNumber,
       );
-      const updated = await deps.relationStore.updateState(
+      const updated = await lifecycle?.transition(
         relation.relation_id,
         "awaiting_feedback",
+        {},
+        {
+          event: "ready_for_review",
+          message: `Draft PR ${relation.subject.repository}#${prNumber} marked ready for review`,
+        },
       );
       if (!updated) {
         throw new Error("relation disappeared while marking PR ready");
@@ -513,29 +533,25 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
         : undefined;
     const action = getString(payload, "action") ?? "";
     if (eventType === "pull_request_review" && action === "dismissed") {
-      await deps.relationStore.updateState(
+      await lifecycle?.transition(
         relation.relation_id,
         relation.state,
+        {},
         {
-          state_logs: appendRelationStateLog(
-            relation,
-            "review_dismissed",
-            `GitHub review dismissed on ${repository}#${prNumber}`,
-          ),
+          event: "review_dismissed",
+          message: `GitHub review dismissed on ${repository}#${prNumber}`,
         },
       );
       return c.json({ accepted: false, reason: "review_dismissed" }, 202);
     }
     if (eventType === "pull_request_review" && review?.state === "approved") {
-      await deps.relationStore.updateState(
+      await lifecycle?.transition(
         relation.relation_id,
         relation.state,
+        {},
         {
-          state_logs: appendRelationStateLog(
-            relation,
-            "review_approved",
-            `GitHub review approved on ${repository}#${prNumber}`,
-          ),
+          event: "review_approved",
+          message: `GitHub review approved on ${repository}#${prNumber}`,
         },
       );
       return c.json({ accepted: false, reason: "review_approved" }, 202);
@@ -544,29 +560,25 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
       if (action === "closed") {
         const merged = pullRequest?.merged === true;
         const terminalState = merged ? "merged" : "closed";
-        await deps.relationStore.updateState(
+        await lifecycle?.transition(
           relation.relation_id,
           terminalState,
+          {},
           {
-            state_logs: appendRelationStateLog(
-              relation,
-              terminalState,
-              `GitHub webhook observed PR ${repository}#${prNumber} ${merged ? "merged" : "closed"}`,
-            ),
+            event: terminalState,
+            message: `GitHub webhook observed PR ${repository}#${prNumber} ${merged ? "merged" : "closed"}`,
           },
         );
         return c.json({ accepted: false, reason: terminalState }, 202);
       }
       if (action === "reopened" && relation.state === "closed") {
-        await deps.relationStore.updateState(
+        await lifecycle?.transition(
           relation.relation_id,
           "awaiting_feedback",
+          {},
           {
-            state_logs: appendRelationStateLog(
-              relation,
-              "reopened",
-              `GitHub webhook observed PR ${repository}#${prNumber} reopened`,
-            ),
+            event: "reopened",
+            message: `GitHub webhook observed PR ${repository}#${prNumber} reopened`,
           },
         );
         return c.json({ accepted: false, reason: "reopened" }, 202);
@@ -575,28 +587,24 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
         action === "ready_for_review" &&
         relation.state === "awaiting_review"
       ) {
-        await deps.relationStore.updateState(
+        await lifecycle?.transition(
           relation.relation_id,
           "awaiting_feedback",
+          {},
           {
-            state_logs: appendRelationStateLog(
-              relation,
-              "ready_for_review",
-              `GitHub webhook observed PR ${repository}#${prNumber} ready for review`,
-            ),
+            event: "ready_for_review",
+            message: `GitHub webhook observed PR ${repository}#${prNumber} ready for review`,
           },
         );
         return c.json({ accepted: false, reason: "ready_for_review" }, 202);
       }
-      await deps.relationStore.updateState(
+      await lifecycle?.transition(
         relation.relation_id,
         relation.state,
+        {},
         {
-          state_logs: appendRelationStateLog(
-            relation,
-            "pull_request_event_ignored",
-            `GitHub pull_request event '${action}' did not require a maintenance wake for ${repository}#${prNumber}`,
-          ),
+          event: "pull_request_event_ignored",
+          message: `GitHub pull_request event '${action}' did not require a maintenance wake for ${repository}#${prNumber}`,
         },
       );
       return c.json(
@@ -647,35 +655,21 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
     } else {
       return c.json({ accepted: false, reason: "event_ignored" }, 202);
     }
-    const nextRepairCount = relation.repair_count + 1;
-    if (nextRepairCount > 3) {
-      await deps.relationStore.updateState(
-        relation.relation_id,
-        "needs_human",
-        {
-          needs_human_reason:
-            "repeated relation feedback exceeded auto-repair limit",
-          last_processed: {
-            ...relation.last_processed,
-            ...lastProcessedPatch,
-          },
-        },
-      );
+    const feedback = await lifecycle?.receiveFeedback(relation.relation_id, {
+      eventType,
+      cursor: lastProcessedPatch,
+      incrementFeedbackCount: true,
+      log: {
+        event: eventType,
+        message: `GitHub webhook ${eventType} woke maintenance for ${repository}#${prNumber}`,
+      },
+    });
+    if (feedback?.repairLimitReached) {
       return c.json({ accepted: false, reason: "repair_limit_reached" }, 202);
     }
-    await deps.relationStore.updateState(relation.relation_id, "fixing", {
-      last_processed: {
-        ...relation.last_processed,
-        ...lastProcessedPatch,
-      },
-      feedback_count: relation.feedback_count + 1,
-      repair_count: nextRepairCount,
-      state_logs: appendRelationStateLog(
-        relation,
-        eventType,
-        `GitHub webhook ${eventType} woke maintenance for ${repository}#${prNumber}`,
-      ),
-    });
+    if (!feedback?.relation) {
+      return c.json({ accepted: false, reason: "relation_not_found" }, 202);
+    }
     const eventId = delivery || `github-${eventType}-${repository}-${prNumber}`;
     await deps.triggerQueueStore.enqueue({
       event_id: eventId,

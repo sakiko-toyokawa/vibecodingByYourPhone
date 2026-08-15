@@ -10,6 +10,7 @@ import { PlannerService } from "./loop/contract/planner.js";
 import {
   ControlPlane,
   CronScheduler,
+  type DrainPendingTriggersOptions,
   EvalRunner,
   FailurePatternStore,
   LearningEventStore,
@@ -17,6 +18,7 @@ import {
   LoopRunService,
   ProposalPipeline,
   ProposalStore,
+  RelationLifecycleService,
   RelationPoller,
   RunLedgerStore,
   RunStateStore,
@@ -259,12 +261,17 @@ export function createApp(
     if (!maintenanceTargetStore) {
       throw new Error("MaintenanceTargetStore not initialized");
     }
+    const relationLifecycle = new RelationLifecycleService({
+      relationStore,
+      eventBus: options.eventBus,
+    });
     const loopRunService = new LoopRunService({
       supervisor,
       loopCardStore,
       runLedgerStore,
       runStateStore,
       controlPlane: loopControlPlane,
+      eventBus: options.eventBus,
       // 阶段 3 装配消费: 新 run 装配读取 published / canary 提案
       proposalStore,
       // 02 §5 known_failure_patterns: 验证输入对照失败模式账本的 open
@@ -274,6 +281,7 @@ export function createApp(
       githubToolProvisioner: container.cradle.githubToolProvisioner,
       dataDir: options.dataDir,
       relationStore,
+      relationLifecycle,
       maintenanceTargetStore,
       planner,
       loopWatchdog: {
@@ -305,17 +313,45 @@ export function createApp(
         }
       }
     })();
+    const triggerQueueStore = new TriggerQueueStore({
+      dataDir: options.dataDir,
+    });
+    const drainPending = (
+      loopId?: string,
+      options?: DrainPendingTriggersOptions,
+    ) =>
+      drainPendingTriggers(
+        {
+          queueStore: triggerQueueStore,
+          runService: loopRunService,
+          controlPlane: loopControlPlane,
+          maintenanceTargetStore,
+          relationLifecycle,
+        },
+        loopId,
+        options,
+      );
+    registerValue("triggerQueueStore", triggerQueueStore);
+    registerValue("drainPendingTriggers", drainPending);
     const cronScheduler = new CronScheduler({
       loopCardStore,
       isRunActive: (loopId) => loopRunService.isRunActive(loopId),
       onTrigger: (loopId, dedupeKey) => {
         console.log(`[CronScheduler] firing loop '${loopId}' (${dedupeKey})`);
-        loopRunService.startRun(loopId, "cron").catch((error) => {
-          console.warn(
-            `[CronScheduler] failed to start run for loop '${loopId}':`,
-            error,
-          );
-        });
+        void triggerQueueStore
+          .enqueue({
+            event_id: `cron-${dedupeKey}`,
+            loop_id: loopId,
+            source: "cron",
+            payload: { event_type: "cron" },
+          })
+          .then(() => drainPending(loopId))
+          .catch((error) => {
+            console.warn(
+              `[CronScheduler] failed to enqueue run for loop '${loopId}':`,
+              error,
+            );
+          });
       },
       // 点火键持久化: 进程重启后同一分钟内不重复点火
       dataDir: options.dataDir,
@@ -373,23 +409,9 @@ export function createApp(
     registerValue("learningWorker", learningWorker);
     registerValue("proposalStore", proposalStore);
     registerValue("proposalPipeline", proposalPipeline);
-    const triggerQueueStore = new TriggerQueueStore({
-      dataDir: options.dataDir,
-    });
-    const drainPending = (loopId?: string) =>
-      drainPendingTriggers(
-        {
-          queueStore: triggerQueueStore,
-          runService: loopRunService,
-          controlPlane: loopControlPlane,
-          maintenanceTargetStore,
-        },
-        loopId,
-      );
-    registerValue("triggerQueueStore", triggerQueueStore);
-    registerValue("drainPendingTriggers", drainPending);
     const relationPoller = new RelationPoller({
       relationStore,
+      relationLifecycle,
       githubClient: container.cradle.githubClient,
       triggerQueueStore,
       drainPendingTriggers: drainPending,
@@ -401,6 +423,7 @@ export function createApp(
       console.warn("[RelationPoller] startup poll failed:", error);
     });
     registerValue("relationPoller", relationPoller);
+    registerValue("relationLifecycle", relationLifecycle);
     const triggerDrainTimer = setInterval(() => {
       void drainPending().catch((error) =>
         console.warn("[LoopTrigger] queue drain failed:", error),

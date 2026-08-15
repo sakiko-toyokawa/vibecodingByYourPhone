@@ -23,6 +23,7 @@ import type { Process } from "../../supervisor/Process.js";
 import type { Supervisor } from "../../supervisor/Supervisor.js";
 import type { QueueFullResponse } from "../../supervisor/Supervisor.js";
 import type { QueuedResponse } from "../../supervisor/WorkerQueue.js";
+import type { IEventBus } from "../../watcher/index.js";
 import { resolveAdapterPolicy } from "../assembly/adapter-policy.js";
 import type { ResumeSignal } from "../control-plane/control-plane.js";
 import {
@@ -41,6 +42,7 @@ import { isGitHubManagedLoop, loopRuntime } from "./workspace.js";
 export interface TurnExecutionDeps {
   supervisor: Supervisor;
   runLedgerStore: RunLedgerStore;
+  eventBus?: IEventBus;
   loopWatchdog: {
     turnIdleTimeoutMs: number;
     turnIdleCheckIntervalMs: number;
@@ -645,6 +647,14 @@ export async function executeTurn(
   // (此前要等 outcome 返回才赋值, 首轮在飞期间 session_ref 恒 null)。
   // runTurns 在 outcome 返回后用同值再赋一次。
   ctx.sessionRef = proc.sessionId;
+  deps.eventBus?.emit({
+    type: "turn-started",
+    loop_id: ctx.active.loopId,
+    run_id: ctx.active.runId,
+    turn: ctx.turn,
+    session_ref: proc.sessionId,
+    timestamp: new Date().toISOString(),
+  });
   // Registered so PATCH pause can kill the executing turn (选项 A);
   // removed again when watchProcess settles.
   executingProcesses.set(ctx.active.runId, proc);

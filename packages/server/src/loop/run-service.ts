@@ -45,6 +45,7 @@ import type { Process } from "../supervisor/Process.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { QueueFullResponse } from "../supervisor/Supervisor.js";
 import type { QueuedResponse } from "../supervisor/WorkerQueue.js";
+import type { IEventBus } from "../watcher/index.js";
 import { describeAdapter } from "./assembly/adapter-info.js";
 import { resolveAdapterPolicy } from "./assembly/adapter-policy.js";
 import {
@@ -73,6 +74,7 @@ import {
   createLoopToolApprovalHook,
 } from "./policy/approval-hook.js";
 import { resolvePolicyProfile } from "./policy/profiles.js";
+import { RelationLifecycleService } from "./relation/lifecycle-service.js";
 import type { RelationStore } from "./relation/relation-store.js";
 import {
   buildHumanFeedbackRefs,
@@ -161,6 +163,8 @@ export interface LoopRunServiceDeps {
   supervisor: Supervisor;
   loopCardStore: LoopCardStore;
   runLedgerStore: RunLedgerStore;
+  /** Optional: loop lifecycle events are broadcast when a bus is wired. */
+  eventBus?: IEventBus;
   /** Phase 6 checkpoint writing / restart recovery. */
   runStateStore?: RunStateStore;
   /** Phase-2 control-plane; absent in tests that only exercise phase-0
@@ -188,6 +192,8 @@ export interface LoopRunServiceDeps {
   dataDir?: string;
   /** Durable external relationship store used by relation-aware runs. */
   relationStore?: RelationStore;
+  /** Unique relation state writer; defaults from relationStore when absent. */
+  relationLifecycle?: RelationLifecycleService;
   /** Durable generic maintenance target store used by external-driven runs. */
   maintenanceTargetStore?: MaintenanceTargetStore;
   /** Planner Agent for multi-turn task decomposition (optional). */
@@ -234,6 +240,14 @@ export class LoopRunService {
   constructor(deps: LoopRunServiceDeps) {
     this.deps = {
       ...deps,
+      ...(deps.relationStore && !deps.relationLifecycle
+        ? {
+            relationLifecycle: new RelationLifecycleService({
+              relationStore: deps.relationStore,
+              eventBus: deps.eventBus,
+            }),
+          }
+        : {}),
       loopWatchdog: deps.loopWatchdog ?? {
         turnIdleTimeoutMs: 10 * 60 * 1000,
         turnIdleCheckIntervalMs: 30 * 1000,
@@ -432,6 +446,13 @@ export class LoopRunService {
     };
     this.state.activeByLoop.set(loopId, active);
     this.state.activeByRunId.set(runId, active);
+    this.deps.eventBus?.emit({
+      type: "run-started",
+      loop_id: loopId,
+      run_id: runId,
+      source,
+      timestamp: active.createdAt,
+    });
 
     // Fire-and-forget: the HTTP handler / scheduler must not block on the
     // agent finishing. The ledger is the durable record of the run.

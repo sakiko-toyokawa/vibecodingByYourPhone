@@ -37,7 +37,6 @@ import { CodeEditorPage } from "./pages/CodeEditorPage";
 import { DirectLoginPage } from "./pages/DirectLoginPage";
 import { EmulatorPage } from "./pages/EmulatorPage";
 import { FilePage } from "./pages/FilePage";
-import { GitHubModePage } from "./pages/GitHubModePage";
 import { GitStatusPage } from "./pages/GitStatusPage";
 import { GlobalSessionsPage } from "./pages/GlobalSessionsPage";
 import { HostPickerPage } from "./pages/HostPickerPage";
@@ -52,6 +51,7 @@ import { ProjectsPage } from "./pages/ProjectsPage";
 import { RecentSessionsPage } from "./pages/RecentSessionsPage";
 import { RelayConnectionGate } from "./pages/RelayConnectionGate";
 import { RelayLoginPage } from "./pages/RelayLoginPage";
+import { RunDetailPage } from "./pages/RunDetailPage";
 import { SessionEditorPage } from "./pages/SessionEditorPage";
 import { SessionPage } from "./pages/SessionPage";
 import { SettingsLayout } from "./pages/settings";
@@ -105,9 +105,13 @@ const APP_ROUTES = (
       <Route path="inbox" element={<InboxPage />} />
       <Route path="loops" element={<LoopsPage />} />
       <Route path="loops/:loopId" element={<LoopDetailPage />} />
+      <Route path="runs/:runId" element={<RunDetailPage />} />
       <Route path="human-queue" element={<HumanSlaQueuePage />} />
       <Route path="maintenance" element={<MaintenanceTargetsPage />} />
-      <Route path="github" element={<GitHubModePage />} />
+      <Route
+        path="github"
+        element={<Navigate to="../loops?filter=github" replace />}
+      />
       <Route path="git-status" element={<GitStatusPage />} />
       <Route path="devices" element={<EmulatorPage />} />
       <Route path="devices/:deviceId" element={<EmulatorPage />} />

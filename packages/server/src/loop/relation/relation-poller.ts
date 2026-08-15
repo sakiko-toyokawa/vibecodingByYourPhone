@@ -1,13 +1,12 @@
 import type { GitHubCheckRun, GitHubClient } from "../../github/index.js";
 import type { TriggerQueueStore } from "../state/trigger-queue-store.js";
-import {
-  type RelationRecord,
-  type RelationStore,
-  appendRelationStateLog,
-} from "./relation-store.js";
+import { RelationLifecycleService } from "./lifecycle-service.js";
+import type { RelationRecord, RelationStore } from "./relation-store.js";
 
 export interface RelationPollerDeps {
   relationStore: RelationStore;
+  /** Optional in tests; production wires the single lifecycle service. */
+  relationLifecycle?: RelationLifecycleService;
   githubClient: GitHubClient;
   triggerQueueStore: TriggerQueueStore;
   drainPendingTriggers?: (loopId?: string) => Promise<void>;
@@ -30,10 +29,14 @@ function hasFailedCheckRuns(checkRuns: GitHubCheckRun[]): boolean {
 
 export class RelationPoller {
   private readonly deps: RelationPollerDeps;
+  private readonly lifecycle: RelationLifecycleService;
   private timer: NodeJS.Timeout | null = null;
 
   constructor(deps: RelationPollerDeps) {
     this.deps = deps;
+    this.lifecycle =
+      deps.relationLifecycle ??
+      new RelationLifecycleService({ relationStore: deps.relationStore });
   }
 
   start(intervalMs = 5 * 60 * 1000): void {
@@ -72,29 +75,25 @@ export class RelationPoller {
       );
       if (pull.state === "closed" || pull.merged) {
         const terminalState = pull.merged ? "merged" : "closed";
-        await this.deps.relationStore.updateState(
+        await this.lifecycle.transition(
           relation.relation_id,
           terminalState,
+          {},
           {
-            state_logs: appendRelationStateLog(
-              relation,
-              terminalState,
-              `GitHub PR ${repository}#${prNumber} ${pull.merged ? "merged" : "closed"}`,
-            ),
+            event: terminalState,
+            message: `GitHub PR ${repository}#${prNumber} ${pull.merged ? "merged" : "closed"}`,
           },
         );
         continue;
       }
       if (relation.state === "closed") {
-        await this.deps.relationStore.updateState(
+        await this.lifecycle.transition(
           relation.relation_id,
           "awaiting_feedback",
+          {},
           {
-            state_logs: appendRelationStateLog(
-              relation,
-              "reopened",
-              `GitHub PR ${repository}#${prNumber} was reopened`,
-            ),
+            event: "reopened",
+            message: `GitHub PR ${repository}#${prNumber} was reopened`,
           },
         );
         continue;
@@ -107,15 +106,13 @@ export class RelationPoller {
       }
       if (relation.state === "awaiting_review") {
         if (!pull.draft) {
-          await this.deps.relationStore.updateState(
+          await this.lifecycle.transition(
             relation.relation_id,
             "awaiting_feedback",
+            {},
             {
-              state_logs: appendRelationStateLog(
-                relation,
-                "ready_for_review",
-                `GitHub PR ${repository}#${prNumber} is no longer a draft`,
-              ),
+              event: "ready_for_review",
+              message: `GitHub PR ${repository}#${prNumber} is no longer a draft`,
             },
           );
         }
@@ -193,21 +190,18 @@ export class RelationPoller {
           cursor.commit_sha !== lastProcessed.commit_sha ||
           cursor.ci_failure_sha !== lastProcessed.ci_failure_sha
         ) {
-          await this.deps.relationStore.updateState(
+          await this.lifecycle.transition(
             relation.relation_id,
             relation.state,
             {
               last_processed: cursor,
-              ...(lastProcessed.ci_failure_sha && !hasFailure
-                ? {
-                    state_logs: appendRelationStateLog(
-                      relation,
-                      "checks_recovered",
-                      `GitHub PR ${repository}#${prNumber} checks recovered on ${pull.head_sha}`,
-                    ),
-                  }
-                : {}),
             },
+            lastProcessed.ci_failure_sha && !hasFailure
+              ? {
+                  event: "checks_recovered",
+                  message: `GitHub PR ${repository}#${prNumber} checks recovered on ${pull.head_sha}`,
+                }
+              : undefined,
           );
         }
         continue;
@@ -217,19 +211,6 @@ export class RelationPoller {
         newestIssueCommentId,
         newestReviewId,
       );
-      const nextRepairCount = relation.repair_count + 1;
-      if (nextRepairCount > 3) {
-        await this.deps.relationStore.updateState(
-          relation.relation_id,
-          "needs_human",
-          {
-            needs_human_reason:
-              "repeated relation feedback exceeded auto-repair limit",
-            last_processed: cursor,
-          },
-        );
-        continue;
-      }
       const primaryEventType = signals.includes("head_moved")
         ? "head_moved"
         : signals.includes("ci_failure")
@@ -242,14 +223,20 @@ export class RelationPoller {
             ? `ci-${pull.head_sha}`
             : String(newestId);
       const eventId = `github-poll-${relation.relation_id}-${eventSuffix}`;
-      await this.deps.relationStore.updateState(
+      const feedback = await this.lifecycle.receiveFeedback(
         relation.relation_id,
-        "fixing",
         {
-          last_processed: cursor,
-          repair_count: nextRepairCount,
+          eventType: primaryEventType,
+          cursor,
+          log: {
+            event: primaryEventType,
+            message: `GitHub poll woke maintenance for ${repository}#${prNumber} (${signals.join(", ")})`,
+          },
         },
       );
+      if (feedback.repairLimitReached || !feedback.relation) {
+        continue;
+      }
       await this.deps.triggerQueueStore.enqueue({
         event_id: eventId,
         loop_id: relation.loop_id,

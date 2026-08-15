@@ -38,6 +38,8 @@ import { RunStateStore } from "./control-plane/run-state-store.js";
 import { LoopRunService } from "./run-service.js";
 import { LoopCardStore } from "./state/loop-card-store.js";
 import { RunLedgerStore } from "./state/run-ledger-store.js";
+import { TriggerQueueStore } from "./state/trigger-queue-store.js";
+import { drainPendingTriggers } from "./trigger/trigger-dispatcher.js";
 import type { VerifyRunResult } from "./verification/verify-run.js";
 
 let sessionCounter = 0;
@@ -216,10 +218,22 @@ async function withFixture(
       sleep: async () => {},
       verifyRunFn: fakeVerify as never,
     });
+    const triggerQueueStore = new TriggerQueueStore({ dataDir });
     const app = createLoopsRoutes({
       loopCardStore,
       runService: service,
       controlPlane,
+      triggerQueueStore,
+      drainPendingTriggers: (loopId, options) =>
+        drainPendingTriggers(
+          {
+            queueStore: triggerQueueStore,
+            runService: service,
+            controlPlane,
+          },
+          loopId,
+          options,
+        ),
     });
     await fn({
       app,
@@ -646,10 +660,22 @@ test("restart recovery: pause mid-turn-1 → 重启后 resume 重建上下文, f
       sleep: async () => {},
       verifyRunFn: fakeVerify as never,
     });
+    const triggerQueueStore1 = new TriggerQueueStore({ dataDir });
     const app1 = createLoopsRoutes({
       loopCardStore,
       runService: service1,
       controlPlane: controlPlane1,
+      triggerQueueStore: triggerQueueStore1,
+      drainPendingTriggers: (loopId, options) =>
+        drainPendingTriggers(
+          {
+            queueStore: triggerQueueStore1,
+            runService: service1,
+            controlPlane: controlPlane1,
+          },
+          loopId,
+          options,
+        ),
     });
 
     const trigger = await triggerRun(app1, "loop-it");
@@ -687,10 +713,22 @@ test("restart recovery: pause mid-turn-1 → 重启后 resume 重建上下文, f
       sleep: async () => {},
       verifyRunFn: fakeVerify as never,
     });
+    const triggerQueueStore2 = new TriggerQueueStore({ dataDir });
     const app2 = createLoopsRoutes({
       loopCardStore,
       runService: service2,
       controlPlane: controlPlane2,
+      triggerQueueStore: triggerQueueStore2,
+      drainPendingTriggers: (loopId, options) =>
+        drainPendingTriggers(
+          {
+            queueStore: triggerQueueStore2,
+            runService: service2,
+            controlPlane: controlPlane2,
+          },
+          loopId,
+          options,
+        ),
     });
 
     const resume = await patchLoop(app2, "loop-it", { action: "resume" });

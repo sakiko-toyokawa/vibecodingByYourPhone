@@ -2,6 +2,7 @@ import type { VerifierReport } from "@yep-anywhere/shared";
 import type { ProviderName } from "../../../sdk/providers/types.js";
 import type { Process } from "../../../supervisor/Process.js";
 import type { Supervisor } from "../../../supervisor/Supervisor.js";
+import type { IEventBus } from "../../../watcher/index.js";
 import {
   isKnownProviderName,
   resolveAdapterPolicy,
@@ -38,6 +39,7 @@ import {
 export interface RunVerifierAgentDeps {
   supervisor: Supervisor;
   runLedgerStore: RunLedgerStore;
+  eventBus?: IEventBus;
   watchProcess: (
     runId: string,
     proc: Process,
@@ -177,6 +179,7 @@ export async function runVerifierAgent(
   const attempt = async (
     promptText: string,
     attemptOutputName: string,
+    attemptNumber: number,
   ): Promise<{ output: string; canRetry: boolean }> => {
     let output = "";
     let canRetry = false;
@@ -202,12 +205,36 @@ export async function runVerifierAgent(
           output =
             "verifier agent could not start: supervisor queue unavailable";
         } else {
-          const watched = await deps.watchProcess(runId, result as Process, {
+          const proc = result as Process;
+          deps.eventBus?.emit({
+            type: "verification-started",
+            loop_id: ctx.active.loopId,
+            run_id: runId,
+            turn: agentCtx.turn,
+            session_ref: proc.sessionId,
+            attempt: attemptNumber,
+            timestamp: new Date().toISOString(),
+          });
+          const watched = await deps.watchProcess(runId, proc, {
             timeoutMs:
               adapterPolicy.timeoutMs ??
               (ctx.input.nativeInvocation.timeout_seconds
                 ? ctx.input.nativeInvocation.timeout_seconds * 1000
                 : undefined),
+          });
+          const verdict = parseVerifierAgentVerdict(watched.finalText);
+          deps.eventBus?.emit({
+            type: "verification-completed",
+            loop_id: ctx.active.loopId,
+            run_id: runId,
+            turn: agentCtx.turn,
+            session_ref: proc.sessionId,
+            attempt: attemptNumber,
+            ok: watched.ok,
+            verdict: verdict.ok ? verdict.value.status : undefined,
+            output_ref: `artifact://${runId}/${attemptOutputName}`,
+            error: watched.error,
+            timestamp: new Date().toISOString(),
           });
           output =
             watched.finalText ||
@@ -241,7 +268,7 @@ export async function runVerifierAgent(
     return { output, canRetry };
   };
 
-  const first = await attempt(basePrompt, outputName);
+  const first = await attempt(basePrompt, outputName, 1);
   const firstOutputRef = `artifact://${runId}/${outputName}`;
   const firstVerdict = parseVerifierAgentVerdict(first.output);
   if (firstVerdict.ok) {
@@ -268,6 +295,7 @@ export async function runVerifierAgent(
       validationError: firstVerdict.error,
     }),
     retryOutputName,
+    2,
   );
   const secondVerdict = parseVerifierAgentVerdict(second.output);
   if (secondVerdict.ok) {

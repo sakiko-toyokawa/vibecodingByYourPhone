@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { MaintenanceTargetStore } from "../loop/maintenance/index.js";
 import type { TriggerQueueStore } from "../loop/state/trigger-queue-store.js";
+import { TriggerQueuePayloadSchema } from "../loop/trigger/trigger-payload.js";
 
 const ExternalRefSchema = z.object({
   source: z.string().min(1),
@@ -129,16 +130,24 @@ export function createMaintenanceRoutes(deps: MaintenanceRoutesDeps): Hono {
       );
     }
     await targetStore.updateState(target.target_id, "waking");
+    const payloadParse = TriggerQueuePayloadSchema.safeParse({
+      ...(data.payload ?? {}),
+      maintenance_id: target.target_id,
+      external_ref: target.external_ref,
+    });
+    if (!payloadParse.success) {
+      const message = payloadParse.error.issues
+        .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+        .join("; ");
+      return c.json({ error: "invalid_event", message }, 400);
+    }
+    const payload = payloadParse.data;
     const entry = await deps.triggerQueueStore.enqueue({
       event_id: data.event_id,
       loop_id: target.loop_id,
       source: "webhook",
       priority: data.priority,
-      payload: {
-        ...data.payload,
-        maintenance_id: target.target_id,
-        external_ref: target.external_ref,
-      },
+      payload,
     });
     await deps.drainPendingTriggers(target.loop_id);
     return c.json(

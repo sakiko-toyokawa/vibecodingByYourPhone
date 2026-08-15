@@ -5,9 +5,9 @@ import { AgentsPage } from "./pages/AgentsPage";
 import { CodeEditorPage } from "./pages/CodeEditorPage";
 import { EmulatorPage } from "./pages/EmulatorPage";
 import { FilePage } from "./pages/FilePage";
-import { GitHubModePage } from "./pages/GitHubModePage";
 import { GitStatusPage } from "./pages/GitStatusPage";
 import { GlobalSessionsPage } from "./pages/GlobalSessionsPage";
+import { HumanSlaQueuePage } from "./pages/HumanSlaQueuePage";
 import { InboxPage } from "./pages/InboxPage";
 import { LoginPage } from "./pages/LoginPage";
 import { LoopDetailPage } from "./pages/LoopDetailPage";
@@ -17,6 +17,7 @@ import { NewSessionPage } from "./pages/NewSessionPage";
 import { OlderSessionsPage } from "./pages/OlderSessionsPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { RecentSessionsPage } from "./pages/RecentSessionsPage";
+import { RunDetailPage } from "./pages/RunDetailPage";
 import { SessionEditorPage } from "./pages/SessionEditorPage";
 import { SessionPage } from "./pages/SessionPage";
 import { SettingsLayout } from "./pages/settings";
@@ -40,8 +41,13 @@ export function AppRoutes() {
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/loops" element={<LoopsPage />} />
         <Route path="/loops/:loopId" element={<LoopDetailPage />} />
+        <Route path="/runs/:runId" element={<RunDetailPage />} />
+        <Route path="/human-queue" element={<HumanSlaQueuePage />} />
         <Route path="/maintenance" element={<MaintenanceTargetsPage />} />
-        <Route path="/github" element={<GitHubModePage />} />
+        <Route
+          path="/github"
+          element={<Navigate to="/loops?filter=github" replace />}
+        />
         <Route path="/settings" element={<SettingsLayout />} />
         <Route path="/settings/:category" element={<SettingsLayout />} />
         {/* Project-scoped pages */}

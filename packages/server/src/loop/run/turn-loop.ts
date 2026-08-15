@@ -21,6 +21,7 @@ import {
 } from "../../sdk/adapter-error.js";
 import type { Process } from "../../supervisor/Process.js";
 import type { Supervisor } from "../../supervisor/Supervisor.js";
+import type { IEventBus } from "../../watcher/index.js";
 import { describeAdapter } from "../assembly/adapter-info.js";
 import { resolveAdapterPolicy } from "../assembly/adapter-policy.js";
 import {
@@ -44,11 +45,7 @@ import {
 } from "../maintenance/maintenance-request.js";
 import type { MaintenanceTargetStore } from "../maintenance/maintenance-target-store.js";
 import { extractRestrictionRelease } from "../policy/restriction-release.js";
-import {
-  extractPrPublishPayload,
-  readGitIdentity,
-} from "../relation/pr-publish.js";
-import type { RelationStore } from "../relation/relation-store.js";
+import { RelationLifecycleService } from "../relation/lifecycle-service.js";
 import type { FailurePatternStore } from "../state/failure-pattern-store.js";
 import { writeDualTrackHandoff } from "../state/handoff.js";
 import type { LoopCardStore } from "../state/loop-card-store.js";
@@ -108,6 +105,7 @@ import {
 
 export interface TurnLoopDeps extends RunContextDeps {
   runStateStore?: RunStateStore;
+  eventBus?: IEventBus;
   supervisor: Supervisor;
   /** Backoff wait between retry turns; injectable for tests. */
   sleep?: (ms: number) => Promise<void>;
@@ -475,6 +473,11 @@ export async function runTurns(
   const store = deps.runLedgerStore;
   let blocked = false;
   state.executingContexts.set(runId, ctx);
+  const relationLifecycle =
+    deps.relationLifecycle ??
+    (deps.relationStore
+      ? new RelationLifecycleService({ relationStore: deps.relationStore })
+      : undefined);
   const sleep = deps.sleep ?? defaultSleep;
   const verify = deps.verifyRunFn ?? verifyRun;
 
@@ -513,6 +516,16 @@ export async function runTurns(
       if (outcome.sessionRef !== "none") {
         ctx.sessionRef = outcome.sessionRef;
       }
+      deps.eventBus?.emit({
+        type: "turn-completed",
+        loop_id: loopId,
+        run_id: runId,
+        turn: ctx.turn,
+        session_ref: outcome.sessionRef,
+        ok: outcome.ok,
+        error: outcome.error,
+        timestamp: new Date().toISOString(),
+      });
       // One-shot restriction releases expire after the turn they were granted
       // for, whether or not the agent used them.
       ctx.approvedToolCalls = [];
@@ -872,6 +885,7 @@ export async function runTurns(
                       {
                         supervisor: deps.supervisor,
                         runLedgerStore: store,
+                        eventBus: deps.eventBus,
                         watchProcess: async (runId_, proc, opts) => {
                           const result = await watchProcess(runId_, proc, {
                             timeoutMs: opts.timeoutMs,
@@ -1342,11 +1356,10 @@ export async function runTurns(
         deps.relationStore &&
         ctx.card.loop.discovery?.source === "github_prompt"
       ) {
-        await registerGithubPrPublish(
+        await relationLifecycle?.registerGithubPrPublish(
           loopId,
           runId,
           outcome.finalText,
-          deps.relationStore,
         );
       }
 
@@ -1584,13 +1597,19 @@ export async function runTurns(
       if (ctx.relation && deps.relationStore) {
         const current = deps.relationStore.findById(ctx.relation.relation_id);
         if (current) {
-          await deps.relationStore.updateState(
+          const toState =
+            status === "complete" ? "awaiting_feedback" : "needs_human";
+          await relationLifecycle?.transition(
             current.relation_id,
-            status === "complete" ? "awaiting_feedback" : "needs_human",
+            toState,
             {
               ...(status !== "complete"
                 ? { needs_human_reason: `relation run ended as ${status}` }
                 : {}),
+            },
+            {
+              event: status === "complete" ? "run_complete" : "run_failed",
+              message: `relation run ${runId} ended as ${status}`,
             },
           );
         }
@@ -1675,69 +1694,6 @@ async function registerMaintenanceTarget(
       ...request.context_payload,
       registered_by_run: runId,
     },
-    updated_at: now,
-  });
-}
-
-async function registerGithubPrPublish(
-  loopId: string,
-  runId: string,
-  finalText: string,
-  relationStore: RelationStore,
-): Promise<void> {
-  const pendingPublish = extractPrPublishPayload(finalText);
-  if (!pendingPublish) {
-    return;
-  }
-  const now = new Date().toISOString();
-  const gitIdentity = await readGitIdentity(pendingPublish.cwd);
-  const existing = relationStore
-    .list()
-    .find(
-      (relation) =>
-        relation.loop_id === loopId &&
-        relation.subject.type === "github_pr" &&
-        relation.subject.repository === pendingPublish.repository &&
-        relation.subject.branch === pendingPublish.branch,
-    );
-  if (existing && existing.state !== "pr_pending_approval") {
-    return;
-  }
-  const relationId = existing?.relation_id ?? `rel-${loopId}-${runId}`;
-  const subject =
-    existing?.subject.type === "github_pr"
-      ? {
-          ...existing.subject,
-          repository: pendingPublish.repository,
-          branch: pendingPublish.branch,
-        }
-      : {
-          type: "github_pr" as const,
-          repository: pendingPublish.repository,
-          branch: pendingPublish.branch,
-        };
-  await relationStore.upsert({
-    ...(existing ?? {}),
-    relation_id: relationId,
-    loop_id: loopId,
-    subject,
-    state: "pr_pending_approval",
-    last_processed: existing?.last_processed ?? {},
-    feedback_count: existing?.feedback_count ?? 0,
-    repair_count: existing?.repair_count ?? 0,
-    pending_publish: {
-      ...pendingPublish,
-      ...(gitIdentity
-        ? {
-            author_name: gitIdentity.name,
-            author_email: gitIdentity.email,
-            identity_source: "git_config",
-          }
-        : {}),
-      run_id: runId,
-      created_at: now,
-    },
-    created_at: existing?.created_at ?? now,
     updated_at: now,
   });
 }

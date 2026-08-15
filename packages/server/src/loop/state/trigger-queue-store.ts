@@ -8,8 +8,9 @@
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import type { TriggerQueuePayload } from "../trigger/trigger-payload.js";
 
-export type TriggerSource = "webhook" | "issue" | "resume";
+export type TriggerSource = "webhook" | "issue" | "resume" | "cron" | "manual";
 export type TriggerQueueState = "pending" | "done" | "failed";
 
 export interface TriggerQueueEntry {
@@ -54,7 +55,7 @@ export class TriggerQueueStore {
     loop_id: string;
     source: TriggerSource;
     priority?: TriggerQueueEntry["priority"];
-    payload?: Record<string, unknown>;
+    payload?: TriggerQueuePayload;
   }): Promise<TriggerQueueEntry> {
     const existing = await this.findByEventId(input.event_id);
     if (existing) {

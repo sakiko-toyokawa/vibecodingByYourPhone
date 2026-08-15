@@ -25,6 +25,7 @@ function makeWebhookApp(
       toolProvisioner: {} as GitHubToolProvisioner,
       githubClient: {} as GitHubClient,
       relationStore: {
+        findById: () => relation,
         findByGitHubPr: () => relation,
         updateState: async (id: string, state: string, patch?: object) => {
           relationUpdates.push({ id, state, patch });
@@ -214,6 +215,14 @@ test("GitHub webhook enqueues a trigger for a known relation", async () => {
     patch?: object;
   }> = [];
   const relationStore = {
+    findById: () => ({
+      relation_id: "rel-1",
+      loop_id: "loop-maintainer",
+      state: "awaiting_feedback",
+      feedback_count: 0,
+      repair_count: 0,
+      last_processed: {},
+    }),
     findByGitHubPr: () => ({
       relation_id: "rel-1",
       loop_id: "loop-maintainer",
@@ -489,7 +498,7 @@ test("GitHub webhook ignores synchronize without repair", async () => {
         repair_count?: number;
       }
     )?.repair_count,
-    undefined,
+    2,
   );
 });
 

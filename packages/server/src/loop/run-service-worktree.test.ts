@@ -39,6 +39,8 @@ import { RunStateStore } from "./control-plane/run-state-store.js";
 import { LoopRunService } from "./run-service.js";
 import { LoopCardStore } from "./state/loop-card-store.js";
 import { RunLedgerStore } from "./state/run-ledger-store.js";
+import { TriggerQueueStore } from "./state/trigger-queue-store.js";
+import { drainPendingTriggers } from "./trigger/trigger-dispatcher.js";
 import type { VerifyRunResult } from "./verification/verify-run.js";
 
 const execFileAsync = promisify(execFile);
@@ -209,6 +211,7 @@ async function withFixture(fn: (ctx: Fixture) => Promise<void>): Promise<void> {
       verifyRunFn: fakeVerify as never,
       dataDir,
     });
+    const triggerQueueStore = new TriggerQueueStore({ dataDir });
     const app = new Hono();
     app.route(
       "/",
@@ -216,6 +219,17 @@ async function withFixture(fn: (ctx: Fixture) => Promise<void>): Promise<void> {
         loopCardStore,
         runService: service,
         controlPlane,
+        triggerQueueStore,
+        drainPendingTriggers: (loopId, options) =>
+          drainPendingTriggers(
+            {
+              queueStore: triggerQueueStore,
+              runService: service,
+              controlPlane,
+            },
+            loopId,
+            options,
+          ),
       }),
     );
     app.route("/", createRunsRoutes({ runService: service, controlPlane }));

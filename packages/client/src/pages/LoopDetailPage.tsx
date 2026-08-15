@@ -1,11 +1,10 @@
 import type { RunDecisionAction } from "@yep-anywhere/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { type GitHubRelation, githubApi } from "../api/github";
 import {
   type InteractionDepsStatus,
   type LoopRunSummary,
-  type RunDetail,
   type RunTurnSummary,
   type StoredLoop,
   loopsApi,
@@ -17,6 +16,7 @@ import { WorkspaceStrategyBadge } from "../components/LoopWorkspaceHint";
 import { MaintenanceTargetCard } from "../components/MaintenanceTargetCard";
 import { PageHeader } from "../components/PageHeader";
 import { RunStreamOutput } from "../components/RunStreamOutput";
+import { useRun } from "../hooks/useRun";
 import { useI18n } from "../i18n";
 import { useNavigationLayout } from "../layouts";
 import { activityBus } from "../lib/activityBus";
@@ -28,8 +28,6 @@ import {
   humanizeVerifierStatus,
 } from "../lib/loopHumanText";
 import { runStateBadgeClass } from "../lib/loopStateStyle";
-
-const POLL_INTERVAL_MS = 10_000;
 
 function formatTime(iso: string): string {
   const date = new Date(iso);
@@ -46,14 +44,24 @@ function artifactNameFromRef(ref: string | null): string | null {
  * Loop detail page: run history with state badges, judgment summary for the
  * selected run, and a manual "run now" trigger.
  *
- * Refreshes every 10s and immediately on loop-state-changed events for this
- * loop.
+ * Refreshes from activity events for this loop and selected run.
  */
-export function LoopDetailPage() {
+interface LoopDetailPageProps {
+  initialLoopId?: string;
+  initialRunId?: string;
+}
+
+export function LoopDetailPage({
+  initialLoopId,
+  initialRunId,
+}: LoopDetailPageProps = {}) {
   const { t } = useI18n();
   const { openSidebar, isWideScreen } = useNavigationLayout();
   const navigate = useNavigate();
   const { loopId } = useParams<{ loopId: string }>();
+  const [searchParams] = useSearchParams();
+  const loopIdValue = initialLoopId ?? loopId;
+  const requestedRunId = initialRunId ?? searchParams.get("run");
 
   const [loop, setLoop] = useState<StoredLoop | null>(null);
   const [runs, setRuns] = useState<LoopRunSummary[]>([]);
@@ -62,14 +70,12 @@ export function LoopDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState(false);
   const [patching, setPatching] = useState(false);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [runDetail, setRunDetail] = useState<RunDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [artifacts, setArtifacts] = useState<string[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(
+    requestedRunId,
+  );
   const [selectedArtifact, setSelectedArtifact] = useState<string | null>(null);
   const [artifactContent, setArtifactContent] = useState<string | null>(null);
   const [artifactLoading, setArtifactLoading] = useState(false);
-  const [runTurns, setRunTurns] = useState<RunTurnSummary[]>([]);
   const [turnsOpen, setTurnsOpen] = useState(false);
   const [selectedTurn, setSelectedTurn] = useState<RunTurnSummary | null>(null);
   const [turnView, setTurnView] = useState<{
@@ -95,70 +101,81 @@ export function LoopDetailPage() {
   const [decisionBusy, setDecisionBusy] = useState(false);
   const selectedRunIdRef = useRef<string | null>(null);
   selectedRunIdRef.current = selectedRunId;
+  const runData = useRun(loopIdValue, selectedRunId);
 
   const load = useCallback(async () => {
-    if (!loopId) return;
+    if (!loopIdValue) return;
     try {
       const [
         { loop: storedLoop },
         { runs: runList },
         { targets: maintenanceList },
       ] = await Promise.all([
-        loopsApi.getLoop(loopId),
-        loopsApi.listRuns(loopId),
+        loopsApi.getLoop(loopIdValue),
+        loopsApi.listRuns(loopIdValue),
         maintenanceApi
-          .listTargets(loopId)
+          .listTargets(loopIdValue)
           .catch(() => ({ targets: [] as MaintenanceTarget[] })),
       ]);
       setLoop(storedLoop);
       setRuns(runList);
       setMaintenanceTargets(maintenanceList);
       setError(null);
-      // Refresh the open judgment panel too (state may have changed),
-      // including the artifact list — turn artifacts (stdout, summaries,
-      // reports) land as the run progresses.
-      if (selectedRunIdRef.current) {
-        try {
-          const [detail, artifactList, turnList] = await Promise.all([
-            loopsApi.getRun(selectedRunIdRef.current),
-            loopsApi.listRunArtifacts(selectedRunIdRef.current),
-            loopsApi.listRunTurns(selectedRunIdRef.current),
-          ]);
-          setRunDetail(detail);
-          setArtifacts(artifactList.artifacts);
-          setRunTurns(turnList.turns);
-        } catch {
-          // Keep showing the stale detail; the list still refreshed
-        }
-      }
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setLoading(false);
     }
-  }, [loopId]);
+  }, [loopIdValue]);
 
-  // Initial load + 10s polling
+  // Initial load + event-driven refresh. No polling: lifecycle events cover
+  // run start, turn boundary, verifier stage, and blocking-state changes.
   useEffect(() => {
     void load();
-    const interval = setInterval(() => void load(), POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
   }, [load]);
 
-  // Immediate refresh on loop-state-changed for this loop
   useEffect(() => {
-    if (!loopId) return;
-    return activityBus.on("loop-state-changed", (event) => {
-      if (event.loop_id === loopId) void load();
-    });
-  }, [loopId, load]);
+    if (!loopIdValue) return;
+    const unsubs = [
+      "run-started",
+      "turn-started",
+      "turn-completed",
+      "verification-started",
+      "verification-completed",
+      "relation-state-changed",
+      "feedback-received",
+      "loop-state-changed",
+      "run-decision-required",
+    ].map((eventType) =>
+      activityBus.on(eventType as "loop-state-changed", (event) => {
+        if (
+          "loop_id" in event &&
+          typeof event.loop_id === "string" &&
+          event.loop_id !== loopIdValue
+        ) {
+          return;
+        }
+        if (
+          "run_id" in event &&
+          typeof event.run_id === "string" &&
+          !selectedRunIdRef.current
+        ) {
+          setSelectedRunId(event.run_id);
+        }
+        void load();
+      }),
+    );
+    return () => {
+      for (const unsub of unsubs) unsub();
+    };
+  }, [load, loopIdValue]);
 
   const loadInteractionDeps = useCallback(async () => {
-    if (!loopId) return;
+    if (!loopIdValue) return;
     setInteractionDepsLoading(true);
     setInteractionDepsMessage(null);
     try {
-      setInteractionDeps(await loopsApi.getInteractionDeps(loopId));
+      setInteractionDeps(await loopsApi.getInteractionDeps(loopIdValue));
     } catch (err) {
       setInteractionDeps(null);
       setInteractionDepsMessage(
@@ -167,7 +184,7 @@ export function LoopDetailPage() {
     } finally {
       setInteractionDepsLoading(false);
     }
-  }, [loopId]);
+  }, [loopIdValue]);
 
   useEffect(() => {
     if (!loop?.card.loop.verification.required.includes("interaction")) {
@@ -178,26 +195,26 @@ export function LoopDetailPage() {
   }, [loadInteractionDeps, loop]);
 
   const loadRelations = useCallback(async () => {
-    if (!loopId) return;
+    if (!loopIdValue) return;
     try {
-      const { relations } = await githubApi.listRelations(loopId);
+      const { relations } = await githubApi.listRelations(loopIdValue);
       setRelations(relations);
     } catch {
       setRelations([]);
     }
-  }, [loopId]);
+  }, [loopIdValue]);
 
   useEffect(() => {
     void loadRelations();
   }, [loadRelations]);
 
   const handleInstallInteractionDeps = useCallback(async () => {
-    if (!loopId) return;
+    if (!loopIdValue) return;
     setInteractionDepsInstalling(true);
     setInteractionDepsMessage(null);
     try {
       const result = await loopsApi.installInteractionDeps(
-        loopId,
+        loopIdValue,
         interactionDeps?.installCommand,
       );
       setInteractionDepsMessage(result.output || result.command);
@@ -209,31 +226,15 @@ export function LoopDetailPage() {
     } finally {
       setInteractionDepsInstalling(false);
     }
-  }, [interactionDeps?.installCommand, loadInteractionDeps, loopId]);
+  }, [interactionDeps?.installCommand, loadInteractionDeps, loopIdValue]);
 
-  const handleSelectRun = useCallback(async (runId: string) => {
+  const handleSelectRun = useCallback((runId: string) => {
     setSelectedRunId(runId);
-    setDetailLoading(true);
     setSelectedArtifact(null);
     setArtifactContent(null);
-    try {
-      const [detail, artifactList, turnList] = await Promise.all([
-        loopsApi.getRun(runId),
-        loopsApi.listRunArtifacts(runId),
-        loopsApi.listRunTurns(runId),
-      ]);
-      setRunDetail(detail);
-      setArtifacts(artifactList.artifacts);
-      setRunTurns(turnList.turns);
-      setTurnsOpen(false);
-      setSelectedTurn(null);
-      setTurnView(null);
-    } catch {
-      setRunDetail(null);
-      setArtifacts([]);
-    } finally {
-      setDetailLoading(false);
-    }
+    setTurnsOpen(false);
+    setSelectedTurn(null);
+    setTurnView(null);
   }, []);
 
   const handleSelectArtifact = useCallback(
@@ -306,9 +307,10 @@ export function LoopDetailPage() {
   );
 
   const handleDiscardRun = useCallback(async () => {
-    if (!selectedRunId || !runDetail) return;
+    if (!selectedRunId || !runData.runDetail) return;
     const isActive =
-      runDetail.run.state === "active" || runDetail.run.state === "retry";
+      runData.runDetail.run.state === "active" ||
+      runData.runDetail.run.state === "retry";
     const confirmed = window.confirm(
       isActive
         ? "Discard this run? The executing process will be terminated, then direct changes will be reverted or the worktree removed."
@@ -324,13 +326,14 @@ export function LoopDetailPage() {
         cleanup_worktree: true,
         force: isActive,
       });
+      await runData.refresh();
       await load();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setDiscarding(false);
     }
-  }, [load, runDetail, selectedRunId]);
+  }, [load, runData, selectedRunId]);
 
   const handleDecision = useCallback(
     async (decision: RunDecisionAction) => {
@@ -339,6 +342,7 @@ export function LoopDetailPage() {
       setActionError(null);
       try {
         await loopsApi.submitDecision(selectedRunId, decision);
+        await runData.refresh();
         await load();
       } catch (err) {
         setActionError(err instanceof Error ? err.message : String(err));
@@ -346,15 +350,16 @@ export function LoopDetailPage() {
         setDecisionBusy(false);
       }
     },
-    [load, selectedRunId],
+    [load, runData, selectedRunId],
   );
 
   const handleRunNow = useCallback(async () => {
-    if (!loopId) return;
+    if (!loopIdValue) return;
     setTriggering(true);
     setActionError(null);
     try {
-      await loopsApi.triggerRun(loopId);
+      await loopsApi.triggerRun(loopIdValue);
+      await runData.refresh();
       await load();
     } catch (err) {
       const status = (err as { status?: number }).status;
@@ -366,17 +371,18 @@ export function LoopDetailPage() {
     } finally {
       setTriggering(false);
     }
-  }, [loopId, load, t]);
+  }, [loopIdValue, load, runData, t]);
 
   // PATCH pause / resume (03-API契约.md, 阶段 2). The current run state is
   // derived from the newest run in the list projection.
   const handlePatch = useCallback(
     async (action: "pause" | "resume") => {
-      if (!loopId) return;
+      if (!loopIdValue) return;
       setPatching(true);
       setActionError(null);
       try {
-        await loopsApi.patchLoop(loopId, action);
+        await loopsApi.patchLoop(loopIdValue, action);
+        await runData.refresh();
         await load();
       } catch (err) {
         setActionError(err instanceof Error ? err.message : String(err));
@@ -384,7 +390,7 @@ export function LoopDetailPage() {
         setPatching(false);
       }
     },
-    [loopId, load],
+    [loopIdValue, load, runData],
   );
 
   const sortedRuns = [...runs].sort(
@@ -393,15 +399,15 @@ export function LoopDetailPage() {
   );
   const currentRunState = sortedRuns[0]?.state ?? null;
 
-  const judgment = runDetail?.ledger_summary.judgment_summary ?? null;
-  const failureTags = runDetail?.ledger_summary.failure_tags ?? [];
+  const judgment = runData.runDetail?.ledger_summary.judgment_summary ?? null;
+  const failureTags = runData.runDetail?.ledger_summary.failure_tags ?? [];
   const collectorReportRef =
-    runDetail?.ledger_summary.collector_report_ref ?? null;
-  const handoffRef = runDetail?.ledger_summary.handoff_ref ?? null;
+    runData.runDetail?.ledger_summary.collector_report_ref ?? null;
+  const handoffRef = runData.runDetail?.ledger_summary.handoff_ref ?? null;
   const blockerFingerprint =
-    runDetail?.ledger_summary.blocker_fingerprint ?? null;
+    runData.runDetail?.ledger_summary.blocker_fingerprint ?? null;
   const repeatedBlockerCount =
-    runDetail?.ledger_summary.repeated_blocker_count ?? 0;
+    runData.runDetail?.ledger_summary.repeated_blocker_count ?? 0;
 
   return (
     <div
@@ -419,7 +425,7 @@ export function LoopDetailPage() {
         }
       >
         <PageHeader
-          title={loopId ?? t("loopsTitle")}
+          title={loopIdValue ?? t("loopsTitle")}
           showBack
           onBack={() => navigate("..")}
           rightContent={
@@ -634,48 +640,51 @@ export function LoopDetailPage() {
                     >
                       {t("loopsJudgmentTitle")}
                     </h3>
-                    {detailLoading ? (
+                    {runData.loading ? (
                       <p className="p-3 [font-size:var(--font-size-sm)] italic text-[var(--text-muted)]">
                         {t("loopsLoading")}
                       </p>
-                    ) : !runDetail ? (
+                    ) : !runData.runDetail ? (
                       <p className="p-3 [font-size:var(--font-size-sm)] italic text-[var(--text-muted)]">
                         {t("loopsNoJudgment")}
                       </p>
                     ) : (
                       <div className="flex flex-col gap-[var(--space-2)] [font-size:var(--font-size-sm)]">
                         {!judgment &&
-                          (runDetail.run.state === "active" ||
-                            runDetail.run.state === "retry") && (
+                          (runData.runDetail.run.state === "active" ||
+                            runData.runDetail.run.state === "retry") && (
                             <p className="m-0 rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] p-3 text-[var(--text-muted)]">
                               {t("loopsJudgmentPending")}
                             </p>
                           )}
-                        {(runDetail.run.state === "paused" ||
-                          runDetail.run.state === "needs_human" ||
-                          runDetail.run.state === "budget_limited") && (
+                        {(runData.runDetail.run.state === "paused" ||
+                          runData.runDetail.run.state === "needs_human" ||
+                          runData.runDetail.run.state === "budget_limited") && (
                           <p className="m-0 rounded-[var(--radius-sm)] border border-[var(--warning-color)]/40 bg-[var(--warning-color)]/10 p-3 text-[var(--warning-color)]">
                             {t("loopsRunBlocked", {
-                              state: humanizeDecision(runDetail.run.state),
+                              state: humanizeDecision(
+                                runData.runDetail.run.state,
+                              ),
                               reason:
-                                runDetail.ledger_summary.last_decision
+                                runData.runDetail.ledger_summary.last_decision
                                   ?.human_reasons &&
-                                runDetail.ledger_summary.last_decision
+                                runData.runDetail.ledger_summary.last_decision
                                   .human_reasons.length > 0
                                   ? formatHumanReasons(
-                                      runDetail.ledger_summary.last_decision
-                                        .human_reasons,
+                                      runData.runDetail.ledger_summary
+                                        .last_decision.human_reasons,
                                     )
-                                  : runDetail.ledger_summary.last_decision
+                                  : runData.runDetail.ledger_summary
+                                        .last_decision
                                     ? humanizeReason(
-                                        runDetail.ledger_summary.last_decision
-                                          .reason,
+                                        runData.runDetail.ledger_summary
+                                          .last_decision.reason,
                                       )
                                     : "—",
                             })}
                           </p>
                         )}
-                        {runDetail.run.state === "needs_human" && (
+                        {runData.runDetail.run.state === "needs_human" && (
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
@@ -697,7 +706,7 @@ export function LoopDetailPage() {
                             </button>
                           </div>
                         )}
-                        {runDetail.run.state !== "discarded" && (
+                        {runData.runDetail.run.state !== "discarded" && (
                           <button
                             type="button"
                             className="self-end rounded-md border border-[var(--error-color)]/50 bg-[var(--error-color)]/10 px-4 py-2 text-sm font-medium text-[var(--error-color)] transition-opacity hover:opacity-90 disabled:opacity-50"
@@ -732,8 +741,8 @@ export function LoopDetailPage() {
                             {t("loopsJudgmentTurns")}
                           </span>
                           <span className="text-right text-[var(--text-primary)]">
-                            {runDetail.ledger_summary.turns_used} /{" "}
-                            {runDetail.ledger_summary.max_turns ?? "—"}
+                            {runData.runDetail.ledger_summary.turns_used} /{" "}
+                            {runData.runDetail.ledger_summary.max_turns ?? "—"}
                           </span>
                         </div>
                         <div className="flex items-start justify-between gap-[var(--space-3)]">
@@ -741,8 +750,9 @@ export function LoopDetailPage() {
                             {t("loopsJudgmentRetries")}
                           </span>
                           <span className="text-right text-[var(--text-primary)]">
-                            {runDetail.ledger_summary.retries_used} /{" "}
-                            {runDetail.ledger_summary.max_retries ?? "—"}
+                            {runData.runDetail.ledger_summary.retries_used} /{" "}
+                            {runData.runDetail.ledger_summary.max_retries ??
+                              "—"}
                           </span>
                         </div>
                         {(collectorReportRef ||
@@ -790,14 +800,14 @@ export function LoopDetailPage() {
                             key={selectedRunId}
                             runId={selectedRunId}
                             isActive={
-                              runDetail?.run.state === "active" ||
-                              runDetail?.run.state === "retry"
+                              runData.runDetail?.run.state === "active" ||
+                              runData.runDetail?.run.state === "retry"
                             }
-                            sessionRef={runDetail?.session_ref ?? null}
+                            sessionRef={runData.sessionRef}
                           />
                         </div>
 
-                        {runTurns.length > 0 && (
+                        {runData.runTurns.length > 0 && (
                           <div className="mt-4 border-t border-[var(--border-color)] pt-4">
                             <div className="mb-3 flex items-center justify-between gap-2">
                               <h4 className="m-0 [font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
@@ -813,7 +823,7 @@ export function LoopDetailPage() {
                             </div>
                             {turnsOpen && (
                               <div className="flex flex-col gap-2">
-                                {runTurns.map((turn) => (
+                                {runData.runTurns.map((turn) => (
                                   <button
                                     key={turn.turn}
                                     type="button"
@@ -902,13 +912,13 @@ export function LoopDetailPage() {
                           </div>
                         )}
 
-                        {artifacts.length > 0 && (
+                        {runData.artifacts.length > 0 && (
                           <div className="mt-4 border-t border-[var(--border-color)] pt-4">
                             <h4 className="m-0 mb-3 [font-size:var(--font-size-sm)] font-medium text-[var(--text-primary)]">
                               Artifacts
                             </h4>
                             <div className="flex flex-wrap gap-[var(--space-2)]">
-                              {artifacts.map((name) => (
+                              {runData.artifacts.map((name) => (
                                 <button
                                   key={name}
                                   type="button"

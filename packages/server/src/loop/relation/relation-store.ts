@@ -5,6 +5,7 @@ import type {
   MaintenanceTarget,
   MaintenanceTargetState,
 } from "../maintenance/types.js";
+import { RELATION_MAX_REPAIRS, RELATION_TRIGGER_TYPES } from "./constants.js";
 
 export const RELATION_STATES = [
   "pr_pending_approval",
@@ -153,8 +154,8 @@ function relationToTarget(relation: RelationRecord): MaintenanceTarget {
     feedback_count: relation.feedback_count,
     repair_count: relation.repair_count,
     wake_policy: {
-      trigger_types: ["github_comment", "github_review"],
-      max_repairs: 3,
+      trigger_types: [...RELATION_TRIGGER_TYPES],
+      max_repairs: RELATION_MAX_REPAIRS,
     },
     context_payload: {
       target: relation.subject,

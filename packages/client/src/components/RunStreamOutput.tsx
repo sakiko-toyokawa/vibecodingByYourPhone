@@ -23,14 +23,61 @@ interface RunStreamOutputProps {
 /** Accumulated display entry after merging stream events. */
 interface DisplayEntry {
   at: string;
-  kind: "system" | "user" | "assistant" | "error" | "result" | "info";
+  kind:
+    | "system"
+    | "user"
+    | "assistant"
+    | "error"
+    | "result"
+    | "info"
+    | "tool_use"
+    | "tool_result";
   text: string;
+  label?: string;
 }
 
 /** Only parse the tail of large runtime-events.jsonl files (performance). */
-const MAX_PARSE_LINES = 1000;
+const MAX_PARSE_LINES = 5000;
 /** Only display the latest N merged entries (performance). */
-const MAX_DISPLAY_ENTRIES = 50;
+const MAX_DISPLAY_ENTRIES = 200;
+
+interface RuntimeContentBlock {
+  type?: string;
+  name?: string;
+  input?: unknown;
+  content?: unknown;
+  tool_use_id?: string;
+  is_error?: boolean;
+  [key: string]: unknown;
+}
+
+function blockText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((item) =>
+        typeof item === "string"
+          ? item
+          : blockText(
+              (item as RuntimeContentBlock | undefined)?.content ?? item,
+            ),
+      )
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (content === undefined || content === null) return "";
+  if (typeof content === "object") return JSON.stringify(content, null, 2);
+  return String(content);
+}
+
+function toolInputSummary(input: unknown): string {
+  if (typeof input === "string") {
+    return input.length > 600 ? `${input.slice(0, 600)}\n…` : input;
+  }
+  if (input === undefined || input === null) return "";
+  const json = JSON.stringify(input, null, 2) ?? "";
+  return json.length > 1200 ? `${json.slice(0, 1200)}\n…` : json;
+}
 
 function parseRuntimeEvents(content: string): RuntimeEvent[] {
   const lines = content.split("\n").filter((line) => line.trim().length > 0);
@@ -63,10 +110,23 @@ function buildDisplayEntries(events: RuntimeEvent[]): DisplayEntry[] {
   const entries: DisplayEntry[] = [];
   /** messageId -> accumulated text */
   const streamAccum = new Map<string, { at: string; text: string }>();
+  const streamTool = new Map<string, { name: string; input: string }>();
+  const toolNames = new Map<string, string>();
   let currentStreamId: string | null = null;
 
   const flushStream = () => {
     if (!currentStreamId) return;
+    const tool = streamTool.get(currentStreamId);
+    if (tool) {
+      toolNames.set(currentStreamId, tool.name);
+      entries.push({
+        at: streamAccum.get(currentStreamId)?.at ?? new Date().toISOString(),
+        kind: "tool_use",
+        label: `tool_use · ${tool.name}`,
+        text: tool.input.trim() || "…",
+      });
+      streamTool.delete(currentStreamId);
+    }
     const acc = streamAccum.get(currentStreamId);
     if (acc && acc.text.trim().length > 0) {
       entries.push({ at: acc.at, kind: "assistant", text: acc.text });
@@ -97,9 +157,25 @@ function buildDisplayEntries(events: RuntimeEvent[]): DisplayEntry[] {
         continue;
       }
 
+      if (evt.type === "content_block_start") {
+        const block = evt.content_block as RuntimeContentBlock | undefined;
+        if (block?.type === "tool_use" && currentStreamId) {
+          streamTool.set(currentStreamId, {
+            name: block.name ?? "tool",
+            input: "",
+          });
+        }
+        continue;
+      }
+
       if (evt.type === "content_block_delta" && currentStreamId) {
         const delta = evt.delta as
-          | { type?: string; text?: string; thinking?: string }
+          | {
+              type?: string;
+              text?: string;
+              thinking?: string;
+              partial_json?: string;
+            }
           | undefined;
         const acc = streamAccum.get(currentStreamId);
         if (acc && delta) {
@@ -107,6 +183,9 @@ function buildDisplayEntries(events: RuntimeEvent[]): DisplayEntry[] {
             acc.text += delta.text;
           } else if (delta.type === "thinking_delta" && delta.thinking) {
             acc.text += delta.thinking;
+          } else if (delta.type === "input_json_delta" && delta.partial_json) {
+            const tool = streamTool.get(currentStreamId);
+            if (tool) tool.input += delta.partial_json;
           }
         }
         continue;
@@ -121,6 +200,57 @@ function buildDisplayEntries(events: RuntimeEvent[]): DisplayEntry[] {
 
     // Non-stream events
     flushStream();
+
+    if (msg.type === "assistant" && Array.isArray(msg.content)) {
+      for (const raw of msg.content as unknown[]) {
+        const block = raw as RuntimeContentBlock;
+        if (block.type === "tool_use" && block.name) {
+          const toolId = typeof block.id === "string" ? block.id : block.name;
+          toolNames.set(toolId, block.name);
+          entries.push({
+            at: event.at,
+            kind: "tool_use",
+            label: `tool_use · ${block.name}`,
+            text: toolInputSummary(block.input),
+          });
+        } else if (block.type === "tool_result") {
+          const toolName = toolNames.get(block.tool_use_id ?? "") ?? "tool";
+          entries.push({
+            at: event.at,
+            kind: "tool_result",
+            label: `tool_result · ${toolName}`,
+            text: blockText(block.content),
+          });
+        } else {
+          const text = blockText(block.content ?? block.text);
+          if (text.trim().length > 0) {
+            entries.push({ at: event.at, kind: "assistant", text });
+          }
+        }
+      }
+      continue;
+    }
+
+    if (msg.type === "user" && Array.isArray(msg.content)) {
+      for (const raw of msg.content as unknown[]) {
+        const block = raw as RuntimeContentBlock;
+        if (block.type === "tool_result") {
+          const toolName = toolNames.get(block.tool_use_id ?? "") ?? "tool";
+          entries.push({
+            at: event.at,
+            kind: "tool_result",
+            label: `tool_result · ${toolName}`,
+            text: blockText(block.content),
+          });
+        } else {
+          const text = blockText(block.content ?? block.text);
+          if (text.trim().length > 0) {
+            entries.push({ at: event.at, kind: "user", text });
+          }
+        }
+      }
+      continue;
+    }
 
     if (msg.type === "system" && msg.subtype === "init") {
       entries.push({
@@ -160,6 +290,10 @@ function kindLabel(kind: DisplayEntry["kind"]): string {
       return "[result]";
     case "info":
       return "[info]";
+    case "tool_use":
+      return "[tool_use]";
+    case "tool_result":
+      return "[tool_result]";
   }
 }
 
@@ -300,13 +434,28 @@ export function RunStreamOutput({
                 ? "text-[var(--error-color)]"
                 : entry.kind === "assistant"
                   ? "text-[var(--accent-rust)]"
-                  : "text-[var(--text-muted)]"
+                  : entry.kind === "tool_use" || entry.kind === "tool_result"
+                    ? "text-[var(--accent-rust)]"
+                    : "text-[var(--text-muted)]"
             }`}
           >
-            {kindLabel(entry.kind)}
+            {entry.label ?? kindLabel(entry.kind)}
           </span>
-          <span className="whitespace-pre-wrap break-all [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
-            {entry.text}
+          <span className="min-w-0 flex-1">
+            {entry.kind === "tool_result" ? (
+              <details className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-2">
+                <summary className="cursor-pointer text-xs font-medium text-[var(--text-secondary)]">
+                  Show result
+                </summary>
+                <div className="mt-2 whitespace-pre-wrap break-all [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
+                  {entry.text}
+                </div>
+              </details>
+            ) : (
+              <span className="whitespace-pre-wrap break-all [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
+                {entry.text}
+              </span>
+            )}
           </span>
         </div>
       ))}

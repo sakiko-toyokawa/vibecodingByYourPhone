@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
+import { Link } from "react-router-dom";
 import { type GitHubRelation, githubApi } from "../api/github";
+import { useRemoteBasePath } from "../hooks/useRemoteBasePath";
 import { humanizeRelationState } from "../lib/loopHumanText";
 
 interface GitHubRelationCardProps {
@@ -17,6 +19,7 @@ export function GitHubRelationCard({
   onChanged,
   showLoop = false,
 }: GitHubRelationCardProps) {
+  const basePath = useRemoteBasePath();
   const [busy, setBusy] = useState<"approve" | "ready" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,7 +100,17 @@ export function GitHubRelationCard({
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <span className="font-mono text-xs text-[var(--text-dimmed)]">
           {relation.relation_id}
-          {showLoop ? ` · ${relation.loop_id}` : ""}
+          {showLoop && (
+            <>
+              {" · "}
+              <Link
+                to={`${basePath}/loops/${encodeURIComponent(relation.loop_id)}`}
+                className="text-[var(--text-secondary)] underline decoration-dotted underline-offset-2 hover:text-[var(--text-primary)]"
+              >
+                {relation.loop_id}
+              </Link>
+            </>
+          )}
         </span>
         <span className="ml-auto flex flex-wrap items-center gap-2">
           {relation.state === "pr_pending_approval" && (

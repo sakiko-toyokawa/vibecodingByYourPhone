@@ -1,6 +1,10 @@
-import type { RunDecisionAction } from "@yep-anywhere/shared";
+import type {
+  HumanReason,
+  PendingToolCall,
+  RunDecisionAction,
+} from "@yep-anywhere/shared";
 import { useCallback, useEffect, useState } from "react";
-import { loopsApi } from "../api/loops";
+import { type HumanSlaItem, loopsApi } from "../api/loops";
 import { useI18n } from "../i18n";
 import {
   type LoopDecisionOption,
@@ -19,8 +23,43 @@ import {
   recommendedDecisionOption,
 } from "./LoopApprovalCards.shared";
 
+interface InitialPendingApproval {
+  type: "run-decision-required";
+  loop_id: string;
+  run_id: string;
+  request_id: string;
+  action: "manual_review";
+  risk: "unrated";
+  reason: string;
+  evidence_refs: string[];
+  human_reasons: HumanReason[];
+  tool_call?: PendingToolCall;
+  diff_summary?: string;
+  options: LoopDecisionOption[];
+  recommended?: string;
+  timestamp: string;
+}
+
+type ApprovalEvent = RunDecisionRequiredEvent | InitialPendingApproval;
+
+function slaToApprovalEvent(item: HumanSlaItem): InitialPendingApproval {
+  return {
+    type: "run-decision-required",
+    loop_id: item.loop_id,
+    run_id: item.run_id,
+    request_id: item.request_id ?? `sla-${item.run_id}`,
+    action: "manual_review",
+    risk: "unrated",
+    reason: item.reason,
+    evidence_refs: [],
+    human_reasons: item.human_reasons ?? [],
+    options: ["approve", "reject", "request_changes", "pause"],
+    timestamp: item.entered_at,
+  };
+}
+
 interface PendingApproval {
-  event: RunDecisionRequiredEvent;
+  event: ApprovalEvent;
   /** request_changes selected: show the feedback form */
   feedbackOpen: boolean;
   feedback: string;
@@ -255,6 +294,36 @@ export function LoopApprovalCards() {
   const [approvals, setApprovals] = useState<Record<string, PendingApproval>>(
     {},
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    loopsApi
+      .listPendingHuman()
+      .then(({ items }) => {
+        if (cancelled) return;
+        setApprovals((prev) => {
+          const next = { ...prev };
+          for (const item of items) {
+            if (!next[item.run_id]) {
+              next[item.run_id] = {
+                event: slaToApprovalEvent(item),
+                feedbackOpen: false,
+                feedback: "",
+                submitting: false,
+                error: null,
+              };
+            }
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        // Initial hydration is best-effort; live WS events still populate.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const unsubDecision = activityBus.on("run-decision-required", (event) => {

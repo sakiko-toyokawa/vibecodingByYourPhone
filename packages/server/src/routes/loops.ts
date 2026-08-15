@@ -8,6 +8,7 @@
  * publish / rollback 走 routes/proposals.ts).
  */
 
+import { randomUUID } from "node:crypto";
 import { LoopActionRequestSchema, LoopCardSchema } from "@yep-anywhere/shared";
 import type { ProposalStatus } from "@yep-anywhere/shared";
 import { RunStateSchema } from "@yep-anywhere/shared";
@@ -21,9 +22,11 @@ import {
   type LoopRunService,
   type MaintenanceTargetStore,
   type ProposalStore,
+  type RunSummary,
   type TriggerQueueStore,
   isGitWorkTree,
 } from "../loop/index.js";
+import { TriggerQueuePayloadSchema } from "../loop/trigger/trigger-payload.js";
 import {
   checkInteractionDependencies,
   inferPlaywrightInstallCommand,
@@ -77,7 +80,10 @@ export interface LoopsRoutesDeps {
     command: string,
   ) => Promise<{ ok: boolean; output: string }>;
   triggerQueueStore?: TriggerQueueStore;
-  drainPendingTriggers?: (loopId?: string) => Promise<void>;
+  drainPendingTriggers?: (
+    loopId?: string,
+    options?: { throwOnError?: boolean },
+  ) => Promise<void>;
 }
 
 function runErrorStatus(error: LoopRunError): 400 | 404 | 409 {
@@ -562,14 +568,31 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
         .join("; ");
       return c.json({ error: "invalid_loop_card", message }, 400);
     }
-    try {
-      const run = await runService.startRun(
-        c.req.param("id"),
-        "manual",
-        parsed.data.intent_overrides,
-        { relationId: parsed.data.relation_id },
+    const loopId = c.req.param("id");
+    if (!triggerQueueStore || !drainPendingTriggers) {
+      return c.json(
+        {
+          error: "trigger_queue_unavailable",
+          message: "Trigger queue is required for manual run management",
+        },
+        503,
       );
-      return c.json({ run: { ...run, turn: 1 } }, 201);
+    }
+    const payload = TriggerQueuePayloadSchema.parse({
+      ...(parsed.data.relation_id
+        ? { relation_id: parsed.data.relation_id }
+        : {}),
+      event_type: "manual",
+    });
+    const entry = await triggerQueueStore.enqueue({
+      event_id: `manual-${Date.now()}-${randomUUID().slice(0, 8)}`,
+      loop_id: loopId,
+      source: "manual",
+      priority: "urgent",
+      payload,
+    });
+    try {
+      await drainPendingTriggers(loopId, { throwOnError: true });
     } catch (error) {
       if (error instanceof LoopRunError) {
         return c.json(
@@ -579,6 +602,17 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
       }
       throw error;
     }
+    const runs = await runService.listRuns(loopId);
+    const run =
+      runs[0] ??
+      ({
+        run_id: entry.event_id,
+        loop_id: loopId,
+        state: "active",
+        source: "manual",
+        created_at: new Date().toISOString(),
+      } as RunSummary);
+    return c.json({ run: { ...run, turn: 1 } }, 201);
   });
 
   /**
@@ -749,9 +783,18 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
         400,
       );
     }
-    const payload = data.relation_id
-      ? { ...(data.payload ?? {}), relation_id: data.relation_id }
-      : data.payload;
+    const payloadParse = TriggerQueuePayloadSchema.safeParse(
+      data.relation_id
+        ? { ...(data.payload ?? {}), relation_id: data.relation_id }
+        : (data.payload ?? {}),
+    );
+    if (!payloadParse.success) {
+      const message = payloadParse.error.issues
+        .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+        .join("; ");
+      return c.json({ error: "invalid_trigger", message }, 400);
+    }
+    const payload = payloadParse.data;
     const entry = await triggerQueueStore.enqueue({
       event_id: data.event_id,
       loop_id: loopId,

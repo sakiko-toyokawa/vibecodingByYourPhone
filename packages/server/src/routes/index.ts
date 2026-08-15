@@ -14,6 +14,7 @@ import type {
   LoopRunService,
   MaintenanceTargetStore,
   ProposalStore,
+  RelationLifecycleService,
   RelationStore,
   TriggerQueueStore,
 } from "../loop/index.js";
@@ -80,6 +81,7 @@ export interface RouteDependencies {
   loopControlPlane?: ControlPlane;
   proposalStore?: ProposalStore;
   relationStore?: RelationStore;
+  relationLifecycle?: RelationLifecycleService;
   maintenanceTargetStore?: MaintenanceTargetStore;
   githubCredentialStore: GitHubCredentialStore;
   githubToolProvisioner: GitHubToolProvisioner;
@@ -106,6 +108,7 @@ export function registerRoutes(
     loopControlPlane,
     proposalStore,
     relationStore,
+    relationLifecycle,
     maintenanceTargetStore,
     githubCredentialStore,
     githubToolProvisioner,
@@ -434,6 +437,7 @@ export function registerRoutes(
       githubClient,
       dataDir: options.dataDir,
       relationStore,
+      relationLifecycle,
       triggerQueueStore,
       drainPendingTriggers,
     }),

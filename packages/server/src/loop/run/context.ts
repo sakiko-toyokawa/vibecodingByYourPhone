@@ -20,6 +20,7 @@ import type { ControlPlane } from "../control-plane/control-plane.js";
 import type { RunStateStore } from "../control-plane/run-state-store.js";
 import type { MaintenanceTargetStore } from "../maintenance/maintenance-target-store.js";
 import type { MaintenanceTarget } from "../maintenance/types.js";
+import type { RelationLifecycleService } from "../relation/lifecycle-service.js";
 import type {
   RelationRecord,
   RelationStore,
@@ -51,6 +52,7 @@ export interface RunContextDeps {
   githubToolProvisioner?: GithubToolProvisioner;
   dataDir?: string;
   relationStore?: RelationStore;
+  relationLifecycle?: RelationLifecycleService;
   maintenanceTargetStore?: MaintenanceTargetStore;
 }
 

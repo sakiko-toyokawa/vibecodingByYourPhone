@@ -11,6 +11,10 @@ import type {
   RunState,
   UrlProjectId,
 } from "@yep-anywhere/shared";
+import type {
+  RelationRecord,
+  RelationState,
+} from "../loop/relation/relation-store.js";
 import type { SessionOwnership, SessionSummary } from "../supervisor/types.js";
 
 export type FileChangeType = "create" | "modify" | "delete";
@@ -337,6 +341,89 @@ export interface ProposalPublishedEvent {
   timestamp: string;
 }
 
+/** Event emitted when a loop run is accepted by the trigger dispatcher. */
+export interface RunStartedEvent {
+  type: "run-started";
+  loop_id: string;
+  run_id: string;
+  source: string;
+  timestamp: string;
+}
+
+/** Event emitted when a loop turn opens a fresh provider session. */
+export interface TurnStartedEvent {
+  type: "turn-started";
+  loop_id: string;
+  run_id: string;
+  turn: number;
+  session_ref: string;
+  timestamp: string;
+}
+
+/** Event emitted when a loop turn finishes execution. */
+export interface TurnCompletedEvent {
+  type: "turn-completed";
+  loop_id: string;
+  run_id: string;
+  turn: number;
+  session_ref: string;
+  ok: boolean;
+  error?: string;
+  timestamp: string;
+}
+
+/** Event emitted when a verifier agent session starts. */
+export interface VerificationStartedEvent {
+  type: "verification-started";
+  loop_id: string;
+  run_id: string;
+  turn: number;
+  session_ref: string;
+  attempt: number;
+  timestamp: string;
+}
+
+/** Event emitted when a verifier agent session completes. */
+export interface VerificationCompletedEvent {
+  type: "verification-completed";
+  loop_id: string;
+  run_id: string;
+  turn: number;
+  session_ref: string;
+  attempt: number;
+  ok: boolean;
+  /** Verdict status when the output was parseable ("passed"/"failed"/...). */
+  verdict?: string;
+  output_ref?: string;
+  error?: string;
+  timestamp: string;
+}
+
+/** Event emitted after every relation state-machine transition. */
+export interface RelationStateChangedEvent {
+  type: "relation-state-changed";
+  relation_id: string;
+  loop_id: string;
+  from_state: RelationState | null;
+  to_state: RelationState;
+  /** Optional state-machine event name that drove the transition. */
+  event?: string;
+  message?: string;
+  relation: RelationRecord;
+  timestamp: string;
+}
+
+/** Event emitted when external relation feedback is accepted or rejected. */
+export interface FeedbackReceivedEvent {
+  type: "feedback-received";
+  relation_id: string;
+  loop_id: string;
+  event_type: string;
+  repair_count: number;
+  repair_limit_reached: boolean;
+  timestamp: string;
+}
+
 /** Union of all event types that can be emitted through the bus */
 export type BusEvent =
   | FileChangeEvent
@@ -362,7 +449,14 @@ export type BusEvent =
   | LoopBudgetWarningEvent
   | LoopHumanSlaReminderEvent
   | LoopHumanSlaAbandonedEvent
-  | ProposalPublishedEvent;
+  | ProposalPublishedEvent
+  | RunStartedEvent
+  | TurnStartedEvent
+  | TurnCompletedEvent
+  | VerificationStartedEvent
+  | VerificationCompletedEvent
+  | RelationStateChangedEvent
+  | FeedbackReceivedEvent;
 
 export type EventHandler<T = BusEvent> = (event: T) => void;
 

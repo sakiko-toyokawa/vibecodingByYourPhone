@@ -1,3 +1,7 @@
+import {
+  EXECUTOR_SUMMARY_BEGIN,
+  EXECUTOR_SUMMARY_END,
+} from "../../../packages/server/src/loop/assembly/runtime-input.js";
 import type { Process } from "../../packages/server/src/supervisor/Process.js";
 import type { Supervisor } from "../../packages/server/src/supervisor/Supervisor.js";
 
@@ -128,7 +132,14 @@ export class FakeSupervisor {
               message: {
                 type: "result",
                 subtype: "success",
-                result: "turn report text",
+                result: [
+                  "turn report text",
+                  EXECUTOR_SUMMARY_BEGIN,
+                  "- 已完成：turn completed",
+                  "- 風險：none",
+                  "- 文件：none",
+                  EXECUTOR_SUMMARY_END,
+                ].join("\n"),
                 is_error: false,
                 usage: { input_tokens: 10, output_tokens: 5 },
               },

@@ -12,6 +12,7 @@ export * from "./learning/pipeline.js";
 export * from "./learning/signature.js";
 export * from "./learning/worker.js";
 export * from "./maintenance/index.js";
+export * from "./relation/lifecycle-service.js";
 export * from "./relation/relation-poller.js";
 export * from "./relation/relation-store.js";
 export * from "./run-service.js";

@@ -1,6 +1,6 @@
 import type { ProviderInfo } from "@yep-anywhere/shared";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import {
   type GitHubCredentialStatus,
@@ -8,9 +8,10 @@ import {
   type GitHubToolStatus,
   githubApi,
 } from "../api/github";
-import { type LoopRunSummary, type StoredLoop, loopsApi } from "../api/loops";
+import { type StoredLoop, loopsApi } from "../api/loops";
 import { GitHubRelationCard } from "../components/GitHubRelationCard";
 import { PageHeader } from "../components/PageHeader";
+import { type LoopListEntry, useLoops } from "../hooks/useLoops";
 import { useRemoteBasePath } from "../hooks/useRemoteBasePath";
 import { useI18n } from "../i18n";
 import { useNavigationLayout } from "../layouts";
@@ -22,15 +23,7 @@ import {
 import { humanizeDecision, humanizeRelationState } from "../lib/loopHumanText";
 import { runStateBadgeClass } from "../lib/loopStateStyle";
 
-interface LoopListEntry {
-  loop: StoredLoop;
-  /** Latest run (runs are newest-first), undefined when never run or on error */
-  lastRun?: LoopRunSummary;
-}
-
-function isGithubLoop(loop: StoredLoop): boolean {
-  return loop.card.loop.discovery?.source === "github_prompt";
-}
+type LoopFilter = "all" | "normal" | "github";
 
 function formatTrigger(loop: StoredLoop): string {
   const trigger = loop.card.loop.trigger;
@@ -50,15 +43,21 @@ function formatTime(iso: string): string {
  * Loops list page: registered loops with trigger type, latest run state,
  * and creation time. Click a loop to open its detail page.
  */
-export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
+export function LoopsPage({
+  initialFilter,
+}: { initialFilter?: LoopFilter } = {}) {
   const { t } = useI18n();
   const { openSidebar, isWideScreen } = useNavigationLayout();
   const basePath = useRemoteBasePath();
   const navigate = useNavigate();
-  const githubMode = mode === "github";
-  const [entries, setEntries] = useState<LoopListEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [searchParams] = useSearchParams();
+  const [filter, setFilter] = useState<LoopFilter>(
+    initialFilter ??
+      (searchParams.get("filter") === "github" ? "github" : "all"),
+  );
+  const githubMode = filter === "github";
+  const showGithub = filter !== "normal";
+  const { entries, loading, error, reload } = useLoops();
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<LoopCreateFormState>(
     DEFAULT_LOOP_CREATE_FORM,
@@ -78,40 +77,6 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
   const [relations, setRelations] = useState<GitHubRelation[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
 
-  const load = useCallback(async () => {
-    try {
-      const { loops } = await loopsApi.listLoops();
-      const visible = loops.filter(
-        (loop) =>
-          !loop.archived &&
-          (mode === "github" ? isGithubLoop(loop) : !isGithubLoop(loop)),
-      );
-      // Latest run state per loop; a failing runs call must not hide the loop
-      const withRuns = await Promise.all(
-        visible.map(async (loop): Promise<LoopListEntry> => {
-          try {
-            const { runs } = await loopsApi.listRuns(loop.id);
-            return { loop, lastRun: runs[0] };
-          } catch {
-            return { loop };
-          }
-        }),
-      );
-      setEntries(
-        [...withRuns].sort((a, b) =>
-          (b.lastRun?.created_at ?? "").localeCompare(
-            a.lastRun?.created_at ?? "",
-          ),
-        ),
-      );
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
-    } finally {
-      setLoading(false);
-    }
-  }, [mode]);
-
   const loadRelations = useCallback(async () => {
     try {
       const { relations } = await githubApi.listRelations();
@@ -120,10 +85,6 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
       setRelations([]);
     }
   }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   useEffect(() => {
     githubApi
@@ -214,7 +175,7 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
         const { loop } = await loopsApi.createLoop(card);
         setCreateForm(DEFAULT_LOOP_CREATE_FORM);
         setCreateOpen(false);
-        await load();
+        await reload();
         navigate(`${basePath}/loops/${encodeURIComponent(loop.id)}`);
       } catch (err) {
         setCreateError(err instanceof Error ? err.message : String(err));
@@ -222,7 +183,7 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
         setCreating(false);
       }
     },
-    [basePath, createForm, load, navigate, t],
+    [basePath, createForm, reload, navigate, t],
   );
 
   const handleSaveGitHubToken = useCallback(
@@ -279,6 +240,11 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
     }
   }, [t]);
 
+  const visibleEntries = entries.filter(({ loop }) => {
+    const isGithub = loop.card.loop.discovery?.source === "github_prompt";
+    return filter === "all" || (filter === "github" ? isGithub : !isGithub);
+  });
+
   return (
     <div
       className={
@@ -295,7 +261,7 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
         }
       >
         <PageHeader
-          title={githubMode ? "GitHub" : t("loopsTitle")}
+          title={t("loopsTitle")}
           onOpenSidebar={openSidebar}
           rightContent={
             <button
@@ -321,6 +287,28 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
 
         <main className="flex-1 min-h-0 min-w-0 w-full overflow-x-hidden overflow-y-auto [-webkit-overflow-scrolling:touch]">
           <div className="box-border min-w-0 w-full px-6 py-8 md:px-10 md:py-10">
+            <div className="mb-6 flex flex-wrap items-center gap-2">
+              {(
+                [
+                  ["all", "All"],
+                  ["normal", t("loopsTitle")],
+                  ["github", "GitHub"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
+                    filter === value
+                      ? "border-[var(--accent-rust)] bg-[var(--accent-rust)]/10 text-[var(--text-primary)]"
+                      : "border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:border-[var(--border-hover)]"
+                  }`}
+                  onClick={() => setFilter(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             {githubMode && (
               <section className="mb-6 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-secondary)] p-6">
                 <div className="mb-5 flex flex-col gap-1">
@@ -429,7 +417,7 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
               </section>
             )}
 
-            {githubMode && (
+            {showGithub && (
               <section className="mb-6 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-secondary)] p-6">
                 <div className="mb-4">
                   <h2
@@ -922,15 +910,15 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
               </p>
             )}
 
-            {!loading && !error && entries.length === 0 && (
+            {!loading && !error && visibleEntries.length === 0 && (
               <p className="p-[var(--space-3)] italic text-[var(--text-muted)]">
                 {t("loopsEmpty")}
               </p>
             )}
 
-            {!loading && !error && entries.length > 0 && (
+            {!loading && !error && visibleEntries.length > 0 && (
               <div className="flex flex-col gap-[var(--space-2)]">
-                {entries.map(({ loop, lastRun }) => {
+                {visibleEntries.map(({ loop, lastRun }) => {
                   const relation = relations.find(
                     (item) => item.loop_id === loop.id,
                   );
@@ -981,7 +969,7 @@ export function LoopsPage({ mode = "normal" }: { mode?: "normal" | "github" }) {
                             {prompt}
                           </div>
                         )}
-                        {githubMode && relation && (
+                        {showGithub && relation && (
                           <div className="mt-1 [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
                             {relation.subject.repository}#
                             {relation.subject.pr_number ?? "?"} ·{" "}

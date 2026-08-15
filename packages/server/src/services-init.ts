@@ -21,6 +21,7 @@ import {
 import {
   LoopCardStore,
   MaintenanceTargetStore,
+  type RelationLifecycleService,
   type RelationPoller,
   RelationStore,
 } from "./loop/index.js";
@@ -92,6 +93,7 @@ export interface ServicesContainer {
   // 阶段 3 第三刀: 发布管线 (worker 自动推进 draft→shadow→canary)
   proposalPipeline?: ProposalPipeline;
   relationStore?: RelationStore;
+  relationLifecycle?: RelationLifecycleService;
   maintenanceTargetStore?: MaintenanceTargetStore;
   relationPoller?: RelationPoller;
   triggerQueueStore?: TriggerQueueStore;
