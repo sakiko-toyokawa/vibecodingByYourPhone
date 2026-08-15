@@ -1356,15 +1356,17 @@ export async function runTurns(
         deps.relationStore &&
         ctx.card.loop.discovery?.source === "github_prompt"
       ) {
-        // publish_mode "issue"：调研/复现类任务交接 issue 提案而非 PR。
-        if (ctx.card.loop.handoff?.publish_mode === "issue") {
+        // PR 优先；没有 PR 块时兜底尝试 ISSUE-PROPOSAL。publish_mode 只影响
+        // prompt 教学，不应成为硬门槛——卡片漏配 publish_mode 时 agent 按
+        // 任务文本产出的 issue 提案也不能丢（2026-08-15 生产实例：
+        // codex-issue run 完成了但提案没注册）。
+        const published = await relationLifecycle?.registerGithubPrPublish(
+          loopId,
+          runId,
+          outcome.finalText,
+        );
+        if (!published) {
           await relationLifecycle?.registerGithubIssueProposal(
-            loopId,
-            runId,
-            outcome.finalText,
-          );
-        } else {
-          await relationLifecycle?.registerGithubPrPublish(
             loopId,
             runId,
             outcome.finalText,

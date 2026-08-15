@@ -457,6 +457,44 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
       );
     }
     try {
+      // 查重后提案可能要求评论已有 issue 而非新建（agent 在提案里用
+      // action=comment_on_existing_issue + target_issue 表达）。
+      if (proposal.action === "comment_on_existing_issue") {
+        if (!proposal.target_issue) {
+          return c.json(
+            {
+              error: "invalid_issue_payload",
+              message: "comment action requires target_issue",
+            },
+            409,
+          );
+        }
+        const commentUrl = await githubClient.commentOnIssue({
+          repository: proposal.repository,
+          issueNumber: proposal.target_issue,
+          body: proposal.body,
+        });
+        const updated = await lifecycle?.transition(
+          relation.relation_id,
+          "awaiting_feedback",
+          {
+            subject: {
+              type: "github_issue",
+              repository: proposal.repository,
+              issue_number: proposal.target_issue,
+            },
+            pending_issue: undefined,
+          },
+          {
+            event: "comment_published",
+            message: `Analysis posted as a comment on ${proposal.repository}#${proposal.target_issue} (${commentUrl})`,
+          },
+        );
+        if (!updated) {
+          throw new Error("relation disappeared while posting comment");
+        }
+        return c.json({ relation: updated, commentUrl });
+      }
       const issueUrl = await githubClient.createIssue({
         repository: proposal.repository,
         title: proposal.title,

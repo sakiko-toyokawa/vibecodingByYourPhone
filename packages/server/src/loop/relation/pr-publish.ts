@@ -30,11 +30,15 @@ export interface ExtractedPrPublishPayload {
 /**
  * Issue 提案负载（调研/复现类任务）。与 PR 发布不同，提案没有本地产物——
  * 价值全在 title/body 的分析文本里，发布动作（gh issue create）不需要 cwd。
+ * action 缺省 = 新建 issue；"comment_on_existing_issue" + target_issue 表示
+ * 查重后发现已有 issue，批准后在目标 issue 下发表评论而非新建。
  */
 export interface ExtractedIssueProposalPayload {
   repository: string;
   title: string;
   body: string;
+  action?: "comment_on_existing_issue";
+  target_issue?: number;
 }
 
 export interface GitIdentity {
@@ -156,5 +160,14 @@ export function extractIssueProposalPayload(
   if (!repository || !title || !body) {
     return null;
   }
-  return { repository, title, body };
+  const payload: ExtractedIssueProposalPayload = { repository, title, body };
+  if (object.action === "comment_on_existing_issue") {
+    const target = object.target_issue;
+    if (typeof target !== "number" || !Number.isFinite(target) || target <= 0) {
+      return null;
+    }
+    payload.action = "comment_on_existing_issue";
+    payload.target_issue = Math.trunc(target);
+  }
+  return payload;
 }

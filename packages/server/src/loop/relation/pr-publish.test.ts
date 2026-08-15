@@ -130,3 +130,22 @@ test("extractIssueProposalPayload rejects missing fields and absent blocks", asy
     null,
   );
 });
+
+test("extractIssueProposalPayload keeps the comment-on-existing-issue action", async () => {
+  const {
+    extractIssueProposalPayload,
+    ISSUE_PROPOSAL_BEGIN,
+    ISSUE_PROPOSAL_END,
+  } = await import("./pr-publish.js");
+  const text = `${ISSUE_PROPOSAL_BEGIN}{ "repository": "openai/codex", "title": "t", "body": "b", "action": "comment_on_existing_issue", "target_issue": 36750 }${ISSUE_PROPOSAL_END}`;
+  assert.deepEqual(extractIssueProposalPayload(text), {
+    repository: "openai/codex",
+    title: "t",
+    body: "b",
+    action: "comment_on_existing_issue",
+    target_issue: 36750,
+  });
+  // comment 动作缺 target_issue → 整个块无效
+  const invalid = `${ISSUE_PROPOSAL_BEGIN}{ "repository": "o/r", "title": "t", "body": "b", "action": "comment_on_existing_issue" }${ISSUE_PROPOSAL_END}`;
+  assert.equal(extractIssueProposalPayload(invalid), null);
+});

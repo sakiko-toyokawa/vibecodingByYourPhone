@@ -72,6 +72,9 @@ export interface RelationRecord {
     repository: string;
     title: string;
     body: string;
+    /** 缺省 = 新建 issue；comment_on_existing_issue = 在 target_issue 下评论。 */
+    action?: "comment_on_existing_issue";
+    target_issue?: number;
     run_id?: string;
     created_at?: string;
   };
@@ -357,7 +360,11 @@ export class RelationStore {
     this.ensureInitialized();
     return this.maintenanceTargetStore
       .list()
-      .filter((target) => target.target_type === "github_pr")
+      .filter(
+        (target) =>
+          target.target_type === "github_pr" ||
+          target.target_type === "github_issue",
+      )
       .map((target) => targetToRelation(target))
       .filter((relation): relation is RelationRecord => relation !== null)
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at));

@@ -197,6 +197,24 @@ export class GitHubClient {
     return stdout.trim();
   }
 
+  /** Post a comment on an existing issue; returns the comment URL. */
+  async commentOnIssue(input: {
+    repository: string;
+    issueNumber: number;
+    body: string;
+  }): Promise<string> {
+    const stdout = await this.runChecked([
+      "issue",
+      "comment",
+      String(input.issueNumber),
+      "--repo",
+      input.repository,
+      "--body",
+      input.body,
+    ]);
+    return stdout.trim();
+  }
+
   async getVerifiedIdentity(): Promise<GitHubVerifiedIdentity> {
     const login = (
       await this.runChecked(["api", "user", "--jq", ".login"])

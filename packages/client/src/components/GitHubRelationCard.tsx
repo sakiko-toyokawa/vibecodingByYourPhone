@@ -121,7 +121,10 @@ export function GitHubRelationCard({
             {relation.pending_issue.title}
           </div>
           <div className="mt-1 break-all font-mono text-xs text-[var(--text-muted)]">
-            {relation.pending_issue.repository} · issue proposal
+            {relation.pending_issue.repository} ·{" "}
+            {relation.pending_issue.action === "comment_on_existing_issue"
+              ? `comment on #${relation.pending_issue.target_issue}`
+              : "issue proposal"}
           </div>
           <pre className="m-0 mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
             {relation.pending_issue.body}
@@ -155,7 +158,10 @@ export function GitHubRelationCard({
               >
                 {busy === "publish-issue"
                   ? "Publishing..."
-                  : "Approve & Publish Issue"}
+                  : relation.pending_issue.action ===
+                      "comment_on_existing_issue"
+                    ? `Approve & Comment on #${relation.pending_issue.target_issue}`
+                    : "Approve & Publish Issue"}
               </button>
             )}
           {relation.state === "pr_pending_approval" &&

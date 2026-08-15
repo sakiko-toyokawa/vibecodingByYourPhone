@@ -1117,3 +1117,77 @@ test("GitHub approve-issue rejects relations without a pending proposal", async 
   assert.equal(response.status, 409);
   assert.equal((await json(response)).error, "invalid_issue_payload");
 });
+
+test("GitHub approve-issue posts a comment when the proposal targets an existing issue", async () => {
+  let commentInput: {
+    repository: string;
+    issueNumber: number;
+    body: string;
+  } | null = null;
+  const relation = {
+    relation_id: "rel-issue-2",
+    loop_id: "loop-codex-repro",
+    subject: { type: "github_issue", repository: "openai/codex" },
+    state: "pr_pending_approval",
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 0,
+    pending_issue: {
+      repository: "openai/codex",
+      title: "Analysis: covered by #36750",
+      body: "## Root-cause hypothesis\n...",
+      action: "comment_on_existing_issue",
+      target_issue: 36750,
+    },
+  };
+  const app = new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {
+        createIssue: async () => {
+          throw new Error("should comment, not create");
+        },
+        commentOnIssue: async (input: {
+          repository: string;
+          issueNumber: number;
+          body: string;
+        }) => {
+          commentInput = input;
+          return "https://github.com/openai/codex/issues/36750#issuecomment-1";
+        },
+      } as unknown as GitHubClient,
+      relationStore: {
+        findById: () => relation,
+        updateState: async (id: string, state: string, patch?: object) => ({
+          ...relation,
+          ...patch,
+          state,
+        }),
+      } as never,
+    }),
+  );
+
+  const response = await app.request(
+    "/github/relations/rel-issue-2/approve-issue",
+    { method: "POST" },
+  );
+
+  assert.equal(response.status, 200);
+  const body = await json(response);
+  assert.equal(
+    body.commentUrl,
+    "https://github.com/openai/codex/issues/36750#issuecomment-1",
+  );
+  const updated = body.relation as {
+    state: string;
+    subject: { issue_number?: number };
+  };
+  assert.equal(updated.state, "awaiting_feedback");
+  assert.equal(updated.subject.issue_number, 36750);
+  assert.equal(
+    (commentInput as { issueNumber: number } | null)?.issueNumber,
+    36750,
+  );
+});

@@ -75,6 +75,8 @@ export interface GitHubRelation {
     repository: string;
     title: string;
     body: string;
+    action?: "comment_on_existing_issue";
+    target_issue?: number;
     run_id?: string;
     created_at?: string;
   };
