@@ -446,3 +446,75 @@ test("RelationPoller marks merged relations terminal", async () => {
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("RelationPoller does not re-log terminal closed state on every poll", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-rel-poll-"));
+  try {
+    const relationStore = new RelationStore({ dataDir });
+    await relationStore.initialize();
+    await relationStore.upsert(
+      makeRelation("closed", {
+        state_logs: [
+          {
+            at: new Date().toISOString(),
+            event: "closed",
+            message: "GitHub PR owner/repo#12 closed",
+          },
+        ],
+      }),
+    );
+    const queue = makeQueue();
+    const poller = new RelationPoller({
+      relationStore,
+      githubClient: githubClient({
+        getPullRequest: async () => ({
+          state: "closed",
+          merged: false,
+          head_sha: "sha",
+          draft: false,
+        }),
+      }),
+      triggerQueueStore: queue.store,
+    });
+    await poller.pollOnce();
+    const relation = relationStore.findById("rel-1");
+    assert.equal(relation?.state, "closed");
+    // 终态幂等：不追加重复的 "closed" 日志。
+    assert.equal(relation?.state_logs?.length, 1);
+    assert.equal(queue.enqueued.length, 0);
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("RelationPoller does not resurrect dismissed relations while the PR stays open", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-rel-poll-"));
+  try {
+    const relationStore = new RelationStore({ dataDir });
+    await relationStore.initialize();
+    await relationStore.upsert(
+      makeRelation("closed", {
+        state_logs: [
+          {
+            at: new Date().toISOString(),
+            event: "dismissed",
+            message: "human resolved needs_human: stop tracking",
+          },
+        ],
+      }),
+    );
+    const queue = makeQueue();
+    const poller = new RelationPoller({
+      relationStore,
+      // PR 在 GitHub 侧仍然 open —— dismissed 的 relation 不得复活。
+      githubClient: githubClient(),
+      triggerQueueStore: queue.store,
+    });
+    await poller.pollOnce();
+    const relation = relationStore.findById("rel-1");
+    assert.equal(relation?.state, "closed");
+    assert.equal(queue.enqueued.length, 0);
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});

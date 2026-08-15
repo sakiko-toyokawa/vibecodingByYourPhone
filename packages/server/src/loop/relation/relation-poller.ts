@@ -75,18 +75,25 @@ export class RelationPoller {
       );
       if (pull.state === "closed" || pull.merged) {
         const terminalState = pull.merged ? "merged" : "closed";
-        await this.lifecycle.transition(
-          relation.relation_id,
-          terminalState,
-          {},
-          {
-            event: terminalState,
-            message: `GitHub PR ${repository}#${prNumber} ${pull.merged ? "merged" : "closed"}`,
-          },
-        );
+        // 终态幂等：已是 merged/closed 的 relation 不再重复迁移、重复记日志
+        // （此前每个 poll 周期都会给已关闭 PR 追加一条 "closed" 日志）。
+        if (relation.state !== terminalState) {
+          await this.lifecycle.transition(
+            relation.relation_id,
+            terminalState,
+            {},
+            {
+              event: terminalState,
+              message: `GitHub PR ${repository}#${prNumber} ${pull.merged ? "merged" : "closed"}`,
+            },
+          );
+        }
         continue;
       }
-      if (relation.state === "closed") {
+      // 人工 resolve=close（dismissed）的 relation 是「停止跟踪」，不是
+      // GitHub 侧关闭——PR 还开着属正常，不做 reopened 复活。
+      const lastLogEvent = relation.state_logs?.at(-1)?.event;
+      if (relation.state === "closed" && lastLogEvent !== "dismissed") {
         await this.lifecycle.transition(
           relation.relation_id,
           "awaiting_feedback",

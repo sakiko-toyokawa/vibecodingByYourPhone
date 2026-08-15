@@ -907,3 +907,109 @@ test("GitHub mark-ready marks the draft PR ready and transitions to awaiting_fee
     "awaiting_feedback",
   );
 });
+
+function makeResolveApp(relation: Record<string, unknown> | null) {
+  return new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {} as GitHubClient,
+      relationStore: {
+        findById: () => relation,
+        updateState: async (id: string, state: string, patch?: object) => ({
+          ...relation,
+          ...patch,
+          state,
+        }),
+      } as never,
+    }),
+  );
+}
+
+test("GitHub resolve rejects a relation that is not needs_human", async () => {
+  const app = makeResolveApp({
+    relation_id: "rel-1",
+    loop_id: "loop-maintainer",
+    subject: { type: "github_pr", repository: "owner/repo", branch: "fix/12" },
+    state: "awaiting_feedback",
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 0,
+  });
+
+  const response = await app.request("/github/relations/rel-1/resolve", {
+    method: "POST",
+    body: JSON.stringify({ action: "retry" }),
+  });
+
+  assert.equal(response.status, 409);
+  assert.equal((await json(response)).error, "invalid_state");
+});
+
+test("GitHub resolve retry resets the repair budget and parks awaiting_feedback", async () => {
+  const app = makeResolveApp({
+    relation_id: "rel-1",
+    loop_id: "loop-maintainer",
+    subject: { type: "github_pr", repository: "owner/repo", branch: "fix/12" },
+    state: "needs_human",
+    last_processed: {},
+    feedback_count: 2,
+    repair_count: 3,
+    needs_human_reason: "repeated relation feedback exceeded auto-repair limit",
+  });
+
+  const response = await app.request("/github/relations/rel-1/resolve", {
+    method: "POST",
+    body: JSON.stringify({ action: "retry" }),
+  });
+
+  assert.equal(response.status, 200);
+  const relation = (await json(response)).relation as {
+    state: string;
+    repair_count: number;
+  };
+  assert.equal(relation.state, "awaiting_feedback");
+  assert.equal(relation.repair_count, 0);
+});
+
+test("GitHub resolve close stops tracking the relation", async () => {
+  const app = makeResolveApp({
+    relation_id: "rel-1",
+    loop_id: "loop-maintainer",
+    subject: { type: "github_pr", repository: "owner/repo", branch: "fix/12" },
+    state: "needs_human",
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 1,
+    needs_human_reason: "run failed",
+  });
+
+  const response = await app.request("/github/relations/rel-1/resolve", {
+    method: "POST",
+    body: JSON.stringify({ action: "close", note: "superseded upstream" }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(
+    ((await json(response)).relation as { state: string }).state,
+    "closed",
+  );
+});
+
+test("GitHub resolve returns 404 for unknown relations and 400 for bad actions", async () => {
+  const app = makeResolveApp(null);
+
+  const missing = await app.request("/github/relations/nope/resolve", {
+    method: "POST",
+    body: JSON.stringify({ action: "retry" }),
+  });
+  assert.equal(missing.status, 404);
+
+  const badAction = await app.request("/github/relations/nope/resolve", {
+    method: "POST",
+    body: JSON.stringify({ action: "merge" }),
+  });
+  assert.equal(badAction.status, 400);
+  assert.equal((await badAction.json()).error, "invalid_resolve");
+});

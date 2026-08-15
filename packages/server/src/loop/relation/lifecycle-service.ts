@@ -39,6 +39,11 @@ export interface RelationFeedbackResult {
   repairLimitReached: boolean;
 }
 
+export type RelationResolveAction = "retry" | "close";
+
+/** resolve 的返回值：null = relation 不存在；"invalid_state" = 当前不在 needs_human。 */
+export type RelationResolveResult = RelationRecord | null | "invalid_state";
+
 export class RelationLifecycleService {
   private readonly deps: RelationLifecycleDeps;
 
@@ -158,6 +163,48 @@ export class RelationLifecycleService {
       timestamp: new Date().toISOString(),
     });
     return { relation, repairLimitReached };
+  }
+
+  /**
+   * Human resolution for a needs_human relation — the only exit from that
+   * state besides a resumed run writing back. "retry" resets the repair
+   * budget and parks the relation in awaiting_feedback; "close" stops
+   * tracking entirely (log event "dismissed" guards against the poller's
+   * reopen-resurrection treating it as a GitHub-side close).
+   */
+  async resolve(
+    relationId: string,
+    action: RelationResolveAction,
+    note?: string,
+  ): Promise<RelationResolveResult> {
+    const current = this.deps.relationStore.findById(relationId);
+    if (!current) {
+      return null;
+    }
+    if (current.state !== "needs_human") {
+      return "invalid_state";
+    }
+    const suffix = note ? ` — ${note}` : "";
+    if (action === "retry") {
+      return this.transition(
+        relationId,
+        "awaiting_feedback",
+        { repair_count: 0, needs_human_reason: undefined },
+        {
+          event: "resolved_retry",
+          message: `human resolved needs_human: retry, repair budget reset${suffix}`,
+        },
+      );
+    }
+    return this.transition(
+      relationId,
+      "closed",
+      { needs_human_reason: undefined },
+      {
+        event: "dismissed",
+        message: `human resolved needs_human: stop tracking${suffix}`,
+      },
+    );
   }
 
   /**

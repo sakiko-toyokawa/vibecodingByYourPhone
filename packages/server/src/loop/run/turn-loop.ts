@@ -1589,6 +1589,26 @@ export async function runTurns(
         status === "budget_limited" ||
         status === "paused"
       ) {
+        // needs_human 是挂起而非终态：run 停在原地等人工决策，下面的终态
+        // 回写不会执行。relation 必须同步转 needs_human，否则它会一直显示
+        // fixing（假活），人工也无从得知该去 run 详情页做决策。
+        // continueRun 恢复时会把 relation 转回 fixing。
+        if (status === "needs_human" && ctx.relation && deps.relationStore) {
+          const current = deps.relationStore.findById(ctx.relation.relation_id);
+          if (current && current.state === "fixing") {
+            await relationLifecycle?.transition(
+              current.relation_id,
+              "needs_human",
+              {
+                needs_human_reason: `run ${runId} awaits a human decision (POST /api/runs/${runId}/decision)`,
+              },
+              {
+                event: "run_needs_human",
+                message: `relation run ${runId} parked at needs_human`,
+              },
+            );
+          }
+        }
         blocked = true;
         state.suspended.set(runId, ctx);
         return;
@@ -1746,6 +1766,27 @@ export async function continueRun(
   ctx.approvedToolCalls = signal.approvedToolCall
     ? [signal.approvedToolCall]
     : [];
+
+  // run 恢复执行：若 relation 因 run 挂起被同步成 needs_human（见下方
+  // 终态回写段的注释），现在转回 fixing。人工在 run 决策里选择继续，
+  // 就等于宣告这条 relation 的修复重新在飞。
+  if (ctx.relation && deps.relationStore) {
+    const current = deps.relationStore.findById(ctx.relation.relation_id);
+    if (current && current.state === "needs_human") {
+      const lifecycle =
+        deps.relationLifecycle ??
+        new RelationLifecycleService({ relationStore: deps.relationStore });
+      await lifecycle.transition(
+        current.relation_id,
+        "fixing",
+        { needs_human_reason: undefined },
+        {
+          event: "run_resumed",
+          message: `relation run ${signal.runId} resumed by human decision`,
+        },
+      );
+    }
+  }
 
   // --- 合并闸门批准 ---
   if (signal.cause === "human_approve") {

@@ -461,6 +461,53 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
     }
   });
 
+  /**
+   * POST /relations/:id/resolve — needs_human relation 的人工出口。
+   * action=retry：重置 repair 预算，回到 awaiting_feedback 等下一条反馈；
+   * action=close：停止跟踪（终态 closed，日志事件 dismissed，
+   * poller 不会把它当作 GitHub 侧关闭后又重开而复活）。
+   *
+   * Errors: 400 invalid_resolve（body 非法）；404 relation_not_found；
+   * 409 invalid_state（relation 不在 needs_human）。
+   */
+  app.post("/relations/:id/resolve", async (c) => {
+    if (!deps.relationStore || !lifecycle) {
+      return c.json({ error: "relation_store_unavailable" }, 503);
+    }
+    let body: Record<string, unknown>;
+    try {
+      body = (await c.req.json()) as Record<string, unknown>;
+    } catch {
+      return c.json({ error: "invalid_resolve", message: "invalid JSON" }, 400);
+    }
+    const action = getString(body, "action");
+    if (action !== "retry" && action !== "close") {
+      return c.json(
+        {
+          error: "invalid_resolve",
+          message: "action must be 'retry' or 'close'",
+        },
+        400,
+      );
+    }
+    const note = optionalString(body, "note");
+    const result = await lifecycle.resolve(c.req.param("id"), action, note);
+    if (result === null) {
+      return c.json({ error: "relation_not_found" }, 404);
+    }
+    if (result === "invalid_state") {
+      const relation = deps.relationStore.findById(c.req.param("id"));
+      return c.json(
+        {
+          error: "invalid_state",
+          message: `relation '${c.req.param("id")}' is '${relation?.state ?? "unknown"}', not 'needs_human'`,
+        },
+        409,
+      );
+    }
+    return c.json({ relation: result });
+  });
+
   app.post("/webhook", async (c) => {
     if (!deps.relationStore || !deps.triggerQueueStore) {
       return c.json({ error: "relation_trigger_unavailable" }, 503);
