@@ -261,7 +261,7 @@ export function LoopsPage({
       event.stopPropagation();
       if (
         !window.confirm(
-          `Delete loop '${loopId}'? This archives it and removes it from the dashboard.`,
+          `Delete loop '${loopId}'? This permanently deletes its local runs, state, and relations.`,
         )
       ) {
         return;

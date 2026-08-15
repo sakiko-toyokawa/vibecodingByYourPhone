@@ -201,6 +201,16 @@ export class LoopCardStore {
     return stored;
   }
 
+  /** Permanently remove a loop from the registry. */
+  async deleteLoop(id: string): Promise<boolean> {
+    if (!this.state.loops[id]) {
+      return false;
+    }
+    delete this.state.loops[id];
+    await this.save();
+    return true;
+  }
+
   /**
    * Save state to disk with debouncing to prevent excessive writes.
    */

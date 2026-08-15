@@ -393,11 +393,37 @@ export function LoopDetailPage({
     [loopIdValue, load, runData],
   );
 
+  const handleDeleteLoop = useCallback(async () => {
+    if (!loopIdValue) return;
+    if (
+      !window.confirm(
+        `Delete loop '${loopIdValue}'? This permanently deletes its local runs, state, and relations.`,
+      )
+    ) {
+      return;
+    }
+    setPatching(true);
+    setActionError(null);
+    try {
+      await loopsApi.deleteLoop(loopIdValue);
+      navigate("..");
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+      setPatching(false);
+    }
+  }, [loopIdValue, navigate]);
+
   const sortedRuns = [...runs].sort(
     (a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   );
   const currentRunState = sortedRuns[0]?.state ?? null;
+  const canDelete =
+    !currentRunState ||
+    currentRunState === "complete" ||
+    currentRunState === "failed" ||
+    currentRunState === "discarded" ||
+    currentRunState === "budget_limited";
 
   const judgment = runData.runDetail?.ledger_summary.judgment_summary ?? null;
   const failureTags = runData.runDetail?.ledger_summary.failure_tags ?? [];
@@ -449,6 +475,16 @@ export function LoopDetailPage({
                   disabled={patching}
                 >
                   {t("loopsResume")}
+                </button>
+              )}
+              {canDelete && (
+                <button
+                  type="button"
+                  className="rounded-md border border-[var(--error-color)]/40 bg-[var(--error-color)]/10 px-4 py-2 text-sm font-medium text-[var(--error-color)] transition-opacity hover:opacity-80 disabled:opacity-50"
+                  onClick={() => void handleDeleteLoop()}
+                  disabled={patching}
+                >
+                  {patching ? "Deleting..." : "Delete completed"}
                 </button>
               )}
               <button

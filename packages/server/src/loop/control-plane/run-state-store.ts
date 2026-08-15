@@ -153,6 +153,12 @@ export class RunStateStore {
     return latest;
   }
 
+  /** Permanently remove a loop's run-state event log. */
+  async deleteLoop(loopId: string): Promise<void> {
+    this.assertSafeName(loopId);
+    await fs.rm(this.filePath(loopId), { force: true }).catch(() => {});
+  }
+
   /** All valid state events, oldest first. */
   async readEvents(loopId: string): Promise<RunStateEvent[]> {
     this.assertSafeName(loopId);

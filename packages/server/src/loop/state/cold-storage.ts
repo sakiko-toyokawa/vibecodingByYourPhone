@@ -127,6 +127,25 @@ export async function removeHotRunStorage(
     .catch(() => {});
 }
 
+/** Remove a run's cold ledger, cold artifacts, and index entry. */
+export async function removeColdRun(
+  store: RunLedgerStore,
+  runId: string,
+): Promise<void> {
+  assertSafe(runId);
+  const coldDir = coldDirOf(store);
+  await fs
+    .rm(path.join(coldDir, `${runId}.jsonl.gz`), { force: true })
+    .catch(() => {});
+  await fs
+    .rm(path.join(coldDir, runId), { recursive: true, force: true })
+    .catch(() => {});
+  const index = (await readIndex(coldDir)).filter(
+    (entry) => entry.run_id !== runId,
+  );
+  await writeIndex(coldDir, index);
+}
+
 export async function readColdLedger(
   store: RunLedgerStore,
   runId: string,

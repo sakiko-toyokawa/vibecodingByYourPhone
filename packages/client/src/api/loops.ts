@@ -181,6 +181,15 @@ export const loopsApi = {
       { method: "PATCH", body: JSON.stringify({ action }) },
     ),
 
+  /** Permanently delete a terminal loop and its local loop data. */
+  deleteLoop: (loopId: string) =>
+    fetchJSON<{
+      deleted_loop_id: string;
+      removed_runs: number;
+      removed_targets: number;
+      removed_queue_events: number;
+    }>(`/loops/${encodeURIComponent(loopId)}`, { method: "DELETE" }),
+
   /** Human answer for a needs_human run. request_changes requires feedback. */
   submitDecision: (
     runId: string,

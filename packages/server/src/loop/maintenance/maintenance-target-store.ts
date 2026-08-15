@@ -133,6 +133,16 @@ export class MaintenanceTargetStore {
     return this.upsert({ ...existing, ...patch, state });
   }
 
+  /** Permanently remove one maintenance target / GitHub relation. */
+  async deleteById(targetId: string): Promise<boolean> {
+    if (!this.state.targets[targetId]) {
+      return false;
+    }
+    delete this.state.targets[targetId];
+    await this.save();
+    return true;
+  }
+
   private async save(): Promise<void> {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     await fs.writeFile(this.filePath, "", { flag: "a" });

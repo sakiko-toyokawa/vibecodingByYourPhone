@@ -64,6 +64,13 @@ const TriggerEventBodySchema = z
   })
   .strict();
 
+const TERMINAL_LOOP_STATES = new Set([
+  "complete",
+  "failed",
+  "discarded",
+  "budget_limited",
+]);
+
 export interface LoopsRoutesDeps {
   loopCardStore: LoopCardStore;
   /** Used for subject-level duplicate coverage when creating GitHub loops. */
@@ -393,6 +400,68 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
       },
       result.ok ? 200 : 500,
     );
+  });
+
+  /**
+   * DELETE /api/loops/:id — permanently delete a terminal loop and its
+   * loop-owned local data (runs, artifacts, state, relations, queue).
+   */
+  app.delete("/:id", async (c) => {
+    const loopId = c.req.param("id");
+    const stored = loopCardStore.getLoop(loopId);
+    if (!stored) {
+      return c.json(
+        { error: "loop_not_found", message: "Loop not found" },
+        404,
+      );
+    }
+
+    const record = controlPlane ? await controlPlane.getRunState(loopId) : null;
+    const executing = record
+      ? record.state === "active" || record.state === "retry"
+      : (runService?.isRunActive(loopId) ?? false);
+    if (executing) {
+      return c.json(
+        {
+          error: "invalid_state",
+          message: `Loop '${loopId}' has an active run; stop it before deleting`,
+        },
+        409,
+      );
+    }
+
+    if (!runService) {
+      return c.json(
+        {
+          error: "run_service_unavailable",
+          message: "Run service not registered",
+        },
+        503,
+      );
+    }
+
+    const latest = (await runService.listRuns(loopId))[0];
+    if (latest && !TERMINAL_LOOP_STATES.has(latest.state)) {
+      return c.json(
+        {
+          error: "invalid_state",
+          message: `Loop '${loopId}' latest run is '${latest.state}'; only terminal loops can be deleted`,
+        },
+        409,
+      );
+    }
+
+    const { removedRuns, removedTargets } =
+      await runService.deleteLoopData(loopId);
+    const removedQueueEvents = triggerQueueStore
+      ? await triggerQueueStore.removeByLoopId(loopId)
+      : 0;
+    return c.json({
+      deleted_loop_id: loopId,
+      removed_runs: removedRuns,
+      removed_targets: removedTargets,
+      removed_queue_events: removedQueueEvents,
+    });
   });
 
   /**

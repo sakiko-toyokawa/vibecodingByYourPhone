@@ -125,6 +125,26 @@ export class TriggerQueueStore {
     await fs.rename(tmpPath, this.filePath);
   }
 
+  /** Remove every queued event for a deleted loop. */
+  async removeByLoopId(loopId: string): Promise<number> {
+    const entries = await this.readAll();
+    const kept = entries.filter((entry) => entry.loop_id !== loopId);
+    if (kept.length === entries.length) {
+      return 0;
+    }
+    const tmpPath = `${this.filePath}.tmp`;
+    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
+    await fs.writeFile(
+      tmpPath,
+      kept.length > 0
+        ? `${kept.map((entry) => JSON.stringify(entry)).join("\n")}\n`
+        : "",
+      "utf-8",
+    );
+    await fs.rename(tmpPath, this.filePath);
+    return entries.length - kept.length;
+  }
+
   private async readAll(): Promise<TriggerQueueEntry[]> {
     let content: string;
     try {

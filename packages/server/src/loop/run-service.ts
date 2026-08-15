@@ -25,6 +25,8 @@
  */
 
 import { randomUUID } from "node:crypto";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import type {
   CollectorReport,
   IntentContract,
@@ -110,6 +112,7 @@ import {
   resolveExecutableCard,
   resolveRuntimeAssemblyContext,
 } from "./run/workspace.js";
+import { removeColdRun } from "./state/cold-storage.js";
 import type { FailurePatternStore } from "./state/failure-pattern-store.js";
 import type { LoopCardStore } from "./state/loop-card-store.js";
 import type { ProposalStore } from "./state/proposal-store.js";
@@ -649,6 +652,51 @@ export class LoopRunService {
    */
   async resumeAfterRestart(loopId: string): Promise<void> {
     return resumeAfterRestart(loopId, this.deps, this.state);
+  }
+
+  /**
+   * Permanently delete a loop and its loop-owned local data: run ledgers,
+   * artifacts, cold archives, run-state logs, and maintenance relations.
+   * Callers must already guarantee the loop has no active run.
+   */
+  async deleteLoopData(loopId: string): Promise<{
+    removedRuns: number;
+    removedTargets: number;
+  }> {
+    const runIds = await this.deps.runLedgerStore.listRunIds();
+    const ownedRunIds: string[] = [];
+    for (const runId of runIds) {
+      const entry = await this.deps.runLedgerStore.readEntry(runId);
+      if (entry?.loop_id === loopId) {
+        ownedRunIds.push(runId);
+      }
+    }
+
+    for (const runId of ownedRunIds) {
+      await removeColdRun(this.deps.runLedgerStore, runId);
+      const loopsDir = path.dirname(
+        path.dirname(this.deps.runLedgerStore.artifactsDirFor(runId)),
+      );
+      await fs
+        .rm(path.join(loopsDir, "runs", `${runId}.jsonl`), { force: true })
+        .catch(() => {});
+      await fs
+        .rm(path.join(loopsDir, "artifacts", runId), {
+          recursive: true,
+          force: true,
+        })
+        .catch(() => {});
+    }
+
+    await this.deps.runStateStore?.deleteLoop(loopId);
+
+    const targets = this.deps.maintenanceTargetStore?.list(loopId) ?? [];
+    for (const target of targets) {
+      await this.deps.maintenanceTargetStore?.deleteById(target.target_id);
+    }
+
+    await this.deps.loopCardStore.deleteLoop(loopId);
+    return { removedRuns: ownedRunIds.length, removedTargets: targets.length };
   }
 
   /**
