@@ -106,20 +106,93 @@ repair 限額邏輯單份；relation 每次遷移都有對應 bus 事件。
 
 ---
 
+## P2 Loop 控制中心（統一控制界面，純前端）
+
+> 背景：P0/P1 落地後（commit `87527a7`）後端閉環與前端數據層已打通
+> （`useLoops`/`useRun` 事件驅動失效、activityBus 已接 7 種生命週期事件），
+> 但信息架構仍是「實體列表的集合」：relations 卡片、run 列表、人審隊列、
+> maintenance 散在四個入口（`Sidebar.tsx:412/420/428/436`），
+> 「需要人處理的事」分置三處（LoopApprovalCards 內存彈窗、`/human-queue`、
+> relation 卡片）。P2 的目標是一句話：**第一眼看到東西卡在哪一站、
+> 哪一站需要我**——從「實體列表」升級為「管道視圖」。
+
+### P2-1 統一收件箱 ActionInbox
+
+- 新組件 `components/loop-center/ActionInbox.tsx`，聚合三類待處理，按緊急度排序：
+  1. SLA 超時項（現 HumanSlaQueuePage 數據源）；
+  2. needs_human runs（`loopsApi.listPendingHuman()`）→ approve / discard / advance；
+  3. `pr_pending_approval` relations（relations API 過濾）→ approve-pr / discard。
+- 每條帶一鍵操作 + 跳轉（→ `/runs/:runId` 或 relation 卡）。
+- 順手收編 `LoopApprovalCards`：初始態改讀 `listPendingHuman()`，WS 事件只做增量——
+  消掉「頁面刷新即丟失」的內存態缺陷。
+- **驗收**：三類待辦同屏可見；操作完成後卡片即時消失（事件驅動，不靠手動刷新）。
+
+### P2-2 管道視圖 PipelineBoard
+
+- 新頁面主體 `pages/LoopCenterPage.tsx`：按 relation 狀態分列
+  `pr_pending_approval → awaiting_review → awaiting_feedback → fixing → done`；
+  無 relation 的普通 loop 歸入末尾「Standalone」列。
+- 卡片內容：PR#、repo、`repair_count`、關聯 run 狀態徽標、最後事件時間；
+  點擊跳 `/runs/:runId`。
+- 數據：relations API + `useLoops` entries 按 `loop_id` 關聯；
+  訂閱 `relation-state-changed` / `feedback-received` 讓卡片實時挪列。
+- **驗收**：從中心頁能看全每個 GitHub 閉環卡在哪一站；webhook 觸發後卡片
+  自動從 awaiting_feedback 挪到 fixing（webhook 通道秒級；poller 補盲通道
+  放寬到其 5 分鐘粒度）。
+
+### P2-3 活躍 run 實時條 ActiveRunsBar
+
+- 內存態列表，靠 `run-started` / `turn-started`（帶 `turn_no`）/ `turn-completed` /
+  `verification-started|completed` 事件維護：顯示 run id、當前 turn、
+  當前階段（executing / verifying）、已運行時長；點擊進 `/runs/:runId`。
+- 這一項同時治「verifier 黑洞」的前端半邊：judge 運行期間階段顯示 verifying。
+
+### P2-4 導航收斂（最後做，依賴 P2-1/2/3 就緒）
+
+- Sidebar 收為單入口「Loop」→ `/loop-center`；頁內 tabs：
+  管道（默認）/ 所有 Loops（現 LoopsPage）/ 人工隊列（現 HumanSlaQueuePage）/
+  Maintenance（現 MaintenanceTargetsPage）。
+- 舊路由保留為重定向：`/loops` → `/loop-center?tab=loops`，
+  `/human-queue` → `?tab=human`，`/maintenance` → `?tab=maintenance`，
+  `/github` → `?tab=pipeline`（github filter 已是查詢參數，語義不變）。
+- `/runs/:runId`、`/loops/:loopId` 詳情路由不動。
+- 同步 `remote-main.tsx`（`AppRoutes.tsx:27` 的既有約定）。
+- 手機端是主場景：管道列在窄屏降為單列堆疊，收件箱永遠在最頂。
+
+### P2 依賴與邊界
+
+- 純前端，無後端改動；唯一可選後端小改：relations 列表 API 若不支持
+  按狀態/server-side 過濾，加 query param（現量級前端過濾也夠，不阻塞）。
+- P2-1/2/3 同屬一個新頁面，建議同一執行者一次做完；P2-4 最後。
+- **總驗收**（真實流量，可複用 aiHub/測試 repo）：開著 `/loop-center` 不刷新，
+  打一條 PR 評論 webhook → 卡片挪列 + ActiveRunsBar 出現新 run +
+  階段實時切換（executing→verifying）→ 完成後收件箱與管道同時更新。
+
 ## 執行順序與風險
 
-1. P0-1 先行（前後端都依賴事件契約）；
-2. P0-2、P0-3 可並行；
-3. P1 三項任意序，P1-3 依賴 P0-1。
+1. P0-1 先行（前後端都依賴事件契約）——已完成（commit `87527a7`）；
+2. P0-2、P0-3 可並行——已完成（同上）；
+3. P1 三項任意序，P1-3 依賴 P0-1——P1-1/P1-2 已完成（同上），
+   P1-3（turn 結構化渲染）只出了基礎版，剩 tool_use/tool_result 分支
+   與 turn 邊界自動跟隨，可併入 P2 一起做；
+4. P2-1/2/3 → P2-4 —— 已完成。
 
 風險點：P0-2 收編涉及 4 處寫點切換——寫點少且已知，建議直接切不搞雙寫過渡；
 切完跑一次 aiHub E2E（issue→PR→comment→repair 全鏈路）驗證 relation 狀態一致。
+（已驗證：`benchmarks/loop-runtime-eval/results/pr-maintenance-2026-08-15T01-52-10-725Z.json` = pass。）
+P2 的風險在範圍蠕變：控制中心是展示層聚合，**不要**趁機在頁面裡長新的
+狀態邏輯——所有狀態仍以後端單寫者為準，前端只做事件驅動的讀模型。
 
 ---
 
 ## 驗收結果（2026-08-15）
 
 - P0-1 / P0-2 / P0-3 與 P1-1 / P1-2 / P1-3 均已實作。
+- P2-1 / P2-2 / P2-3 / P2-4 均已實作：
+  - `ActionInbox` 聚合 SLA、needs_human、PR approval；
+  - `PipelineBoard` 按 relation 狀態分列並自動挪列；
+  - `ActiveRunsBar` 由 run/turn/verification 事件實時維護；
+  - Sidebar 收為單一 Loop 入口，舊路由重定向到 `/loop-center`。
 - `pnpm lint`、`pnpm typecheck`、server tests、client tests、
   `pnpm test:loop-modules`（31 cases）全綠。
 - 真實 aiHub E2E 通過：
