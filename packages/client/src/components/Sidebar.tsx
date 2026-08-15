@@ -409,33 +409,10 @@ export function Sidebar({
               collapsed={isCollapsed}
             />
             <SidebarNavItem
-              to="/loops"
+              to="/loop-center"
               icon={SidebarIcons.loops}
-              label={t("sidebarLoops")}
-              onClick={onNavigate}
-              basePath={basePath}
-              collapsed={isCollapsed}
-            />
-            <SidebarNavItem
-              to="/human-queue"
-              icon={SidebarIcons.inbox}
-              label="Human Queue"
-              onClick={onNavigate}
-              basePath={basePath}
-              collapsed={isCollapsed}
-            />
-            <SidebarNavItem
-              to="/maintenance"
-              icon={SidebarIcons.maintenance}
-              label="Maintenance"
-              onClick={onNavigate}
-              basePath={basePath}
-              collapsed={isCollapsed}
-            />
-            <SidebarNavItem
-              to="/github"
-              icon={SidebarIcons.loops}
-              label="GitHub"
+              label="Loop"
+              badge={inboxCount}
               onClick={onNavigate}
               basePath={basePath}
               collapsed={isCollapsed}

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Outlet, useOutletContext, useParams } from "react-router-dom";
-import { LoopApprovalCards } from "../components/LoopApprovalCards";
 import { Sidebar } from "../components/Sidebar";
 import { useSidebarPreference } from "../hooks/useSidebarPreference";
 import {
@@ -120,9 +119,6 @@ export function NavigationLayout() {
       <div className="min-w-0 flex-1">
         <Outlet context={context} />
       </div>
-
-      {/* Global needs_human approval cards (loop runs awaiting a decision) */}
-      <LoopApprovalCards />
     </div>
   );
 }

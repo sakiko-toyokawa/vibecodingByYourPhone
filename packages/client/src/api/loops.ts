@@ -31,6 +31,12 @@ export interface LoopRunSummary {
   created_at: string;
 }
 
+/** Loop registry entry with the latest run projection bundled server-side. */
+export interface LoopWithRun {
+  loop: StoredLoop;
+  last_run: LoopRunSummary | null;
+}
+
 /** 运行账本 / 决策账本的摘要投影 (GET /api/runs/:id). */
 export interface LedgerSummary {
   turns_used: number;
@@ -115,6 +121,9 @@ const LOOP_LIST_LIMIT = 500;
 export const loopsApi = {
   listLoops: (limit = LOOP_LIST_LIMIT) =>
     fetchJSON<{ loops: StoredLoop[] }>(`/loops?limit=${limit}`),
+
+  listLoopsWithRuns: (limit = LOOP_LIST_LIMIT) =>
+    fetchJSON<{ loops: LoopWithRun[] }>(`/loops?limit=${limit}&with_runs=1`),
 
   createLoop: (card: LoopCard) =>
     fetchJSON<{ loop: StoredLoop }>("/loops", {

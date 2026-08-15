@@ -37,18 +37,13 @@ export function useLoops(): {
 
   const reload = useCallback(async () => {
     try {
-      const { loops } = await loopsApi.listLoops();
-      const visible = loops.filter((loop) => !loop.archived);
-      const withRuns = await Promise.all(
-        visible.map(async (loop): Promise<LoopListEntry> => {
-          try {
-            const { runs } = await loopsApi.listRuns(loop.id);
-            return { loop, lastRun: runs[0] };
-          } catch {
-            return { loop };
-          }
-        }),
-      );
+      const { loops } = await loopsApi.listLoopsWithRuns();
+      const withRuns = loops
+        .filter(({ loop }) => !loop.archived)
+        .map(({ loop, last_run }) => ({
+          loop,
+          lastRun: last_run ?? undefined,
+        }));
       setEntries(
         [...withRuns].sort((a, b) =>
           (b.lastRun?.created_at ?? "").localeCompare(

@@ -199,6 +199,24 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
     const offset = Number(c.req.query("offset")) || 0;
     const statusQuery = c.req.query("status");
     const loops = loopCardStore.listLoops();
+    const withRuns = c.req.query("with_runs") === "1";
+    if (withRuns) {
+      const slice = loops.slice(offset, offset + limit);
+      const entries = await Promise.all(
+        slice.map(async (loop) => {
+          let lastRun: RunSummary | null = null;
+          try {
+            lastRun = runService
+              ? ((await runService.listRuns(loop.id))[0] ?? null)
+              : null;
+          } catch {
+            // One broken loop must not block the whole dashboard.
+          }
+          return { loop, last_run: lastRun };
+        }),
+      );
+      return c.json({ loops: entries });
+    }
     if (!statusQuery) {
       return c.json({ loops: loops.slice(offset, offset + limit) });
     }
