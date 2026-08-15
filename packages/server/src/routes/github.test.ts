@@ -1013,3 +1013,107 @@ test("GitHub resolve returns 404 for unknown relations and 400 for bad actions",
   assert.equal(badAction.status, 400);
   assert.equal((await badAction.json()).error, "invalid_resolve");
 });
+
+test("GitHub approve-issue publishes the pending proposal and parks awaiting_feedback", async () => {
+  let createInput: { repository: string; title: string; body: string } | null =
+    null;
+  const relation = {
+    relation_id: "rel-issue-1",
+    loop_id: "loop-codex-repro",
+    subject: { type: "github_issue", repository: "openai/codex" },
+    state: "pr_pending_approval",
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 0,
+    pending_issue: {
+      repository: "openai/codex",
+      title: "TUI output truncated to one line",
+      body: "## Environment\n...",
+    },
+  };
+  const app = new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {
+        createIssue: async (input: {
+          repository: string;
+          title: string;
+          body: string;
+        }) => {
+          createInput = input;
+          return "https://github.com/openai/codex/issues/77";
+        },
+      } as unknown as GitHubClient,
+      relationStore: {
+        findById: () => relation,
+        updateState: async (id: string, state: string, patch?: object) => ({
+          ...relation,
+          ...patch,
+          state,
+        }),
+      } as never,
+    }),
+  );
+
+  const response = await app.request(
+    "/github/relations/rel-issue-1/approve-issue",
+    {
+      method: "POST",
+    },
+  );
+
+  assert.equal(response.status, 200);
+  const body = await json(response);
+  assert.equal(body.issueUrl, "https://github.com/openai/codex/issues/77");
+  const updated = body.relation as {
+    state: string;
+    subject: { issue_number?: number };
+  };
+  assert.equal(updated.state, "awaiting_feedback");
+  assert.equal(updated.subject.issue_number, 77);
+  assert.equal(
+    (createInput as { title: string } | null)?.title,
+    "TUI output truncated to one line",
+  );
+});
+
+test("GitHub approve-issue rejects relations without a pending proposal", async () => {
+  const relation = {
+    relation_id: "rel-1",
+    loop_id: "loop-maintainer",
+    subject: {
+      type: "github_pr",
+      repository: "owner/repo",
+      pr_number: 12,
+      branch: "fix/12",
+    },
+    state: "pr_pending_approval",
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 0,
+  };
+  const app = new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {
+        createIssue: async () => {
+          throw new Error("should not create");
+        },
+      } as unknown as GitHubClient,
+      relationStore: {
+        findById: () => relation,
+      } as never,
+    }),
+  );
+
+  const response = await app.request("/github/relations/rel-1/approve-issue", {
+    method: "POST",
+  });
+
+  assert.equal(response.status, 409);
+  assert.equal((await json(response)).error, "invalid_issue_payload");
+});

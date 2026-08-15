@@ -21,12 +21,14 @@ export function GitHubRelationCard({
 }: GitHubRelationCardProps) {
   const basePath = useRemoteBasePath();
   const [busy, setBusy] = useState<
-    "approve" | "ready" | "retry" | "close" | null
+    "approve" | "ready" | "retry" | "close" | "publish-issue" | null
   >(null);
   const [error, setError] = useState<string | null>(null);
 
   const runAction = useCallback(
-    async (action: "approve" | "ready" | "retry" | "close") => {
+    async (
+      action: "approve" | "ready" | "retry" | "close" | "publish-issue",
+    ) => {
       setError(null);
       setBusy(action);
       try {
@@ -34,6 +36,8 @@ export function GitHubRelationCard({
           await githubApi.approvePr(relation.relation_id);
         } else if (action === "ready") {
           await githubApi.markReady(relation.relation_id);
+        } else if (action === "publish-issue") {
+          await githubApi.approveIssue(relation.relation_id);
         } else {
           await githubApi.resolveRelation(relation.relation_id, action);
         }
@@ -47,16 +51,26 @@ export function GitHubRelationCard({
     [onChanged, relation.relation_id],
   );
 
-  const prUrl = relation.subject.pr_number
-    ? `https://github.com/${relation.subject.repository}/pull/${relation.subject.pr_number}`
-    : null;
+  const subject = relation.subject;
+  const prUrl =
+    subject.type === "github_pr" && subject.pr_number
+      ? `https://github.com/${subject.repository}/pull/${subject.pr_number}`
+      : null;
+  const issueUrl =
+    subject.type === "github_issue" && subject.issue_number
+      ? `https://github.com/${subject.repository}/issues/${subject.issue_number}`
+      : null;
+  const subjectLabel =
+    subject.type === "github_pr"
+      ? `${subject.repository}#${subject.pr_number ?? "pending"}`
+      : `${subject.repository}${subject.issue_number ? `#${subject.issue_number}` : " · issue proposal"}`;
+  const externalUrl = prUrl ?? issueUrl;
 
   return (
     <div className="rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono [font-size:var(--font-size-sm)] text-[var(--text-primary)]">
-          {relation.subject.repository}#
-          {relation.subject.pr_number ?? "pending"}
+          {subjectLabel}
         </span>
         <span className="rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
           {humanizeRelationState(relation.state)}
@@ -64,14 +78,14 @@ export function GitHubRelationCard({
         <span className="text-xs text-[var(--text-muted)]">
           feedback {relation.feedback_count} · repair {relation.repair_count}
         </span>
-        {prUrl && (
+        {externalUrl && (
           <a
-            href={prUrl}
+            href={externalUrl}
             target="_blank"
             rel="noreferrer"
             className="rounded-md border border-[var(--border-color)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)]"
           >
-            Open PR
+            {prUrl ? "Open PR" : "Open issue"}
           </a>
         )}
       </div>
@@ -101,6 +115,20 @@ export function GitHubRelationCard({
         </div>
       )}
 
+      {relation.pending_issue && (
+        <div className="mt-2 rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] p-3">
+          <div className="break-words text-sm font-semibold text-[var(--text-primary)]">
+            {relation.pending_issue.title}
+          </div>
+          <div className="mt-1 break-all font-mono text-xs text-[var(--text-muted)]">
+            {relation.pending_issue.repository} · issue proposal
+          </div>
+          <pre className="m-0 mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
+            {relation.pending_issue.body}
+          </pre>
+        </div>
+      )}
+
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <span className="font-mono text-xs text-[var(--text-dimmed)]">
           {relation.relation_id}
@@ -117,18 +145,32 @@ export function GitHubRelationCard({
           )}
         </span>
         <span className="ml-auto flex flex-wrap items-center gap-2">
-          {relation.state === "pr_pending_approval" && (
-            <button
-              type="button"
-              className="rounded-md border border-[var(--primary)] bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-[var(--on-primary)] transition-opacity hover:opacity-90 disabled:opacity-50"
-              disabled={busy !== null}
-              onClick={() => void runAction("approve")}
-            >
-              {busy === "approve"
-                ? "Publishing..."
-                : "Approve & Publish Draft PR"}
-            </button>
-          )}
+          {relation.state === "pr_pending_approval" &&
+            relation.pending_issue && (
+              <button
+                type="button"
+                className="rounded-md border border-[var(--primary)] bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-[var(--on-primary)] transition-opacity hover:opacity-90 disabled:opacity-50"
+                disabled={busy !== null}
+                onClick={() => void runAction("publish-issue")}
+              >
+                {busy === "publish-issue"
+                  ? "Publishing..."
+                  : "Approve & Publish Issue"}
+              </button>
+            )}
+          {relation.state === "pr_pending_approval" &&
+            relation.pending_publish && (
+              <button
+                type="button"
+                className="rounded-md border border-[var(--primary)] bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-[var(--on-primary)] transition-opacity hover:opacity-90 disabled:opacity-50"
+                disabled={busy !== null}
+                onClick={() => void runAction("approve")}
+              >
+                {busy === "approve"
+                  ? "Publishing..."
+                  : "Approve & Publish Draft PR"}
+              </button>
+            )}
           {relation.state === "awaiting_review" && (
             <button
               type="button"

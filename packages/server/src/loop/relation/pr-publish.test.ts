@@ -101,3 +101,32 @@ test("extractPrPublishPayload returns null for missing or invalid blocks", () =>
     null,
   );
 });
+
+test("extractIssueProposalPayload parses a valid proposal block", async () => {
+  const {
+    extractIssueProposalPayload,
+    ISSUE_PROPOSAL_BEGIN,
+    ISSUE_PROPOSAL_END,
+  } = await import("./pr-publish.js");
+  const text = `报告正文。\n${ISSUE_PROPOSAL_BEGIN}\n{ "repository": "openai/codex", "title": "TUI output truncated", "body": "## Repro\\nsteps" }\n${ISSUE_PROPOSAL_END}`;
+  assert.deepEqual(extractIssueProposalPayload(text), {
+    repository: "openai/codex",
+    title: "TUI output truncated",
+    body: "## Repro\nsteps",
+  });
+});
+
+test("extractIssueProposalPayload rejects missing fields and absent blocks", async () => {
+  const {
+    extractIssueProposalPayload,
+    ISSUE_PROPOSAL_BEGIN,
+    ISSUE_PROPOSAL_END,
+  } = await import("./pr-publish.js");
+  assert.equal(extractIssueProposalPayload("no block here"), null);
+  assert.equal(
+    extractIssueProposalPayload(
+      `${ISSUE_PROPOSAL_BEGIN}{ "repository": "o/r", "title": "" }${ISSUE_PROPOSAL_END}`,
+    ),
+    null,
+  );
+});

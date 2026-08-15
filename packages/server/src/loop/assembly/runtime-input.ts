@@ -56,7 +56,12 @@ import {
   RESTRICTION_RELEASE_BEGIN,
   RESTRICTION_RELEASE_END,
 } from "../policy/restriction-release.js";
-import { PR_PUBLISH_BEGIN, PR_PUBLISH_END } from "../relation/pr-publish.js";
+import {
+  ISSUE_PROPOSAL_BEGIN,
+  ISSUE_PROPOSAL_END,
+  PR_PUBLISH_BEGIN,
+  PR_PUBLISH_END,
+} from "../relation/pr-publish.js";
 import type { RelationRecord } from "../relation/relation-store.js";
 import { describeAdapter } from "./adapter-info.js";
 import { resolveAdapterPolicy } from "./adapter-policy.js";
@@ -262,8 +267,42 @@ function isGitHubManagedLoop(card: LoopCard): boolean {
   return isGitHubPromptLoop(card);
 }
 
-function githubPromptLines(github: RuntimeAssemblyContext["github"]): string[] {
+function githubLoopStateLines(): string[] {
+  return [
+    "- 每輪結束時輸出 LOOP-STATE JSON 塊，承載供下一輪使用的領域狀態：",
+    LOOP_STATE_BEGIN,
+    '{ "run_id": "<run id>", "updated_at": "<ISO timestamp>", "turn": <turn>, "selected_subject": { "repository": "<owner/repo>", "issue_url": "<issue url>", "issue_number": <issue number>, "clone_path": "<absolute clone repo root>", "branch": "<branch>", "base_sha": "<base sha>" }, "subtask_status": [{ "id": "<subtask id>", "status": "done", "outputs": "<one-line summary>" }] }',
+    LOOP_STATE_END,
+    "- 選定 issue 後 selected_subject 必填；clone_path 必須是實際 clone 出來的 repo 根絕對路徑。",
+  ];
+}
+
+function githubPromptLines(
+  github: RuntimeAssemblyContext["github"],
+  publishMode: "pr" | "issue" = "pr",
+): string[] {
   const ghPath = github?.ghPath ?? "gh";
+  if (publishMode === "issue") {
+    return [
+      "GitHub issue 调研循环（publish_mode=issue）",
+      "",
+      "使用 GitHub CLI 进行发现与仓库阅读。",
+      `- GitHub CLI 路径：${ghPath}`,
+      "- 任务目标是调研 / 复现一个 bug 并产出高质量 issue 提案，不是提交代码修复。",
+      "- 把目标仓库克隆到当前工作区的子目录；需要复现时在本地构建 / 运行，但不要 fork、push、创建 PR、评论或直接创建 issue。",
+      "- 先读仓库的贡献指南（CONTRIBUTING、docs/contributing 等），issue 内容遵循其规范——邀请制仓库（如 openai/codex）要的是带分析的 issue，不是外部 PR。",
+      "- 复现尽力而为：间歇性 bug 复现不出时，产出复现脚本 + 源码根因分析 + 疑似位置同样有价值。",
+      "- issue 正文必须包含：环境（版本 / OS）、复现步骤、期望行为、实际行为、根因假设（附源码 文件:行号 证据）、已排除的可能性。",
+      "- 结束前检查目标仓库是否已有相同问题的 open issue；有则不要提案，改在报告中说明并等待人工决定。",
+      "- 结束时报告：做了什么、复现结果、分析结论、残留不确定性。",
+      "- 必须在报告末尾输出 issue 提案交接块，供人工批准后由 server 发布：",
+      ISSUE_PROPOSAL_BEGIN,
+      '{ "repository": "<owner/repo>", "title": "<issue title>", "body": "<issue body markdown>" }',
+      ISSUE_PROPOSAL_END,
+      "- 不要输出第二个提案块；不要输出 PR-PUBLISH。",
+      ...githubLoopStateLines(),
+    ];
+  }
   return [
     "GitHub issue 修复循环",
     "",
@@ -287,11 +326,7 @@ function githubPromptLines(github: RuntimeAssemblyContext["github"]): string[] {
     "- cwd 必须是实际 clone 出来、包含本地提交的仓库绝对路径；不要使用 managed workspace 根目录。",
     "- 输出 PR-PUBLISH 前，再次检查 open PR、remote branches 与 issue comments；若已出现同范围重复 PR，不要输出 PR-PUBLISH，改在报告中标明并等待人工决定。",
     "- 不要输出第二个 PR 发布块；没有可发布的本地提交时不要输出该块。",
-    "- 每輪結束時輸出 LOOP-STATE JSON 塊，承載供下一輪使用的領域狀態：",
-    LOOP_STATE_BEGIN,
-    '{ "run_id": "<run id>", "updated_at": "<ISO timestamp>", "turn": <turn>, "selected_subject": { "repository": "<owner/repo>", "issue_url": "<issue url>", "issue_number": <issue number>, "clone_path": "<absolute clone repo root>", "branch": "<branch>", "base_sha": "<base sha>" }, "subtask_status": [{ "id": "<subtask id>", "status": "done", "outputs": "<one-line summary>" }] }',
-    LOOP_STATE_END,
-    "- 選定 issue 後 selected_subject 必填；clone_path 必須是實際 clone 出來的 repo 根絕對路徑。",
+    ...githubLoopStateLines(),
   ];
 }
 
@@ -302,9 +337,18 @@ function relationPromptLines(relation: RelationRecord): string[] {
     `- state: ${relation.state}`,
     "- 只處理這個 relation 的目標與回饋，不要重新搜尋新 issue。",
     "- 這個 relation 對應的 open PR 是本次維護目標，不是重複 PR；不要把它當成 duplicate。",
-    "- 維護模式不輸出 PR-PUBLISH；不要建立、更新或替換 PR。",
+    "- 維護模式不輸出 PR-PUBLISH 或 ISSUE-PROPOSAL；不要建立、更新或替換 PR / issue。",
     "- 先判斷 comments / reviews / CI 是否需要修復；不需要時回報 idle 並結束。",
   ];
+  if (relation.subject.type === "github_issue") {
+    lines.push(
+      `- repository: ${relation.subject.repository}`,
+      ...(relation.subject.issue_number
+        ? [`- issue_number: ${relation.subject.issue_number}`]
+        : []),
+      "- 這個 relation 對應的是已發布的 issue；跟踪維護者的回應，需要回覆或補充信息時在報告中給出建議文本，等待人工發送。",
+    );
+  }
   if (relation.subject.type === "github_pr") {
     lines.push(
       `- repository: ${relation.subject.repository}`,
@@ -470,7 +514,10 @@ export function assembleRuntimeInput(
 
   const prompt = [
     ...(isGitHubPromptLoop(card)
-      ? [...githubPromptLines(context.github), ""]
+      ? [
+          ...githubPromptLines(context.github, card.loop.handoff?.publish_mode),
+          "",
+        ]
       : []),
     ...(context.relation ? [...relationPromptLines(context.relation), ""] : []),
     ...(context.maintenanceTarget

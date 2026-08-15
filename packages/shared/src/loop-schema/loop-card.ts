@@ -98,6 +98,11 @@ export const LoopCardSchema = z.object({
         // description. Without it the contract can only generate a generic
         // goal, which is unusable for write-capable (policy) loops.
         task: z.string().optional(),
+        // github_prompt 循环的对外发布形态：默认 "pr"（本地修复 + PR-PUBLISH
+        // 交接）；"issue" 用于调研/复现类任务，产出 ISSUE-PROPOSAL 提案块，
+        // 人工批准后由 server 用 gh issue create 发布（适配 openai/codex 这类
+        // PR 邀请制仓库——它们要的是带分析的 issue，不是外部 PR）。
+        publish_mode: z.enum(["pr", "issue"]).optional(),
       })
       .optional(),
     workspace: z.object({

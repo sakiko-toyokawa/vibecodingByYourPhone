@@ -34,13 +34,15 @@ export function MaintenanceTargetCard({
   // 有 relation_state 时用 relation 词表，保留 Merged/Closed 的区分。
   const relationState =
     typeof adapter.relation_state === "string" ? adapter.relation_state : null;
+  const hasPendingIssue =
+    adapter.pending_issue !== null && typeof adapter.pending_issue === "object";
   const stateLabel =
     target.target_type === "github_pr" && relationState
       ? humanizeRelationState(relationState)
       : humanizeMaintenanceState(target.state);
 
   const runPrAction = async (
-    action: "approve" | "ready" | "retry" | "close",
+    action: "approve" | "ready" | "retry" | "close" | "publish-issue",
   ) => {
     if (!relationId) return;
     setBusy(action);
@@ -50,6 +52,8 @@ export function MaintenanceTargetCard({
         await githubApi.approvePr(relationId);
       } else if (action === "ready") {
         await githubApi.markReady(relationId);
+      } else if (action === "publish-issue") {
+        await githubApi.approveIssue(relationId);
       } else {
         await githubApi.resolveRelation(relationId, action);
       }
@@ -124,54 +128,70 @@ export function MaintenanceTargetCard({
               context: {JSON.stringify(target.context_payload, null, 2)}
             </pre>
           )}
-          {target.target_type === "github_pr" && relationId && (
-            <div className="flex flex-wrap gap-2">
-              {target.state === "pending_approval" && (
-                <button
-                  type="button"
-                  className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-[var(--on-primary)] disabled:opacity-50"
-                  disabled={busy !== null}
-                  onClick={() => void runPrAction("approve")}
-                >
-                  {busy === "approve"
-                    ? "Publishing..."
-                    : "Approve & Publish Draft PR"}
-                </button>
-              )}
-              {target.state === "awaiting_review" && (
-                <button
-                  type="button"
-                  className="rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] disabled:opacity-50"
-                  disabled={busy !== null}
-                  onClick={() => void runPrAction("ready")}
-                >
-                  {busy === "ready"
-                    ? "Marking ready..."
-                    : "Mark Ready for Review"}
-                </button>
-              )}
-              {target.state === "needs_human" && (
-                <>
+          {(target.target_type === "github_pr" ||
+            target.target_type === "github_issue") &&
+            relationId && (
+              <div className="flex flex-wrap gap-2">
+                {target.state === "pending_approval" && hasPendingIssue && (
                   <button
                     type="button"
                     className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-[var(--on-primary)] disabled:opacity-50"
                     disabled={busy !== null}
-                    onClick={() => void runPrAction("retry")}
+                    onClick={() => void runPrAction("publish-issue")}
                   >
-                    {busy === "retry" ? "Resuming..." : "Retry (reset repairs)"}
+                    {busy === "publish-issue"
+                      ? "Publishing..."
+                      : "Approve & Publish Issue"}
                   </button>
+                )}
+                {target.state === "pending_approval" && !hasPendingIssue && (
+                  <button
+                    type="button"
+                    className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-[var(--on-primary)] disabled:opacity-50"
+                    disabled={busy !== null}
+                    onClick={() => void runPrAction("approve")}
+                  >
+                    {busy === "approve"
+                      ? "Publishing..."
+                      : "Approve & Publish Draft PR"}
+                  </button>
+                )}
+                {target.state === "awaiting_review" && (
                   <button
                     type="button"
                     className="rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] disabled:opacity-50"
                     disabled={busy !== null}
-                    onClick={() => void runPrAction("close")}
+                    onClick={() => void runPrAction("ready")}
                   >
-                    {busy === "close" ? "Closing..." : "Stop tracking"}
+                    {busy === "ready"
+                      ? "Marking ready..."
+                      : "Mark Ready for Review"}
                   </button>
-                </>
-              )}
-            </div>
-          )}
+                )}
+                {target.state === "needs_human" && (
+                  <>
+                    <button
+                      type="button"
+                      className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-[var(--on-primary)] disabled:opacity-50"
+                      disabled={busy !== null}
+                      onClick={() => void runPrAction("retry")}
+                    >
+                      {busy === "retry"
+                        ? "Resuming..."
+                        : "Retry (reset repairs)"}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] disabled:opacity-50"
+                      disabled={busy !== null}
+                      onClick={() => void runPrAction("close")}
+                    >
+                      {busy === "close" ? "Closing..." : "Stop tracking"}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           {error && (
             <p className="text-xs text-[var(--error-color)]">{error}</p>
           )}

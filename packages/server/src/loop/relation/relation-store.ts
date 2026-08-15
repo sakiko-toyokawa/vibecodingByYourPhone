@@ -19,7 +19,7 @@ export const RELATION_STATES = [
 
 export type RelationState = (typeof RELATION_STATES)[number];
 
-export interface GithubRelationSubject {
+export interface GithubPrSubject {
   type: "github_pr";
   repository: string;
   issue_number?: number;
@@ -28,6 +28,15 @@ export interface GithubRelationSubject {
   fork_owner?: string;
   base_sha?: string;
 }
+
+/** 调研/复现类任务的对象：一个待发布或已发布的 issue，没有本地分支。 */
+export interface GithubIssueSubject {
+  type: "github_issue";
+  repository: string;
+  issue_number?: number;
+}
+
+export type GithubRelationSubject = GithubPrSubject | GithubIssueSubject;
 
 export interface RelationRecord {
   relation_id: string;
@@ -55,6 +64,14 @@ export interface RelationRecord {
     author_name?: string;
     author_email?: string;
     identity_source?: string;
+    run_id?: string;
+    created_at?: string;
+  };
+  /** 待人工批准的 issue 提案（ISSUE-PROPOSAL 块解析而来）。 */
+  pending_issue?: {
+    repository: string;
+    title: string;
+    body: string;
     run_id?: string;
     created_at?: string;
   };
@@ -138,13 +155,18 @@ function targetStateToRelationState(
 }
 
 function relationToTarget(relation: RelationRecord): MaintenanceTarget {
-  const subjectId = relation.subject.pr_number
-    ? `${relation.subject.repository}#${relation.subject.pr_number}`
-    : `${relation.subject.repository}:${relation.subject.branch}`;
+  const subjectId =
+    relation.subject.type === "github_pr"
+      ? relation.subject.pr_number
+        ? `${relation.subject.repository}#${relation.subject.pr_number}`
+        : `${relation.subject.repository}:${relation.subject.branch}`
+      : relation.subject.issue_number
+        ? `${relation.subject.repository}#${relation.subject.issue_number}`
+        : `${relation.subject.repository}:pending-issue`;
   return {
     target_id: relation.relation_id,
     loop_id: relation.loop_id,
-    target_type: "github_pr",
+    target_type: relation.subject.type,
     external_ref: {
       source: "github",
       subject_id: subjectId,
@@ -164,14 +186,27 @@ function relationToTarget(relation: RelationRecord): MaintenanceTarget {
       relation_id: relation.relation_id,
       relation_state: relation.state,
       repository: relation.subject.repository,
-      pr_number: relation.subject.pr_number,
+      pr_number:
+        relation.subject.type === "github_pr"
+          ? relation.subject.pr_number
+          : undefined,
       issue_number: relation.subject.issue_number,
-      branch: relation.subject.branch,
-      fork_owner: relation.subject.fork_owner,
-      base_sha: relation.subject.base_sha,
+      branch:
+        relation.subject.type === "github_pr"
+          ? relation.subject.branch
+          : undefined,
+      fork_owner:
+        relation.subject.type === "github_pr"
+          ? relation.subject.fork_owner
+          : undefined,
+      base_sha:
+        relation.subject.type === "github_pr"
+          ? relation.subject.base_sha
+          : undefined,
       last_processed: relation.last_processed,
       state_logs: relation.state_logs,
       pending_publish: relation.pending_publish,
+      pending_issue: relation.pending_issue,
       needs_human_reason: relation.needs_human_reason,
     },
     created_at: relation.created_at,
@@ -180,14 +215,16 @@ function relationToTarget(relation: RelationRecord): MaintenanceTarget {
 }
 
 function targetToRelation(target: MaintenanceTarget): RelationRecord | null {
-  if (target.target_type !== "github_pr") {
+  if (
+    target.target_type !== "github_pr" &&
+    target.target_type !== "github_issue"
+  ) {
     return null;
   }
   const adapter = target.adapter_data ?? {};
   const repository =
     typeof adapter.repository === "string" ? adapter.repository : "";
-  const branch = typeof adapter.branch === "string" ? adapter.branch : "";
-  if (!repository || !branch) {
+  if (!repository) {
     return null;
   }
   const state = targetStateToRelationState(
@@ -201,26 +238,46 @@ function targetToRelation(target: MaintenanceTarget): RelationRecord | null {
   const stateLogs = Array.isArray(adapter.state_logs)
     ? (adapter.state_logs as RelationStateLogEntry[])
     : undefined;
+  const subject: GithubRelationSubject | null =
+    target.target_type === "github_issue"
+      ? {
+          type: "github_issue",
+          repository,
+          ...(typeof adapter.issue_number === "number"
+            ? { issue_number: adapter.issue_number }
+            : {}),
+        }
+      : (() => {
+          const branch =
+            typeof adapter.branch === "string" ? adapter.branch : "";
+          if (!branch) {
+            return null;
+          }
+          return {
+            type: "github_pr" as const,
+            repository,
+            branch,
+            ...(typeof adapter.pr_number === "number"
+              ? { pr_number: adapter.pr_number }
+              : {}),
+            ...(typeof adapter.issue_number === "number"
+              ? { issue_number: adapter.issue_number }
+              : {}),
+            ...(typeof adapter.fork_owner === "string"
+              ? { fork_owner: adapter.fork_owner }
+              : {}),
+            ...(typeof adapter.base_sha === "string"
+              ? { base_sha: adapter.base_sha }
+              : {}),
+          };
+        })();
+  if (!subject) {
+    return null;
+  }
   return {
     relation_id: target.target_id,
     loop_id: target.loop_id,
-    subject: {
-      type: "github_pr",
-      repository,
-      branch,
-      ...(typeof adapter.pr_number === "number"
-        ? { pr_number: adapter.pr_number }
-        : {}),
-      ...(typeof adapter.issue_number === "number"
-        ? { issue_number: adapter.issue_number }
-        : {}),
-      ...(typeof adapter.fork_owner === "string"
-        ? { fork_owner: adapter.fork_owner }
-        : {}),
-      ...(typeof adapter.base_sha === "string"
-        ? { base_sha: adapter.base_sha }
-        : {}),
-    },
+    subject,
     state,
     last_processed: lastProcessed,
     ...(stateLogs ? { state_logs: stateLogs } : {}),
@@ -229,6 +286,10 @@ function targetToRelation(target: MaintenanceTarget): RelationRecord | null {
     pending_publish:
       adapter.pending_publish && typeof adapter.pending_publish === "object"
         ? (adapter.pending_publish as RelationRecord["pending_publish"])
+        : undefined,
+    pending_issue:
+      adapter.pending_issue && typeof adapter.pending_issue === "object"
+        ? (adapter.pending_issue as RelationRecord["pending_issue"])
         : undefined,
     needs_human_reason:
       typeof adapter.needs_human_reason === "string"

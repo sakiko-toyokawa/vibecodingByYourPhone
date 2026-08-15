@@ -77,6 +77,11 @@ function prNumberFromUrl(url: string): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
+function issueNumberFromUrl(url: string): number | undefined {
+  const match = url.match(/\/issues\/(\d+)/);
+  return match ? Number(match[1]) : undefined;
+}
+
 export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
   const app = new Hono();
   const { credentialStore, toolProvisioner, githubClient } = deps;
@@ -341,6 +346,7 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
     }
     const pending = relation.pending_publish;
     if (
+      relation.subject.type !== "github_pr" ||
       !pending ||
       !pending.repository ||
       !pending.branch ||
@@ -408,6 +414,83 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
     }
   });
 
+  /**
+   * POST /relations/:id/approve-issue — 人工批准并发布 ISSUE-PROPOSAL。
+   * 与 approve-pr 对称：publish_mode="issue" 的调研型 loop 产出的提案
+   * 停在 pr_pending_approval，批准后由 server 执行 gh issue create，
+   * relation 转 awaiting_feedback 等待维护者回应。
+   *
+   * Errors: 404 relation_not_found；409 invalid_state /
+   * invalid_issue_payload；502 publish_failed。
+   */
+  app.post("/relations/:id/approve-issue", async (c) => {
+    if (!deps.relationStore) {
+      return c.json({ error: "relation_store_unavailable" }, 503);
+    }
+    const relation = deps.relationStore.findById(c.req.param("id"));
+    if (!relation) {
+      return c.json({ error: "relation_not_found" }, 404);
+    }
+    if (relation.state !== "pr_pending_approval") {
+      return c.json(
+        {
+          error: "invalid_state",
+          message: `relation '${relation.relation_id}' is '${relation.state}', not 'pr_pending_approval'`,
+        },
+        409,
+      );
+    }
+    const proposal = relation.pending_issue;
+    if (
+      relation.subject.type !== "github_issue" ||
+      !proposal ||
+      !proposal.repository ||
+      !proposal.title ||
+      !proposal.body
+    ) {
+      return c.json(
+        {
+          error: "invalid_issue_payload",
+          message: "relation has no complete pending_issue payload",
+        },
+        409,
+      );
+    }
+    try {
+      const issueUrl = await githubClient.createIssue({
+        repository: proposal.repository,
+        title: proposal.title,
+        body: proposal.body,
+      });
+      const issueNumber = issueNumberFromUrl(issueUrl);
+      const updated = await lifecycle?.transition(
+        relation.relation_id,
+        "awaiting_feedback",
+        {
+          subject: {
+            type: "github_issue",
+            repository: proposal.repository,
+            ...(issueNumber ? { issue_number: issueNumber } : {}),
+          },
+          pending_issue: undefined,
+        },
+        {
+          event: "issue_published",
+          message: `Issue published as ${proposal.repository}#${issueNumber ?? "?"} (${issueUrl})`,
+        },
+      );
+      if (!updated) {
+        throw new Error("relation disappeared while publishing issue");
+      }
+      return c.json({ relation: updated, issueUrl });
+    } catch (error) {
+      return c.json(
+        { error: "publish_failed", message: errorMessage(error) },
+        502,
+      );
+    }
+  });
+
   app.post("/relations/:id/mark-ready", async (c) => {
     if (!deps.relationStore) {
       return c.json({ error: "relation_store_unavailable" }, 503);
@@ -421,6 +504,15 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
         {
           error: "invalid_state",
           message: `relation '${relation.relation_id}' is '${relation.state}', not 'awaiting_review'`,
+        },
+        409,
+      );
+    }
+    if (relation.subject.type !== "github_pr") {
+      return c.json(
+        {
+          error: "invalid_relation_subject",
+          message: "mark-ready only applies to github_pr relations",
         },
         409,
       );

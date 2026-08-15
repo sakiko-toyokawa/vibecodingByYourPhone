@@ -42,8 +42,9 @@ test("RelationStore persists relations and finds by GitHub PR", async () => {
 
     const reloaded = new RelationStore({ dataDir });
     await reloaded.initialize();
+    const subject = reloaded.findById("rel-oma-488")?.subject;
     assert.equal(
-      reloaded.findById("rel-oma-488")?.subject.branch,
+      subject?.type === "github_pr" ? subject.branch : undefined,
       "fix/488-isolate-oma-model-in-runtime-tests",
     );
   } finally {
@@ -73,7 +74,11 @@ test("RelationStore updateState preserves subject and cursor fields", async () =
     assert.equal(updated?.last_processed.commit_sha, "sha1");
     assert.equal(updated?.last_processed.ci_failure_sha, "sha1");
     assert.equal(updated?.feedback_count, 1);
-    assert.equal(updated?.subject.pr_number, 490);
+    const subject = updated?.subject;
+    assert.equal(
+      subject?.type === "github_pr" ? subject.pr_number : undefined,
+      490,
+    );
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }

@@ -1,5 +1,11 @@
 import type { ProviderInfo } from "@yep-anywhere/shared";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import {
@@ -39,6 +45,13 @@ function formatTime(iso: string): string {
   return date.toLocaleString();
 }
 
+const TERMINAL_LOOP_STATES = new Set([
+  "complete",
+  "failed",
+  "discarded",
+  "budget_limited",
+]);
+
 /**
  * Loops list page: registered loops with trigger type, latest run state,
  * and creation time. Click a loop to open its detail page.
@@ -74,6 +87,8 @@ export function LoopsPage({
   );
   const [githubError, setGithubError] = useState<string | null>(null);
   const [githubMessage, setGithubMessage] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [relations, setRelations] = useState<GitHubRelation[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
 
@@ -239,6 +254,31 @@ export function LoopsPage({
       setGithubBusy(null);
     }
   }, [t]);
+
+  const handleDeleteLoop = useCallback(
+    async (event: MouseEvent, loopId: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (
+        !window.confirm(
+          `Delete loop '${loopId}'? This archives it and removes it from the dashboard.`,
+        )
+      ) {
+        return;
+      }
+      setDeletingId(loopId);
+      setDeleteError(null);
+      try {
+        await loopsApi.deleteLoop(loopId);
+        await reload();
+      } catch (err) {
+        setDeleteError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [reload],
+  );
 
   const visibleEntries = entries.filter(({ loop }) => {
     const isGithub = loop.card.loop.discovery?.source === "github_prompt";
@@ -916,69 +956,94 @@ export function LoopsPage({
               </p>
             )}
 
+            {deleteError && (
+              <p className="mb-3 rounded-[var(--radius-sm)] border border-[var(--error-color)]/40 bg-[var(--error-color)]/10 p-3 text-sm text-[var(--error-color)]">
+                {deleteError}
+              </p>
+            )}
+
             {!loading && !error && visibleEntries.length > 0 && (
               <div className="flex flex-col gap-[var(--space-2)]">
                 {visibleEntries.map(({ loop, lastRun }) => {
                   const relation = relations.find(
                     (item) => item.loop_id === loop.id,
                   );
+                  const canDelete =
+                    !lastRun || TERMINAL_LOOP_STATES.has(lastRun.state);
                   const prompt =
                     loop.card.loop.handoff?.task ??
                     loop.card.loop.discovery?.query ??
                     "";
                   return (
-                    <Link
-                      key={loop.id}
-                      to={`${basePath}/loops/${encodeURIComponent(loop.id)}`}
-                      className="block w-full border border-[var(--border-color)] rounded-[var(--radius-md)] bg-[var(--bg-secondary)] p-6 text-left no-underline text-inherit transition-[border-color] duration-150 hover:border-[var(--border-hover)]"
-                    >
-                      <div className="flex flex-col gap-[var(--space-1)]">
-                        <div className="flex min-w-0 items-center gap-[var(--space-2)]">
-                          <span className="overflow-hidden text-ellipsis whitespace-nowrap font-medium text-[var(--text-primary)]">
-                            {loop.id}
-                          </span>
-                          {loop.card.loop.policy ? (
-                            <span className="shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--warning-color)]/15 px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium text-[var(--warning-color)]">
-                              modify
+                    <div key={loop.id} className="relative">
+                      <Link
+                        to={`${basePath}/loops/${encodeURIComponent(loop.id)}`}
+                        className="block w-full border border-[var(--border-color)] rounded-[var(--radius-md)] bg-[var(--bg-secondary)] p-6 pr-28 text-left no-underline text-inherit transition-[border-color] duration-150 hover:border-[var(--border-hover)]"
+                      >
+                        <div className="flex flex-col gap-[var(--space-1)]">
+                          <div className="flex min-w-0 items-center gap-[var(--space-2)]">
+                            <span className="overflow-hidden text-ellipsis whitespace-nowrap font-medium text-[var(--text-primary)]">
+                              {loop.id}
                             </span>
-                          ) : (
-                            <span className="shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium text-[var(--text-muted)]">
-                              readonly
+                            {loop.card.loop.policy ? (
+                              <span className="shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--warning-color)]/15 px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium text-[var(--warning-color)]">
+                                modify
+                              </span>
+                            ) : (
+                              <span className="shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium text-[var(--text-muted)]">
+                                readonly
+                              </span>
+                            )}
+                            {lastRun && (
+                              <span
+                                className={`shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium ${runStateBadgeClass(lastRun.state)}`}
+                              >
+                                {humanizeDecision(lastRun.state)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-[var(--space-3)] gap-y-1">
+                            <span className="[font-size:var(--font-size-sm)] font-mono text-[var(--text-muted)]">
+                              {formatTrigger(loop)}
                             </span>
+                            <span className="[font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                              {t("loopsCreated", {
+                                time: formatTime(loop.created_at),
+                              })}
+                            </span>
+                          </div>
+                          {prompt && (
+                            <div className="mt-2 line-clamp-3 overflow-hidden rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-3 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
+                              {prompt}
+                            </div>
                           )}
-                          {lastRun && (
-                            <span
-                              className={`shrink-0 whitespace-nowrap rounded-[var(--radius-sm)] px-2 py-0.5 [font-size:var(--font-size-xs)] font-medium ${runStateBadgeClass(lastRun.state)}`}
-                            >
-                              {humanizeDecision(lastRun.state)}
-                            </span>
+                          {showGithub && relation && (
+                            <div className="mt-1 [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
+                              {relation.subject.repository}
+                              {relation.subject.type === "github_pr"
+                                ? `#${relation.subject.pr_number ?? "?"}`
+                                : relation.subject.issue_number
+                                  ? `#${relation.subject.issue_number}`
+                                  : " · issue proposal"}{" "}
+                              · {humanizeRelationState(relation.state)} ·
+                              feedback {relation.feedback_count}
+                            </div>
                           )}
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-[var(--space-3)] gap-y-1">
-                          <span className="[font-size:var(--font-size-sm)] font-mono text-[var(--text-muted)]">
-                            {formatTrigger(loop)}
-                          </span>
-                          <span className="[font-size:var(--font-size-sm)] text-[var(--text-muted)]">
-                            {t("loopsCreated", {
-                              time: formatTime(loop.created_at),
-                            })}
-                          </span>
-                        </div>
-                        {prompt && (
-                          <div className="mt-2 line-clamp-3 overflow-hidden rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] p-3 [font-size:var(--font-size-sm)] text-[var(--text-muted)]">
-                            {prompt}
-                          </div>
-                        )}
-                        {showGithub && relation && (
-                          <div className="mt-1 [font-size:var(--font-size-xs)] text-[var(--text-muted)]">
-                            {relation.subject.repository}#
-                            {relation.subject.pr_number ?? "?"} ·{" "}
-                            {humanizeRelationState(relation.state)} · feedback{" "}
-                            {relation.feedback_count}
-                          </div>
-                        )}
-                      </div>
-                    </Link>
+                      </Link>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          className="absolute right-4 top-4 rounded-md border border-[var(--error-color)]/40 bg-[var(--error-color)]/10 px-3 py-1.5 text-xs font-medium text-[var(--error-color)] transition-opacity hover:opacity-80 disabled:opacity-50"
+                          disabled={deletingId === loop.id}
+                          onClick={(event) =>
+                            void handleDeleteLoop(event, loop.id)
+                          }
+                        >
+                          {deletingId === loop.id ? "Deleting..." : "Delete"}
+                        </button>
+                      )}
+                    </div>
                   );
                 })}
               </div>

@@ -6,7 +6,11 @@
 
 import type { IEventBus } from "../../watcher/index.js";
 import { RELATION_MAX_REPAIRS, RELATION_TRIGGER_TYPES } from "./constants.js";
-import { extractPrPublishPayload, readGitIdentity } from "./pr-publish.js";
+import {
+  extractIssueProposalPayload,
+  extractPrPublishPayload,
+  readGitIdentity,
+} from "./pr-publish.js";
 import {
   type RelationRecord,
   type RelationState,
@@ -275,6 +279,67 @@ export class RelationLifecycleService {
       {
         event: "pr_pending_approval",
         message: `run ${runId} prepared PR publish for ${pendingPublish.repository}:${pendingPublish.branch}`,
+      },
+    );
+  }
+
+  /**
+   * Register an ISSUE-PROPOSAL handoff from a github_prompt run in
+   * publish_mode "issue" (investigation/reproduction tasks; the right
+   * contribution form for invitation-only repos like openai/codex).
+   * The relation is parked in pr_pending_approval until a human publishes
+   * it via the approve-issue route.
+   */
+  async registerGithubIssueProposal(
+    loopId: string,
+    runId: string,
+    finalText: string,
+  ): Promise<RelationRecord | null> {
+    const proposal = extractIssueProposalPayload(finalText);
+    if (!proposal) {
+      return null;
+    }
+    const now = new Date().toISOString();
+    const existing = this.deps.relationStore
+      .list()
+      .find(
+        (relation) =>
+          relation.loop_id === loopId &&
+          relation.subject.type === "github_issue" &&
+          relation.subject.repository === proposal.repository,
+      );
+    if (existing && existing.state !== "pr_pending_approval") {
+      return null;
+    }
+    const relationId = existing?.relation_id ?? `rel-${loopId}-${runId}`;
+    return this.upsert(
+      {
+        ...(existing ?? {}),
+        relation_id: relationId,
+        loop_id: loopId,
+        subject: {
+          type: "github_issue",
+          repository: proposal.repository,
+          ...(existing?.subject.type === "github_issue" &&
+          existing.subject.issue_number
+            ? { issue_number: existing.subject.issue_number }
+            : {}),
+        },
+        state: "pr_pending_approval",
+        last_processed: existing?.last_processed ?? {},
+        feedback_count: existing?.feedback_count ?? 0,
+        repair_count: existing?.repair_count ?? 0,
+        pending_issue: {
+          ...proposal,
+          run_id: runId,
+          created_at: now,
+        },
+        created_at: existing?.created_at ?? now,
+        updated_at: now,
+      },
+      {
+        event: "pr_pending_approval",
+        message: `run ${runId} prepared an issue proposal for ${proposal.repository}`,
       },
     );
   }

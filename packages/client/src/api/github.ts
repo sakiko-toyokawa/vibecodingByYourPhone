@@ -29,7 +29,7 @@ export type GitHubRelationState =
   | "closed"
   | "needs_human";
 
-export interface GitHubRelationSubject {
+export interface GitHubPrSubject {
   type: "github_pr";
   repository: string;
   issue_number?: number;
@@ -38,6 +38,14 @@ export interface GitHubRelationSubject {
   fork_owner?: string;
   base_sha?: string;
 }
+
+export interface GitHubIssueSubject {
+  type: "github_issue";
+  repository: string;
+  issue_number?: number;
+}
+
+export type GitHubRelationSubject = GitHubPrSubject | GitHubIssueSubject;
 
 export interface GitHubRelation {
   relation_id: string;
@@ -60,6 +68,13 @@ export interface GitHubRelation {
     author_name?: string;
     author_email?: string;
     identity_source?: string;
+    run_id?: string;
+    created_at?: string;
+  };
+  pending_issue?: {
+    repository: string;
+    title: string;
+    body: string;
     run_id?: string;
     created_at?: string;
   };
@@ -113,6 +128,13 @@ export const githubApi = {
   approvePr: (relationId: string) =>
     fetchJSON<{ relation: GitHubRelation; prUrl: string }>(
       `/github/relations/${encodeURIComponent(relationId)}/approve-pr`,
+      { method: "POST" },
+    ),
+
+  /** 人工批准并发布 ISSUE-PROPOSAL 提案（publish_mode="issue" 的 loop 产出）。 */
+  approveIssue: (relationId: string) =>
+    fetchJSON<{ relation: GitHubRelation; issueUrl: string }>(
+      `/github/relations/${encodeURIComponent(relationId)}/approve-issue`,
       { method: "POST" },
     ),
 

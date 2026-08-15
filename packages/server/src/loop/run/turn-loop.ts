@@ -1356,11 +1356,20 @@ export async function runTurns(
         deps.relationStore &&
         ctx.card.loop.discovery?.source === "github_prompt"
       ) {
-        await relationLifecycle?.registerGithubPrPublish(
-          loopId,
-          runId,
-          outcome.finalText,
-        );
+        // publish_mode "issue"：调研/复现类任务交接 issue 提案而非 PR。
+        if (ctx.card.loop.handoff?.publish_mode === "issue") {
+          await relationLifecycle?.registerGithubIssueProposal(
+            loopId,
+            runId,
+            outcome.finalText,
+          );
+        } else {
+          await relationLifecycle?.registerGithubPrPublish(
+            loopId,
+            runId,
+            outcome.finalText,
+          );
+        }
       }
 
       const handoffRef = await writeTurnHandoff(

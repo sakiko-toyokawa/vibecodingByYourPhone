@@ -59,9 +59,15 @@ function PipelineCard({
   const target = runId
     ? `${basePath}/runs/${encodeURIComponent(runId)}`
     : `${basePath}/loops/${encodeURIComponent(relation.loop_id)}`;
-  const pr = relation.subject.pr_number
-    ? `#${relation.subject.pr_number}`
-    : relation.subject.branch;
+  const subject = relation.subject;
+  const pr =
+    subject.type === "github_pr"
+      ? subject.pr_number
+        ? `#${subject.pr_number}`
+        : subject.branch
+      : subject.issue_number
+        ? `#${subject.issue_number}`
+        : "issue proposal";
 
   return (
     <Link

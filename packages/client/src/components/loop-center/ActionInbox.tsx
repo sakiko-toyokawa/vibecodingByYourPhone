@@ -50,9 +50,15 @@ function humanToItem(item: HumanSlaItem): InboxItem {
 }
 
 function relationToItem(relation: GitHubRelation): InboxItem {
-  const pr = relation.subject.pr_number
-    ? `#${relation.subject.pr_number}`
-    : relation.subject.branch;
+  const subject = relation.subject;
+  const pr =
+    subject.type === "github_pr"
+      ? subject.pr_number
+        ? `#${subject.pr_number}`
+        : subject.branch
+      : subject.issue_number
+        ? `#${subject.issue_number}`
+        : "issue proposal";
   return {
     id: `relation:${relation.relation_id}`,
     kind: "relation",
@@ -244,6 +250,7 @@ export function ActionInbox() {
                       </button>
                       <a
                         href={
+                          item.relation.subject.type === "github_pr" &&
                           item.relation.subject.pr_number
                             ? `https://github.com/${item.relation.subject.repository}/pull/${item.relation.subject.pr_number}`
                             : undefined

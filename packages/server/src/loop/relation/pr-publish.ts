@@ -15,6 +15,9 @@ const execFileAsync = promisify(execFile);
 export const PR_PUBLISH_BEGIN = "<<<PR-PUBLISH>>>";
 export const PR_PUBLISH_END = "<<<END-PR-PUBLISH>>>";
 
+export const ISSUE_PROPOSAL_BEGIN = "<<<ISSUE-PROPOSAL>>>";
+export const ISSUE_PROPOSAL_END = "<<<END-ISSUE-PROPOSAL>>>";
+
 export interface ExtractedPrPublishPayload {
   repository: string;
   branch: string;
@@ -22,6 +25,16 @@ export interface ExtractedPrPublishPayload {
   body: string;
   /** Absolute path to the cloned repository the agent prepared. */
   cwd: string;
+}
+
+/**
+ * Issue 提案负载（调研/复现类任务）。与 PR 发布不同，提案没有本地产物——
+ * 价值全在 title/body 的分析文本里，发布动作（gh issue create）不需要 cwd。
+ */
+export interface ExtractedIssueProposalPayload {
+  repository: string;
+  title: string;
+  body: string;
 }
 
 export interface GitIdentity {
@@ -114,4 +127,34 @@ export function extractPrPublishPayload(
     return null;
   }
   return { repository, branch, title, body, cwd };
+}
+
+/**
+ * Extract the marked issue proposal payload from a turn's final text.
+ * Returns null when the executor did not produce a valid block.
+ */
+export function extractIssueProposalPayload(
+  finalText: string,
+): ExtractedIssueProposalPayload | null {
+  const start = finalText.indexOf(ISSUE_PROPOSAL_BEGIN);
+  if (start === -1) {
+    return null;
+  }
+  const contentStart = start + ISSUE_PROPOSAL_BEGIN.length;
+  const end = finalText.indexOf(ISSUE_PROPOSAL_END, contentStart);
+  if (end === -1) {
+    return null;
+  }
+  const raw = finalText.slice(contentStart, end).trim();
+  const object = parseObject(raw);
+  if (!object) {
+    return null;
+  }
+  const repository = nonEmptyString(object.repository);
+  const title = nonEmptyString(object.title);
+  const body = nonEmptyString(object.body);
+  if (!repository || !title || !body) {
+    return null;
+  }
+  return { repository, title, body };
 }

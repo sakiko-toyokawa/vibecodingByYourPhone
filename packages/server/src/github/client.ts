@@ -18,6 +18,12 @@ export interface PublishDraftPrInput {
   draft?: boolean;
 }
 
+export interface CreateIssueInput {
+  repository: string;
+  title: string;
+  body: string;
+}
+
 export interface CloneAndCheckoutBranchInput {
   repository: string;
   destination: string;
@@ -173,6 +179,21 @@ export class GitHubClient {
       prArgs.push("--draft");
     }
     const stdout = await this.runChecked(prArgs, input.cwd);
+    return stdout.trim();
+  }
+
+  /** Returns the created issue URL (gh prints it on stdout). */
+  async createIssue(input: CreateIssueInput): Promise<string> {
+    const stdout = await this.runChecked([
+      "issue",
+      "create",
+      "--repo",
+      input.repository,
+      "--title",
+      input.title,
+      "--body",
+      input.body,
+    ]);
     return stdout.trim();
   }
 
