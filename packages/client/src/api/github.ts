@@ -121,4 +121,18 @@ export const githubApi = {
       `/github/relations/${encodeURIComponent(relationId)}/mark-ready`,
       { method: "POST" },
     ),
+
+  /** needs_human relation 的人工出口：retry 重置修复预算，close 停止跟踪。 */
+  resolveRelation: (
+    relationId: string,
+    action: "retry" | "close",
+    note?: string,
+  ) =>
+    fetchJSON<{ relation: GitHubRelation }>(
+      `/github/relations/${encodeURIComponent(relationId)}/resolve`,
+      {
+        method: "POST",
+        body: JSON.stringify({ action, ...(note ? { note } : {}) }),
+      },
+    ),
 };

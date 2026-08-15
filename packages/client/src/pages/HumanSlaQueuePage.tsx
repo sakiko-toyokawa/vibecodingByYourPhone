@@ -31,6 +31,7 @@ export function HumanSlaQueuePage() {
   const [items, setItems] = useState<HumanSlaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [busyRun, setBusyRun] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -50,6 +51,21 @@ export function HumanSlaQueuePage() {
     return () => clearInterval(timer);
   }, [load]);
 
+  // 队列页不再是只读视图：needs_human 的 run 在这里就能批准/驳回，
+  // 不必钻进 loop 详情页。reject 终止 run；approve 让 run 继续下一轮。
+  const decide = async (runId: string, decision: "approve" | "reject") => {
+    setBusyRun(runId);
+    setError(null);
+    try {
+      await loopsApi.submitDecision(runId, decision);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyRun(null);
+    }
+  };
+
   return (
     <div className="min-h-screen p-4 md:p-6">
       <PageHeader title="Human Action Queue" />
@@ -67,10 +83,9 @@ export function HumanSlaQueuePage() {
       ) : (
         <div className="grid gap-3">
           {items.map((item) => (
-            <Link
+            <div
               key={item.run_id}
-              to={`${basePath}/loops/${encodeURIComponent(item.loop_id)}`}
-              className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] p-3 no-underline transition-colors hover:bg-[var(--bg-hover)]"
+              className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] p-3"
             >
               <div className="flex flex-wrap items-center gap-2">
                 <span
@@ -101,7 +116,35 @@ export function HumanSlaQueuePage() {
                 <div>deadline {formatAge(item.abandon_at)}</div>
                 <div>policy {item.policy}</div>
               </div>
-            </Link>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {item.state === "needs_human" && (
+                  <>
+                    <button
+                      type="button"
+                      className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-[var(--on-primary)] transition-opacity hover:opacity-90 disabled:opacity-50"
+                      disabled={busyRun !== null}
+                      onClick={() => void decide(item.run_id, "approve")}
+                    >
+                      {busyRun === item.run_id ? "Submitting..." : "Approve"}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] disabled:opacity-50"
+                      disabled={busyRun !== null}
+                      onClick={() => void decide(item.run_id, "reject")}
+                    >
+                      Reject
+                    </button>
+                  </>
+                )}
+                <Link
+                  to={`${basePath}/loops/${encodeURIComponent(item.loop_id)}`}
+                  className="rounded-md border border-[var(--border-color)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] no-underline transition-colors hover:border-[var(--border-hover)]"
+                >
+                  Open loop
+                </Link>
+              </div>
+            </div>
           ))}
         </div>
       )}

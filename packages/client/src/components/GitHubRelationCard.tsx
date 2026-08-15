@@ -20,18 +20,22 @@ export function GitHubRelationCard({
   showLoop = false,
 }: GitHubRelationCardProps) {
   const basePath = useRemoteBasePath();
-  const [busy, setBusy] = useState<"approve" | "ready" | null>(null);
+  const [busy, setBusy] = useState<
+    "approve" | "ready" | "retry" | "close" | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
 
   const runAction = useCallback(
-    async (action: "approve" | "ready") => {
+    async (action: "approve" | "ready" | "retry" | "close") => {
       setError(null);
       setBusy(action);
       try {
         if (action === "approve") {
           await githubApi.approvePr(relation.relation_id);
-        } else {
+        } else if (action === "ready") {
           await githubApi.markReady(relation.relation_id);
+        } else {
+          await githubApi.resolveRelation(relation.relation_id, action);
         }
         await onChanged?.();
       } catch (err) {
@@ -135,8 +139,47 @@ export function GitHubRelationCard({
               {busy === "ready" ? "Marking ready..." : "Mark Ready for Review"}
             </button>
           )}
+          {relation.state === "needs_human" && (
+            <>
+              <button
+                type="button"
+                className="rounded-md border border-[var(--primary)] bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-[var(--on-primary)] transition-opacity hover:opacity-90 disabled:opacity-50"
+                disabled={busy !== null}
+                onClick={() => void runAction("retry")}
+              >
+                {busy === "retry" ? "Resuming..." : "Retry (reset repairs)"}
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] disabled:opacity-50"
+                disabled={busy !== null}
+                onClick={() => void runAction("close")}
+              >
+                {busy === "close" ? "Closing..." : "Stop tracking"}
+              </button>
+            </>
+          )}
         </span>
       </div>
+
+      {relation.state === "needs_human" && (
+        <div className="mt-2 rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] p-3 text-xs text-[var(--text-muted)]">
+          <div className="break-words">
+            {relation.needs_human_reason ?? "Human review required."}
+          </div>
+          <div className="mt-1">
+            If a run is waiting for a decision, handle it in{" "}
+            <Link
+              to={`${basePath}/loops/${encodeURIComponent(relation.loop_id)}`}
+              className="text-[var(--text-secondary)] underline decoration-dotted underline-offset-2 hover:text-[var(--text-primary)]"
+            >
+              the loop detail page
+            </Link>
+            ; use Retry to reset the repair budget, or Stop tracking to drop
+            this relation.
+          </div>
+        </div>
+      )}
 
       {error && (
         <p className="mt-2 rounded-[var(--radius-sm)] border border-[var(--error-color)]/40 bg-[var(--error-color)]/10 p-2 text-xs text-[var(--error-color)]">

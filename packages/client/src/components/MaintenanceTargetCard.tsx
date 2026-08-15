@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { githubApi } from "../api/github";
 import type { MaintenanceTarget } from "../api/maintenance";
-import { humanizeMaintenanceState } from "../lib/loopHumanText";
+import {
+  humanizeMaintenanceState,
+  humanizeRelationState,
+} from "../lib/loopHumanText";
 import { MaintenancePipeline } from "./MaintenancePipeline";
 
 interface MaintenanceTargetCardProps {
@@ -27,16 +30,28 @@ export function MaintenanceTargetCard({
     typeof adapter.repository === "string" ? adapter.repository : null;
   const prNumber =
     typeof adapter.pr_number === "number" ? adapter.pr_number : null;
+  // github_pr target 的状态词表是有损翻译（merged/closed 都折叠成 done）；
+  // 有 relation_state 时用 relation 词表，保留 Merged/Closed 的区分。
+  const relationState =
+    typeof adapter.relation_state === "string" ? adapter.relation_state : null;
+  const stateLabel =
+    target.target_type === "github_pr" && relationState
+      ? humanizeRelationState(relationState)
+      : humanizeMaintenanceState(target.state);
 
-  const runPrAction = async (action: "approve" | "ready") => {
+  const runPrAction = async (
+    action: "approve" | "ready" | "retry" | "close",
+  ) => {
     if (!relationId) return;
     setBusy(action);
     setError(null);
     try {
       if (action === "approve") {
         await githubApi.approvePr(relationId);
-      } else {
+      } else if (action === "ready") {
         await githubApi.markReady(relationId);
+      } else {
+        await githubApi.resolveRelation(relationId, action);
       }
       await onChanged?.();
     } catch (err) {
@@ -59,7 +74,7 @@ export function MaintenanceTargetCard({
             {target.target_type} · {target.target_id}
           </span>
           <span className="rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
-            {humanizeMaintenanceState(target.state)}
+            {stateLabel}
           </span>
           <span className="text-xs text-[var(--text-muted)]">
             feedback {target.feedback_count} · repair {target.repair_count}
@@ -134,6 +149,26 @@ export function MaintenanceTargetCard({
                     ? "Marking ready..."
                     : "Mark Ready for Review"}
                 </button>
+              )}
+              {target.state === "needs_human" && (
+                <>
+                  <button
+                    type="button"
+                    className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-[var(--on-primary)] disabled:opacity-50"
+                    disabled={busy !== null}
+                    onClick={() => void runPrAction("retry")}
+                  >
+                    {busy === "retry" ? "Resuming..." : "Retry (reset repairs)"}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] disabled:opacity-50"
+                    disabled={busy !== null}
+                    onClick={() => void runPrAction("close")}
+                  >
+                    {busy === "close" ? "Closing..." : "Stop tracking"}
+                  </button>
+                </>
               )}
             </div>
           )}
