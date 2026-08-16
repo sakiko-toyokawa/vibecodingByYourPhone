@@ -140,6 +140,7 @@ export async function removeColdRun(
   await fs
     .rm(path.join(coldDir, runId), { recursive: true, force: true })
     .catch(() => {});
+  await fs.mkdir(coldDir, { recursive: true });
   const index = (await readIndex(coldDir)).filter(
     (entry) => entry.run_id !== runId,
   );

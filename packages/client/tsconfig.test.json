@@ -14,6 +14,8 @@
     "src/components/MaintenancePipeline.test.tsx",
     "src/components/LoopWorkspaceHint.tsx",
     "src/components/LoopWorkspaceHint.test.tsx",
+    "src/components/RunStreamOutput.shared.ts",
+    "src/components/RunStreamOutput.test.ts",
     "src/pages/relayConnectAttempt.ts",
     "src/pages/relayConnectAttempt.test.ts",
     "src/types/desktop.d.ts",
