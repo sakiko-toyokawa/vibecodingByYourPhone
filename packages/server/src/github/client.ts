@@ -215,6 +215,20 @@ export class GitHubClient {
     return stdout.trim();
   }
 
+  /** Issue 状态（open/closed）——github_issue relation 的终态检测用。 */
+  async getIssueState(
+    repository: string,
+    issueNumber: number,
+  ): Promise<{ state: string }> {
+    const stdout = await this.runChecked([
+      "api",
+      `repos/${repository}/issues/${issueNumber}`,
+      "--jq",
+      ".state",
+    ]);
+    return { state: stdout.trim() };
+  }
+
   async getVerifiedIdentity(): Promise<GitHubVerifiedIdentity> {
     const login = (
       await this.runChecked(["api", "user", "--jq", ".login"])

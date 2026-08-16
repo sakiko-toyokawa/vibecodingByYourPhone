@@ -27,6 +27,7 @@ function makeWebhookApp(
       relationStore: {
         findById: () => relation,
         findByGitHubPr: () => relation,
+        findByGitHubIssue: () => null,
         updateState: async (id: string, state: string, patch?: object) => {
           relationUpdates.push({ id, state, patch });
           return { ...relation, ...patch, state };
@@ -331,6 +332,9 @@ test("GitHub webhook writes issue_comment watermark separately", async () => {
     },
     body: JSON.stringify({
       repository: { full_name: "owner/repo" },
+      // 真实 GitHub 负载里 PR 对话区的 issue_comment 必带 pull_request 键；
+      // 只有纯 issue 的评论才没有（现在会路由到 github_issue relation）。
+      pull_request: { number: 12 },
       issue: { number: 12 },
       comment: { id: 9 },
     }),
@@ -1190,4 +1194,122 @@ test("GitHub approve-issue posts a comment when the proposal targets an existing
     (commentInput as { issueNumber: number } | null)?.issueNumber,
     36750,
   );
+});
+
+test("GitHub webhook wakes a github_issue relation on external issue comments", async () => {
+  const enqueued: Array<{ event_id: string; payload: object }> = [];
+  const relationUpdates: Array<{ id: string; state: string }> = [];
+  const relation = {
+    relation_id: "rel-issue-36750",
+    loop_id: "loop-codex-issue",
+    subject: {
+      type: "github_issue",
+      repository: "openai/codex",
+      issue_number: 36750,
+    },
+    state: "awaiting_feedback",
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 0,
+  };
+  const app = new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {} as GitHubClient,
+      relationStore: {
+        findById: () => relation,
+        findByGitHubIssue: () => relation,
+        updateState: async (id: string, state: string) => {
+          relationUpdates.push({ id, state });
+          return { ...relation, state };
+        },
+      } as never,
+      triggerQueueStore: {
+        enqueue: async (input: { event_id: string; payload: object }) => {
+          enqueued.push(input);
+          return { ...input, state: "pending" };
+        },
+      } as never,
+      drainPendingTriggers: async () => {},
+    }),
+  );
+
+  const response = await app.request("/github/webhook", {
+    method: "POST",
+    headers: { "x-github-event": "issue_comment", "x-github-delivery": "d-1" },
+    body: JSON.stringify({
+      repository: { full_name: "openai/codex" },
+      issue: { number: 36750 },
+      comment: { id: 5287785689, user: { login: "mb706" } },
+      action: "created",
+    }),
+  });
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await json(response), { accepted: true, event_id: "d-1" });
+  assert.equal(enqueued.length, 1);
+  assert.ok(
+    relationUpdates.some(
+      (update) => update.id === "rel-issue-36750" && update.state === "fixing",
+    ),
+  );
+});
+
+test("GitHub webhook ignores bot comments instead of consuming repair budget", async () => {
+  const enqueued: Array<{ event_id: string; payload: object }> = [];
+  const relation = {
+    relation_id: "rel-1",
+    loop_id: "loop-maintainer",
+    subject: {
+      type: "github_pr",
+      repository: "owner/repo",
+      pr_number: 12,
+      branch: "fix/12",
+    },
+    state: "awaiting_feedback",
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 0,
+  };
+  const app = new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {} as GitHubClient,
+      relationStore: {
+        findById: () => relation,
+        findByGitHubPr: () => relation,
+        updateState: async (id: string, state: string) => ({
+          ...relation,
+          state,
+        }),
+      } as never,
+      triggerQueueStore: {
+        enqueue: async (input: { event_id: string; payload: object }) => {
+          enqueued.push(input);
+          return { ...input, state: "pending" };
+        },
+      } as never,
+      drainPendingTriggers: async () => {},
+    }),
+  );
+
+  const response = await app.request("/github/webhook", {
+    method: "POST",
+    headers: { "x-github-event": "issue_comment", "x-github-delivery": "d-2" },
+    body: JSON.stringify({
+      repository: { full_name: "owner/repo" },
+      pull_request: { number: 12 },
+      issue: { number: 12 },
+      comment: { id: 999, user: { login: "CLAassistant" } },
+      action: "created",
+    }),
+  });
+
+  assert.equal(response.status, 202);
+  assert.equal((await json(response)).reason, "feedback_author_filtered");
+  assert.equal(enqueued.length, 0);
 });

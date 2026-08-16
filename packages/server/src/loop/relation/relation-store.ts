@@ -356,6 +356,22 @@ export class RelationStore {
     return target ? targetToRelation(target) : null;
   }
 
+  findByGitHubIssue(
+    repository: string,
+    issueNumber: number,
+  ): RelationRecord | null {
+    this.ensureInitialized();
+    const target = this.maintenanceTargetStore
+      .list()
+      .find(
+        (item) =>
+          item.target_type === "github_issue" &&
+          item.adapter_data?.repository === repository &&
+          item.adapter_data?.issue_number === issueNumber,
+      );
+    return target ? targetToRelation(target) : null;
+  }
+
   list(): RelationRecord[] {
     this.ensureInitialized();
     return this.maintenanceTargetStore

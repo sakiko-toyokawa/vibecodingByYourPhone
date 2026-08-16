@@ -518,3 +518,166 @@ test("RelationPoller does not resurrect dismissed relations while the PR stays o
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("RelationPoller ignores bot and self comments (no wake, no watermark move)", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-rel-poll-"));
+  try {
+    const relationStore = new RelationStore({ dataDir });
+    await relationStore.initialize();
+    await relationStore.upsert(
+      makeRelation("awaiting_feedback", {
+        last_processed: { comment_id: 1, commit_sha: "sha" },
+      }),
+    );
+    const queue = makeQueue();
+    const poller = new RelationPoller({
+      relationStore,
+      githubClient: githubClient({
+        getVerifiedIdentity: async () => ({ login: "sakiko-toyokawa" }),
+        listPullRequestComments: async () => [
+          {
+            id: 5,
+            body: "Please sign the CLA",
+            user: "CLAassistant",
+            created_at: "now",
+          },
+        ],
+        listIssueComments: async () => [
+          {
+            id: 6,
+            body: "our own analysis comment",
+            user: "sakiko-toyokawa",
+            created_at: "now",
+          },
+        ],
+      }),
+      triggerQueueStore: queue.store,
+    });
+    await poller.pollOnce();
+    const relation = relationStore.findById("rel-1");
+    assert.equal(queue.enqueued.length, 0);
+    assert.equal(relation?.state, "awaiting_feedback");
+    // bot/自己的评论不推进水位——否则真人评论到来时会被跳过。
+    assert.equal(relation?.last_processed.comment_id, 1);
+    assert.equal(relation?.last_processed.issue_comment_id, undefined);
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+function makeIssueRelation(
+  patch: Partial<RelationRecord> = {},
+): RelationRecord {
+  return {
+    relation_id: "rel-issue-1",
+    loop_id: "loop-codex-issue",
+    subject: {
+      type: "github_issue",
+      repository: "openai/codex",
+      issue_number: 36750,
+    },
+    state: "awaiting_feedback",
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 0,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    ...patch,
+  };
+}
+
+function issueClient(overrides: Record<string, unknown> = {}): never {
+  return {
+    getIssueState: async () => ({ state: "open" }),
+    listIssueComments: async () => [],
+    getVerifiedIdentity: async () => ({ login: "sakiko-toyokawa" }),
+    ...overrides,
+  } as never;
+}
+
+test("RelationPoller wakes a github_issue relation on external issue comments", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-rel-poll-"));
+  try {
+    const relationStore = new RelationStore({ dataDir });
+    await relationStore.initialize();
+    await relationStore.upsert(makeIssueRelation());
+    const queue = makeQueue();
+    const poller = new RelationPoller({
+      relationStore,
+      githubClient: issueClient({
+        listIssueComments: async () => [
+          {
+            id: 5287785689,
+            body: "I can reproduce this on macOS",
+            user: "mb706",
+            created_at: "2026-08-14",
+          },
+        ],
+      }),
+      triggerQueueStore: queue.store,
+    });
+    const events = await poller.pollOnce();
+    assert.equal(events, 1);
+    assert.equal(queue.enqueued.length, 1);
+    const relation = relationStore.findById("rel-issue-1");
+    assert.equal(relation?.state, "fixing");
+    assert.equal(relation?.last_processed.issue_comment_id, 5287785689);
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("RelationPoller does not wake a github_issue relation on our own comments", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-rel-poll-"));
+  try {
+    const relationStore = new RelationStore({ dataDir });
+    await relationStore.initialize();
+    await relationStore.upsert(makeIssueRelation());
+    const queue = makeQueue();
+    const poller = new RelationPoller({
+      relationStore,
+      githubClient: issueClient({
+        listIssueComments: async () => [
+          {
+            id: 5302354609,
+            body: "our published analysis",
+            user: "sakiko-toyokawa",
+            created_at: "2026-08-15",
+          },
+        ],
+      }),
+      triggerQueueStore: queue.store,
+    });
+    const events = await poller.pollOnce();
+    assert.equal(events, 0);
+    assert.equal(queue.enqueued.length, 0);
+    assert.equal(
+      relationStore.findById("rel-issue-1")?.state,
+      "awaiting_feedback",
+    );
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("RelationPoller marks closed issues terminal for github_issue relations", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-rel-poll-"));
+  try {
+    const relationStore = new RelationStore({ dataDir });
+    await relationStore.initialize();
+    await relationStore.upsert(makeIssueRelation());
+    const queue = makeQueue();
+    const poller = new RelationPoller({
+      relationStore,
+      githubClient: issueClient({
+        getIssueState: async () => ({ state: "closed" }),
+      }),
+      triggerQueueStore: queue.store,
+    });
+    await poller.pollOnce();
+    assert.equal(relationStore.findById("rel-issue-1")?.state, "closed");
+    assert.equal(queue.enqueued.length, 0);
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});

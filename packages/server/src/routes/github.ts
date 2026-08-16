@@ -13,6 +13,7 @@ import {
   type RelationRecord,
   type RelationStore,
   type TriggerQueueStore,
+  isExternalFeedbackAuthor,
 } from "../loop/index.js";
 import { isGitWorkTree } from "../loop/index.js";
 import { githubPromptWorkspacePath } from "../loop/run/workspace.js";
@@ -89,6 +90,19 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
     ? (deps.relationLifecycle ??
       new RelationLifecycleService({ relationStore: deps.relationStore }))
     : undefined;
+  // 自己账号登录名（webhook 作者过滤用）；undefined = 未解析，null = 解析失败。
+  let selfLoginCache: string | null | undefined;
+  const getSelfLogin = async (): Promise<string | null> => {
+    if (selfLoginCache === undefined) {
+      try {
+        const identity = await githubClient.getVerifiedIdentity();
+        selfLoginCache = identity.login;
+      } catch {
+        selfLoginCache = null;
+      }
+    }
+    return selfLoginCache;
+  };
 
   app.get("/credentials", (c) => {
     return c.json({ credential: credentialStore.getStatus() });
@@ -696,7 +710,12 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
         202,
       );
     }
-    const relation = deps.relationStore.findByGitHubPr(repository, prNumber);
+    // 纯 issue 事件（payload 无 pull_request）匹配 github_issue relation；
+    // PR 上的评论走 github_pr relation（GitHub 两类事件共享 number 序列，
+    // 不会撞号）。
+    const relation = pullRequest
+      ? deps.relationStore.findByGitHubPr(repository, prNumber)
+      : deps.relationStore.findByGitHubIssue(repository, prNumber);
     if (!relation) {
       return c.json({ accepted: false, reason: "relation_not_found" }, 202);
     }
@@ -792,6 +811,40 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
     if (relation.state !== "awaiting_feedback" && relation.state !== "fixing") {
       return c.json(
         { accepted: false, reason: "relation_not_actionable" },
+        202,
+      );
+    }
+    // 作者过滤：bot（CLAassistant / google-cla[bot] 等）与我们自己账号的
+    // 评论不算外部反馈——否则 approve-issue 发出去的分析会被捡回来自我唤醒
+    // （2026-08-15 生产审计：rtk#3550 / adk-python#6713 的 bot 留言曾白白
+    // 消耗 repair_count）。
+    const feedbackAuthor =
+      (typeof comment?.user === "object" && comment.user !== null
+        ? getString(comment.user as Record<string, unknown>, "login")
+        : null) ??
+      (typeof review?.user === "object" && review.user !== null
+        ? getString(review.user as Record<string, unknown>, "login")
+        : null) ??
+      (typeof payload.sender === "object" && payload.sender !== null
+        ? getString(payload.sender as Record<string, unknown>, "login")
+        : null);
+    if (
+      (eventType === "issue_comment" ||
+        eventType === "pull_request_review_comment" ||
+        eventType === "pull_request_review") &&
+      !isExternalFeedbackAuthor(feedbackAuthor, await getSelfLogin())
+    ) {
+      await lifecycle?.transition(
+        relation.relation_id,
+        relation.state,
+        {},
+        {
+          event: "feedback_author_filtered",
+          message: `ignored feedback from bot/self author ${feedbackAuthor ?? "unknown"} on ${repository}#${prNumber}`,
+        },
+      );
+      return c.json(
+        { accepted: false, reason: "feedback_author_filtered" },
         202,
       );
     }
