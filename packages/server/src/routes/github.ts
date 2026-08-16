@@ -710,13 +710,16 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
         202,
       );
     }
-    // 纯 issue 事件（payload 无 pull_request）匹配 github_issue relation；
-    // PR 上的评论走 github_pr relation（GitHub 两类事件共享 number 序列，
-    // 不会撞号）。
-    const relation = pullRequest
-      ? deps.relationStore.findByGitHubPr(repository, prNumber)
-      : deps.relationStore.findByGitHubIssue(repository, prNumber);
-    if (!relation) {
+    // issue_comment 打在 PR 上时，payload 没有顶层 pull_request，只有
+    // issue.pull_request 子对象——必须按 github_pr relation 匹配，否则 PR
+    // 对话区评论永远叫不醒维护循环（只能靠轮询兜底）。GitHub 的 issue 与 PR
+    // 共享 number 序列，不会撞号。
+    const isPrContext =
+      pullRequest !== undefined || issue?.pull_request != null;
+    const relations = isPrContext
+      ? deps.relationStore.findAllByGitHubPr(repository, prNumber)
+      : deps.relationStore.findAllByGitHubIssue(repository, prNumber);
+    if (relations.length === 0) {
       return c.json({ accepted: false, reason: "relation_not_found" }, 202);
     }
     const comment =
@@ -728,198 +731,264 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
         ? (payload.review as Record<string, unknown>)
         : undefined;
     const action = getString(payload, "action") ?? "";
-    if (eventType === "pull_request_review" && action === "dismissed") {
-      await lifecycle?.transition(
-        relation.relation_id,
-        relation.state,
-        {},
-        {
-          event: "review_dismissed",
-          message: `GitHub review dismissed on ${repository}#${prNumber}`,
-        },
-      );
-      return c.json({ accepted: false, reason: "review_dismissed" }, 202);
-    }
-    if (eventType === "pull_request_review" && review?.state === "approved") {
-      await lifecycle?.transition(
-        relation.relation_id,
-        relation.state,
-        {},
-        {
-          event: "review_approved",
-          message: `GitHub review approved on ${repository}#${prNumber}`,
-        },
-      );
-      return c.json({ accepted: false, reason: "review_approved" }, 202);
-    }
-    if (eventType === "pull_request") {
-      if (action === "closed") {
-        const merged = pullRequest?.merged === true;
-        const terminalState = merged ? "merged" : "closed";
-        await lifecycle?.transition(
-          relation.relation_id,
-          terminalState,
-          {},
+    const sender =
+      typeof payload.sender === "object" && payload.sender !== null
+        ? (payload.sender as Record<string, unknown>)
+        : undefined;
+    // 同一 PR/issue 可能被多个 loop 同时跟踪（生产实例：adk-python#6713
+    // 有两个 relation）——逐个走完整处理流程，不能只唤醒第一个。
+    const results: Array<Record<string, unknown>> = [];
+    for (const relation of relations) {
+      results.push(
+        await handleWebhookRelation(
+          lifecycle,
+          getSelfLogin,
+          deps.triggerQueueStore,
+          deps.drainPendingTriggers,
+          relation,
           {
-            event: terminalState,
-            message: `GitHub webhook observed PR ${repository}#${prNumber} ${merged ? "merged" : "closed"}`,
+            eventType,
+            delivery,
+            repository,
+            prNumber,
+            action,
+            pullRequest,
+            comment,
+            review,
+            sender,
           },
-        );
-        return c.json({ accepted: false, reason: terminalState }, 202);
-      }
-      if (action === "reopened" && relation.state === "closed") {
-        await lifecycle?.transition(
-          relation.relation_id,
-          "awaiting_feedback",
-          {},
-          {
-            event: "reopened",
-            message: `GitHub webhook observed PR ${repository}#${prNumber} reopened`,
-          },
-        );
-        return c.json({ accepted: false, reason: "reopened" }, 202);
-      }
-      if (
-        action === "ready_for_review" &&
-        relation.state === "awaiting_review"
-      ) {
-        await lifecycle?.transition(
-          relation.relation_id,
-          "awaiting_feedback",
-          {},
-          {
-            event: "ready_for_review",
-            message: `GitHub webhook observed PR ${repository}#${prNumber} ready for review`,
-          },
-        );
-        return c.json({ accepted: false, reason: "ready_for_review" }, 202);
-      }
-      await lifecycle?.transition(
-        relation.relation_id,
-        relation.state,
-        {},
-        {
-          event: "pull_request_event_ignored",
-          message: `GitHub pull_request event '${action}' did not require a maintenance wake for ${repository}#${prNumber}`,
-        },
-      );
-      return c.json(
-        { accepted: false, reason: "pull_request_event_ignored", action },
-        202,
+        ),
       );
     }
-    if (relation.state !== "awaiting_feedback" && relation.state !== "fixing") {
-      return c.json(
-        { accepted: false, reason: "relation_not_actionable" },
-        202,
-      );
+    // 单 relation 保持原有扁平响应形状；多 relation 带 relation_id 分组返回。
+    if (results.length === 1) {
+      return c.json(results[0], 202);
     }
-    // 作者过滤：bot（CLAassistant / google-cla[bot] 等）与我们自己账号的
-    // 评论不算外部反馈——否则 approve-issue 发出去的分析会被捡回来自我唤醒
-    // （2026-08-15 生产审计：rtk#3550 / adk-python#6713 的 bot 留言曾白白
-    // 消耗 repair_count）。
-    const feedbackAuthor =
-      (typeof comment?.user === "object" && comment.user !== null
-        ? getString(comment.user as Record<string, unknown>, "login")
-        : null) ??
-      (typeof review?.user === "object" && review.user !== null
-        ? getString(review.user as Record<string, unknown>, "login")
-        : null) ??
-      (typeof payload.sender === "object" && payload.sender !== null
-        ? getString(payload.sender as Record<string, unknown>, "login")
-        : null);
-    if (
-      (eventType === "issue_comment" ||
-        eventType === "pull_request_review_comment" ||
-        eventType === "pull_request_review") &&
-      !isExternalFeedbackAuthor(feedbackAuthor, await getSelfLogin())
-    ) {
-      await lifecycle?.transition(
-        relation.relation_id,
-        relation.state,
-        {},
-        {
-          event: "feedback_author_filtered",
-          message: `ignored feedback from bot/self author ${feedbackAuthor ?? "unknown"} on ${repository}#${prNumber}`,
-        },
-      );
-      return c.json(
-        { accepted: false, reason: "feedback_author_filtered" },
-        202,
-      );
-    }
-    const commentId =
-      typeof comment?.id === "number"
-        ? comment.id
-        : typeof comment?.id === "string" && comment.id.trim() !== ""
-          ? Number(comment.id)
-          : undefined;
-    const reviewId =
-      typeof review?.id === "number"
-        ? review.id
-        : typeof review?.id === "string" && review.id.trim() !== ""
-          ? Number(review.id)
-          : undefined;
-    const issueCommentId =
-      eventType === "issue_comment" ? commentId : undefined;
-    const lastProcessedPatch: Partial<RelationRecord["last_processed"]> = {};
-    const eventPayload: Record<string, unknown> = {};
-    if (eventType === "issue_comment") {
-      if (!issueCommentId) {
-        return c.json({ accepted: false, reason: "missing_comment" }, 202);
-      }
-      lastProcessedPatch.issue_comment_id = issueCommentId;
-      eventPayload.issue_comment_id = issueCommentId;
-    } else if (eventType === "pull_request_review_comment") {
-      if (!commentId) {
-        return c.json({ accepted: false, reason: "missing_comment" }, 202);
-      }
-      lastProcessedPatch.comment_id = commentId;
-      eventPayload.comment_id = commentId;
-    } else if (eventType === "pull_request_review") {
-      if (!reviewId) {
-        return c.json({ accepted: false, reason: "missing_review" }, 202);
-      }
-      lastProcessedPatch.review_id = reviewId;
-      eventPayload.review_id = reviewId;
-    } else {
-      return c.json({ accepted: false, reason: "event_ignored" }, 202);
-    }
-    const feedback = await lifecycle?.receiveFeedback(relation.relation_id, {
-      eventType,
-      cursor: lastProcessedPatch,
-      incrementFeedbackCount: true,
-      log: {
-        event: eventType,
-        message: `GitHub webhook ${eventType} woke maintenance for ${repository}#${prNumber}`,
+    return c.json(
+      {
+        results: results.map((result, index) => ({
+          relation_id: relations[index]?.relation_id,
+          ...result,
+        })),
       },
-    });
-    if (feedback?.repairLimitReached) {
-      return c.json({ accepted: false, reason: "repair_limit_reached" }, 202);
-    }
-    if (!feedback?.relation) {
-      return c.json({ accepted: false, reason: "relation_not_found" }, 202);
-    }
-    const eventId = delivery || `github-${eventType}-${repository}-${prNumber}`;
-    await deps.triggerQueueStore.enqueue({
-      event_id: eventId,
-      loop_id: relation.loop_id,
-      source: "webhook",
-      priority: "normal",
-      payload: {
-        relation_id: relation.relation_id,
-        maintenance_id: relation.relation_id,
-        event_type: eventType,
-        repository,
-        pr_number: prNumber,
-        ...eventPayload,
-      },
-    });
-    await deps.drainPendingTriggers?.(relation.loop_id);
-    return c.json({ accepted: true, event_id: eventId }, 202);
+      202,
+    );
   });
 
   return app;
+}
+
+interface WebhookRelationEventContext {
+  eventType: string;
+  delivery: string;
+  repository: string;
+  prNumber: number;
+  action: string;
+  pullRequest?: Record<string, unknown>;
+  comment?: Record<string, unknown>;
+  review?: Record<string, unknown>;
+  sender?: Record<string, unknown>;
+}
+
+// 单个 relation 的 webhook 事件处理；返回值为响应体（路由统一以 202 返回）。
+// 同一 PR/issue 上的多个 relation 由路由层逐个调用本函数。
+async function handleWebhookRelation(
+  lifecycle: RelationLifecycleService | undefined,
+  getSelfLogin: () => Promise<string | null>,
+  triggerQueueStore: TriggerQueueStore,
+  drainPendingTriggers: ((loopId?: string) => Promise<void>) | undefined,
+  relation: RelationRecord,
+  ctx: WebhookRelationEventContext,
+): Promise<Record<string, unknown>> {
+  const {
+    eventType,
+    delivery,
+    repository,
+    prNumber,
+    action,
+    pullRequest,
+    comment,
+    review,
+    sender,
+  } = ctx;
+  if (eventType === "pull_request_review" && action === "dismissed") {
+    await lifecycle?.transition(
+      relation.relation_id,
+      relation.state,
+      {},
+      {
+        event: "review_dismissed",
+        message: `GitHub review dismissed on ${repository}#${prNumber}`,
+      },
+    );
+    return { accepted: false, reason: "review_dismissed" };
+  }
+  if (eventType === "pull_request_review" && review?.state === "approved") {
+    await lifecycle?.transition(
+      relation.relation_id,
+      relation.state,
+      {},
+      {
+        event: "review_approved",
+        message: `GitHub review approved on ${repository}#${prNumber}`,
+      },
+    );
+    return { accepted: false, reason: "review_approved" };
+  }
+  if (eventType === "pull_request") {
+    if (action === "closed") {
+      const merged = pullRequest?.merged === true;
+      const terminalState = merged ? "merged" : "closed";
+      await lifecycle?.transition(
+        relation.relation_id,
+        terminalState,
+        {},
+        {
+          event: terminalState,
+          message: `GitHub webhook observed PR ${repository}#${prNumber} ${merged ? "merged" : "closed"}`,
+        },
+      );
+      return { accepted: false, reason: terminalState };
+    }
+    if (action === "reopened" && relation.state === "closed") {
+      await lifecycle?.transition(
+        relation.relation_id,
+        "awaiting_feedback",
+        {},
+        {
+          event: "reopened",
+          message: `GitHub webhook observed PR ${repository}#${prNumber} reopened`,
+        },
+      );
+      return { accepted: false, reason: "reopened" };
+    }
+    if (action === "ready_for_review" && relation.state === "awaiting_review") {
+      await lifecycle?.transition(
+        relation.relation_id,
+        "awaiting_feedback",
+        {},
+        {
+          event: "ready_for_review",
+          message: `GitHub webhook observed PR ${repository}#${prNumber} ready for review`,
+        },
+      );
+      return { accepted: false, reason: "ready_for_review" };
+    }
+    await lifecycle?.transition(
+      relation.relation_id,
+      relation.state,
+      {},
+      {
+        event: "pull_request_event_ignored",
+        message: `GitHub pull_request event '${action}' did not require a maintenance wake for ${repository}#${prNumber}`,
+      },
+    );
+    return { accepted: false, reason: "pull_request_event_ignored", action };
+  }
+  if (relation.state !== "awaiting_feedback" && relation.state !== "fixing") {
+    return { accepted: false, reason: "relation_not_actionable" };
+  }
+  // 作者过滤：bot（CLAassistant / google-cla[bot] 等）与我们自己账号的
+  // 评论不算外部反馈——否则 approve-issue 发出去的分析会被捡回来自我唤醒
+  // （2026-08-15 生产审计：rtk#3550 / adk-python#6713 的 bot 留言曾白白
+  // 消耗 repair_count）。
+  const feedbackAuthor =
+    (typeof comment?.user === "object" && comment.user !== null
+      ? getString(comment.user as Record<string, unknown>, "login")
+      : null) ??
+    (typeof review?.user === "object" && review.user !== null
+      ? getString(review.user as Record<string, unknown>, "login")
+      : null) ??
+    (sender ? getString(sender, "login") : null);
+  if (
+    (eventType === "issue_comment" ||
+      eventType === "pull_request_review_comment" ||
+      eventType === "pull_request_review") &&
+    !isExternalFeedbackAuthor(feedbackAuthor, await getSelfLogin())
+  ) {
+    await lifecycle?.transition(
+      relation.relation_id,
+      relation.state,
+      {},
+      {
+        event: "feedback_author_filtered",
+        message: `ignored feedback from bot/self author ${feedbackAuthor ?? "unknown"} on ${repository}#${prNumber}`,
+      },
+    );
+    return { accepted: false, reason: "feedback_author_filtered" };
+  }
+  const commentId =
+    typeof comment?.id === "number"
+      ? comment.id
+      : typeof comment?.id === "string" && comment.id.trim() !== ""
+        ? Number(comment.id)
+        : undefined;
+  const reviewId =
+    typeof review?.id === "number"
+      ? review.id
+      : typeof review?.id === "string" && review.id.trim() !== ""
+        ? Number(review.id)
+        : undefined;
+  const issueCommentId = eventType === "issue_comment" ? commentId : undefined;
+  const lastProcessedPatch: Partial<RelationRecord["last_processed"]> = {};
+  const eventPayload: Record<string, unknown> = {};
+  if (eventType === "issue_comment") {
+    if (!issueCommentId) {
+      return { accepted: false, reason: "missing_comment" };
+    }
+    lastProcessedPatch.issue_comment_id = issueCommentId;
+    eventPayload.issue_comment_id = issueCommentId;
+  } else if (eventType === "pull_request_review_comment") {
+    if (!commentId) {
+      return { accepted: false, reason: "missing_comment" };
+    }
+    lastProcessedPatch.comment_id = commentId;
+    eventPayload.comment_id = commentId;
+  } else if (eventType === "pull_request_review") {
+    if (!reviewId) {
+      return { accepted: false, reason: "missing_review" };
+    }
+    lastProcessedPatch.review_id = reviewId;
+    eventPayload.review_id = reviewId;
+  } else {
+    return { accepted: false, reason: "event_ignored" };
+  }
+  const feedback = await lifecycle?.receiveFeedback(relation.relation_id, {
+    eventType,
+    cursor: lastProcessedPatch,
+    incrementFeedbackCount: true,
+    log: {
+      event: eventType,
+      message: `GitHub webhook ${eventType} woke maintenance for ${repository}#${prNumber}`,
+    },
+  });
+  if (feedback?.repairLimitReached) {
+    return { accepted: false, reason: "repair_limit_reached" };
+  }
+  if (!feedback?.relation) {
+    return { accepted: false, reason: "relation_not_found" };
+  }
+  // event_id 必须带 relation 后缀：同一 delivery 唤醒多个 relation 时，
+  // TriggerQueueStore 按 event_id 幂等去重，不带后缀只有第一个能进队。
+  const eventIdBase =
+    delivery || `github-${eventType}-${repository}-${prNumber}`;
+  const eventId = `${eventIdBase}-${relation.relation_id}`;
+  await triggerQueueStore.enqueue({
+    event_id: eventId,
+    loop_id: relation.loop_id,
+    source: "webhook",
+    priority: "normal",
+    payload: {
+      relation_id: relation.relation_id,
+      maintenance_id: relation.relation_id,
+      event_type: eventType,
+      repository,
+      pr_number: prNumber,
+      ...eventPayload,
+    },
+  });
+  await drainPendingTriggers?.(relation.loop_id);
+  return { accepted: true, event_id: eventId };
 }
 
 async function isValidPrPublishCwd(

@@ -26,8 +26,8 @@ function makeWebhookApp(
       githubClient: {} as GitHubClient,
       relationStore: {
         findById: () => relation,
-        findByGitHubPr: () => relation,
-        findByGitHubIssue: () => null,
+        findAllByGitHubPr: () => [relation],
+        findAllByGitHubIssue: () => [],
         updateState: async (id: string, state: string, patch?: object) => {
           relationUpdates.push({ id, state, patch });
           return { ...relation, ...patch, state };
@@ -224,14 +224,16 @@ test("GitHub webhook enqueues a trigger for a known relation", async () => {
       repair_count: 0,
       last_processed: {},
     }),
-    findByGitHubPr: () => ({
-      relation_id: "rel-1",
-      loop_id: "loop-maintainer",
-      state: "awaiting_feedback",
-      feedback_count: 0,
-      repair_count: 0,
-      last_processed: {},
-    }),
+    findAllByGitHubPr: () => [
+      {
+        relation_id: "rel-1",
+        loop_id: "loop-maintainer",
+        state: "awaiting_feedback",
+        feedback_count: 0,
+        repair_count: 0,
+        last_processed: {},
+      },
+    ],
     updateState: async (id: string, state: string, patch?: object) => {
       relationUpdates.push({ id, state, patch });
       return { relation_id: id, state };
@@ -278,7 +280,7 @@ test("GitHub webhook enqueues a trigger for a known relation", async () => {
   assert.equal(response.status, 202);
   assert.deepEqual(await json(response), {
     accepted: true,
-    event_id: "delivery-1",
+    event_id: "delivery-1-rel-1",
   });
   assert.equal(enqueued.length, 1);
   assert.equal(enqueued[0]?.loop_id, "loop-maintainer");
@@ -332,8 +334,9 @@ test("GitHub webhook writes issue_comment watermark separately", async () => {
     },
     body: JSON.stringify({
       repository: { full_name: "owner/repo" },
-      // 真实 GitHub 负载里 PR 对话区的 issue_comment 必带 pull_request 键；
-      // 只有纯 issue 的评论才没有（现在会路由到 github_issue relation）。
+      // 真实 GitHub 负载里 PR 对话区的 issue_comment 带 issue.pull_request
+      // 子对象（无顶层 pull_request）；这里两种键都带上，两种形态都应路由到
+      // github_pr relation。纯 issue 评论才走 github_issue relation。
       pull_request: { number: 12 },
       issue: { number: 12 },
       comment: { id: 9 },
@@ -1220,7 +1223,7 @@ test("GitHub webhook wakes a github_issue relation on external issue comments", 
       githubClient: {} as GitHubClient,
       relationStore: {
         findById: () => relation,
-        findByGitHubIssue: () => relation,
+        findAllByGitHubIssue: () => [relation],
         updateState: async (id: string, state: string) => {
           relationUpdates.push({ id, state });
           return { ...relation, state };
@@ -1248,7 +1251,10 @@ test("GitHub webhook wakes a github_issue relation on external issue comments", 
   });
 
   assert.equal(response.status, 202);
-  assert.deepEqual(await json(response), { accepted: true, event_id: "d-1" });
+  assert.deepEqual(await json(response), {
+    accepted: true,
+    event_id: "d-1-rel-issue-36750",
+  });
   assert.equal(enqueued.length, 1);
   assert.ok(
     relationUpdates.some(
@@ -1281,7 +1287,7 @@ test("GitHub webhook ignores bot comments instead of consuming repair budget", a
       githubClient: {} as GitHubClient,
       relationStore: {
         findById: () => relation,
-        findByGitHubPr: () => relation,
+        findAllByGitHubPr: () => [relation],
         updateState: async (id: string, state: string) => ({
           ...relation,
           state,
@@ -1312,4 +1318,173 @@ test("GitHub webhook ignores bot comments instead of consuming repair budget", a
   assert.equal(response.status, 202);
   assert.equal((await json(response)).reason, "feedback_author_filtered");
   assert.equal(enqueued.length, 0);
+});
+
+test("GitHub webhook wakes every relation tracking the same PR", async () => {
+  const enqueued: Array<{
+    event_id: string;
+    loop_id: string;
+    payload: object;
+  }> = [];
+  const drained: Array<string | undefined> = [];
+  // 生产实例：google/adk-python#6713 曾同时被两个 loop 跟踪，
+  // 旧实现 findByGitHubPr 只返回第一个，第二个永远醒不来。
+  const relations = [
+    {
+      relation_id: "rel-adk-6713-a",
+      loop_id: "loop-a",
+      state: "awaiting_feedback",
+      feedback_count: 0,
+      repair_count: 0,
+      last_processed: {},
+    },
+    {
+      relation_id: "rel-adk-6713-b",
+      loop_id: "loop-b",
+      state: "awaiting_feedback",
+      feedback_count: 0,
+      repair_count: 0,
+      last_processed: {},
+    },
+  ];
+  const app = new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {} as GitHubClient,
+      relationStore: {
+        findById: (id: string) =>
+          relations.find((relation) => relation.relation_id === id) ?? null,
+        findAllByGitHubPr: () => relations,
+        findAllByGitHubIssue: () => [],
+        updateState: async (id: string, state: string) => ({
+          relation_id: id,
+          state,
+        }),
+      } as never,
+      triggerQueueStore: {
+        enqueue: async (input: {
+          event_id: string;
+          loop_id: string;
+          payload: object;
+        }) => {
+          enqueued.push(input);
+          return { ...input, state: "pending" };
+        },
+      } as never,
+      drainPendingTriggers: async (loopId?: string) => {
+        drained.push(loopId);
+      },
+    }),
+  );
+
+  const response = await app.request("/github/webhook", {
+    method: "POST",
+    headers: {
+      "x-github-event": "pull_request_review_comment",
+      "x-github-delivery": "d-multi",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      repository: { full_name: "google/adk-python" },
+      pull_request: { number: 6713 },
+      comment: { id: 42, user: { login: "surajksharma07" } },
+      action: "created",
+    }),
+  });
+
+  assert.equal(response.status, 202);
+  const body = await json(response);
+  const results = body.results as Array<Record<string, unknown>>;
+  assert.equal(results.length, 2);
+  assert.deepEqual(
+    results.map((result) => [result.relation_id, result.accepted]),
+    [
+      ["rel-adk-6713-a", true],
+      ["rel-adk-6713-b", true],
+    ],
+  );
+  // 同一 delivery 必须给每个 relation 生成独立 event_id，否则
+  // TriggerQueueStore 的幂等去重会让第二个 relation 永远醒不来。
+  assert.deepEqual(
+    enqueued.map((entry) => entry.event_id),
+    ["d-multi-rel-adk-6713-a", "d-multi-rel-adk-6713-b"],
+  );
+  assert.deepEqual(drained, ["loop-a", "loop-b"]);
+});
+
+test("GitHub webhook routes PR conversation comments via issue.pull_request", async () => {
+  const enqueued: Array<{ event_id: string; payload: object }> = [];
+  const relation = {
+    relation_id: "rel-pr-12",
+    loop_id: "loop-maintainer",
+    state: "awaiting_feedback",
+    feedback_count: 0,
+    repair_count: 0,
+    last_processed: {},
+  };
+  let issueLookupUsed = false;
+  const app = new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {} as GitHubClient,
+      relationStore: {
+        findById: () => relation,
+        findAllByGitHubPr: () => [relation],
+        findAllByGitHubIssue: () => {
+          issueLookupUsed = true;
+          return [];
+        },
+        updateState: async (id: string, state: string) => ({
+          ...relation,
+          state,
+        }),
+      } as never,
+      triggerQueueStore: {
+        enqueue: async (input: { event_id: string; payload: object }) => {
+          enqueued.push(input);
+          return { ...input, state: "pending" };
+        },
+      } as never,
+      drainPendingTriggers: async () => {},
+    }),
+  );
+
+  // 真实 GitHub issue_comment 负载：PR 对话区评论没有顶层 pull_request，
+  // 只有 issue.pull_request 子对象。旧代码按纯 issue 路由，github_pr
+  // relation 永远匹配不上。
+  const response = await app.request("/github/webhook", {
+    method: "POST",
+    headers: {
+      "x-github-event": "issue_comment",
+      "x-github-delivery": "d-pr-conv",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      repository: { full_name: "owner/repo" },
+      issue: {
+        number: 12,
+        pull_request: {
+          url: "https://api.github.com/repos/owner/repo/pulls/12",
+        },
+      },
+      comment: { id: 77, user: { login: "external-user" } },
+      action: "created",
+    }),
+  });
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await json(response), {
+    accepted: true,
+    event_id: "d-pr-conv-rel-pr-12",
+  });
+  assert.equal(issueLookupUsed, false);
+  assert.equal(enqueued.length, 1);
+  assert.equal(
+    (enqueued[0]?.payload as { issue_comment_id?: number }).issue_comment_id,
+    77,
+  );
 });

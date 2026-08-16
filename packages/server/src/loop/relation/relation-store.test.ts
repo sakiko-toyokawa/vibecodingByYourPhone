@@ -33,12 +33,12 @@ test("RelationStore persists relations and finds by GitHub PR", async () => {
     await store.initialize();
     await store.upsert(makeRelation());
 
-    const found = store.findByGitHubPr(
+    const found = store.findAllByGitHubPr(
       "open-multi-agent/open-multi-agent",
       490,
     );
-    assert.ok(found);
-    assert.equal(found?.relation_id, "rel-oma-488");
+    assert.equal(found.length, 1);
+    assert.equal(found[0]?.relation_id, "rel-oma-488");
 
     const reloaded = new RelationStore({ dataDir });
     await reloaded.initialize();
@@ -46,6 +46,36 @@ test("RelationStore persists relations and finds by GitHub PR", async () => {
     assert.equal(
       subject?.type === "github_pr" ? subject.branch : undefined,
       "fix/488-isolate-oma-model-in-runtime-tests",
+    );
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("RelationStore returns every relation tracking the same GitHub PR", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-relations-"));
+  try {
+    const store = new RelationStore({ dataDir });
+    await store.initialize();
+    await store.upsert(makeRelation());
+    await store.upsert({
+      ...makeRelation(),
+      relation_id: "rel-oma-488-second",
+      loop_id: "github-agent-maintainer-2",
+    });
+
+    const found = store.findAllByGitHubPr(
+      "open-multi-agent/open-multi-agent",
+      490,
+    );
+    assert.deepEqual(found.map((relation) => relation.relation_id).sort(), [
+      "rel-oma-488",
+      "rel-oma-488-second",
+    ]);
+    // 不匹配的编号返回空数组而不是 null
+    assert.deepEqual(
+      store.findAllByGitHubPr("open-multi-agent/open-multi-agent", 491),
+      [],
     );
   } finally {
     await rm(dataDir, { recursive: true, force: true });

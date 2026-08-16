@@ -343,33 +343,37 @@ export class RelationStore {
     return target ? targetToRelation(target) : null;
   }
 
-  findByGitHubPr(repository: string, prNumber: number): RelationRecord | null {
+  // 同一 PR 可能被多个 loop 同时跟踪（生产实例：adk-python#6713 有两个
+  // relation），所以这里返回全部匹配，调用方必须逐个处理，不能只取第一个。
+  findAllByGitHubPr(repository: string, prNumber: number): RelationRecord[] {
     this.ensureInitialized();
-    const target = this.maintenanceTargetStore
+    return this.maintenanceTargetStore
       .list()
-      .find(
+      .filter(
         (item) =>
           item.target_type === "github_pr" &&
           item.adapter_data?.repository === repository &&
           item.adapter_data?.pr_number === prNumber,
-      );
-    return target ? targetToRelation(target) : null;
+      )
+      .map((target) => targetToRelation(target))
+      .filter((relation): relation is RelationRecord => relation !== null);
   }
 
-  findByGitHubIssue(
+  findAllByGitHubIssue(
     repository: string,
     issueNumber: number,
-  ): RelationRecord | null {
+  ): RelationRecord[] {
     this.ensureInitialized();
-    const target = this.maintenanceTargetStore
+    return this.maintenanceTargetStore
       .list()
-      .find(
+      .filter(
         (item) =>
           item.target_type === "github_issue" &&
           item.adapter_data?.repository === repository &&
           item.adapter_data?.issue_number === issueNumber,
-      );
-    return target ? targetToRelation(target) : null;
+      )
+      .map((target) => targetToRelation(target))
+      .filter((relation): relation is RelationRecord => relation !== null);
   }
 
   list(): RelationRecord[] {
