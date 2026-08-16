@@ -76,6 +76,7 @@ import {
   createLoopToolApprovalHook,
 } from "./policy/approval-hook.js";
 import { resolvePolicyProfile } from "./policy/profiles.js";
+import type { LoopProposalLifecycleService } from "./proposal/lifecycle-service.js";
 import { RelationLifecycleService } from "./relation/lifecycle-service.js";
 import type { RelationStore } from "./relation/relation-store.js";
 import {
@@ -199,6 +200,8 @@ export interface LoopRunServiceDeps {
   relationLifecycle?: RelationLifecycleService;
   /** Durable generic maintenance target store used by external-driven runs. */
   maintenanceTargetStore?: MaintenanceTargetStore;
+  /** LOOP-PROPOSAL 閘門單寫者（P1）；缺席時 run 完成不注册 loop 提案。 */
+  loopProposalLifecycle?: LoopProposalLifecycleService;
   /** Planner Agent for multi-turn task decomposition (optional). */
   planner?: PlannerService;
   /** Watchdog / stagnation settings. */

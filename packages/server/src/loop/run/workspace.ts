@@ -89,6 +89,48 @@ export async function resolveExecutableCard(
       worktree: null,
     };
   }
+  const declaredPath = card.loop.workspace.path;
+  // LOOP-PROPOSAL 閘門落地的子 loop（P1-2 钳制层强制 managed:// 前缀）：
+  // 通用 server 管理工作区，解析到 dataDir 下的同名相对目录。
+  // github_prompt 分支在上面已先行处理（路径口径更严）。
+  if (declaredPath?.startsWith("managed://")) {
+    if (!deps.dataDir) {
+      throw new AssemblyError(
+        "Managed loop workspace cannot start: server data directory is not configured",
+      );
+    }
+    const workspacePath = path.join(
+      deps.dataDir,
+      declaredPath.slice("managed://".length),
+    );
+    // 纵深防御：managed:// 后缀不许越出 dataDir。提案钳制层已强制
+    // loop-workspaces/<kebab-id>，这里再挡一次直建卡与脏数据；
+    // 检查必须先于 mkdir，否则会先把越界目录建出来。
+    const escapeCheck = path.relative(
+      path.resolve(deps.dataDir),
+      path.resolve(workspacePath),
+    );
+    if (escapeCheck.startsWith("..") || path.isAbsolute(escapeCheck)) {
+      throw new AssemblyError(
+        `Managed loop workspace cannot start: path '${declaredPath}' escapes the server data directory`,
+      );
+    }
+    await mkdir(workspacePath, { recursive: true });
+    return {
+      card: {
+        ...card,
+        loop: {
+          ...card.loop,
+          workspace: {
+            ...card.loop.workspace,
+            strategy: "direct",
+            path: workspacePath,
+          },
+        },
+      },
+      worktree: null,
+    };
+  }
   if (card.loop.workspace.strategy !== "worktree") {
     return { card, worktree: null };
   }

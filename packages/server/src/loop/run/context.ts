@@ -20,6 +20,7 @@ import type { ControlPlane } from "../control-plane/control-plane.js";
 import type { RunStateStore } from "../control-plane/run-state-store.js";
 import type { MaintenanceTargetStore } from "../maintenance/maintenance-target-store.js";
 import type { MaintenanceTarget } from "../maintenance/types.js";
+import type { LoopProposalLifecycleService } from "../proposal/lifecycle-service.js";
 import type { RelationLifecycleService } from "../relation/lifecycle-service.js";
 import type {
   RelationRecord,
@@ -54,6 +55,8 @@ export interface RunContextDeps {
   relationStore?: RelationStore;
   relationLifecycle?: RelationLifecycleService;
   maintenanceTargetStore?: MaintenanceTargetStore;
+  /** LOOP-PROPOSAL 閘門單寫者；缺席時 run 完成不注册 loop 提案。 */
+  loopProposalLifecycle?: LoopProposalLifecycleService;
 }
 
 /**

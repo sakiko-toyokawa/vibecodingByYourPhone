@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { type GitHubRelation, githubApi } from "../../api/github";
+import { type LoopProposal, loopProposalsApi } from "../../api/loop-proposals";
 import { type HumanSlaItem, loopsApi } from "../../api/loops";
 import { useRemoteBasePath } from "../../hooks/useRemoteBasePath";
 import { activityBus } from "../../lib/activityBus";
 import { humanizeRelationState } from "../../lib/loopHumanText";
 
-type InboxKind = "sla" | "needs_human" | "relation";
+type InboxKind = "sla" | "needs_human" | "relation" | "loop_proposal";
 
 interface InboxItem {
   id: string;
@@ -17,6 +18,7 @@ interface InboxItem {
   loopId: string;
   runId?: string;
   relation?: GitHubRelation;
+  proposal?: LoopProposal;
   human?: HumanSlaItem;
   timestamp: string;
 }
@@ -26,6 +28,7 @@ const REFRESH_EVENTS = [
   "loop-state-changed",
   "relation-state-changed",
   "feedback-received",
+  "loop-proposal-changed",
 ] as const;
 
 function urgencyForHuman(item: HumanSlaItem): number {
@@ -72,6 +75,23 @@ function relationToItem(relation: GitHubRelation): InboxItem {
   };
 }
 
+function proposalToItem(proposal: LoopProposal): InboxItem {
+  const trigger = proposal.card.loop.trigger;
+  return {
+    id: `loop-proposal:${proposal.proposal_id}`,
+    kind: "loop_proposal",
+    urgency: 1,
+    title: proposal.card.loop.id,
+    subtitle: `parent: ${proposal.parent_loop_id} · ${
+      trigger.type === "schedule" && trigger.cron ? trigger.cron : trigger.type
+    }`,
+    loopId: proposal.parent_loop_id,
+    runId: proposal.run_id,
+    proposal,
+    timestamp: proposal.updated_at,
+  };
+}
+
 function kindLabel(kind: InboxKind): string {
   switch (kind) {
     case "sla":
@@ -80,6 +100,8 @@ function kindLabel(kind: InboxKind): string {
       return "Needs human";
     case "relation":
       return "PR approval";
+    case "loop_proposal":
+      return "Loop proposal";
   }
 }
 
@@ -91,6 +113,8 @@ function kindClass(kind: InboxKind): string {
       return "bg-[var(--warning-color)]/15 text-[var(--warning-color)]";
     case "relation":
       return "bg-[var(--accent-rust)]/15 text-[var(--accent-rust)]";
+    case "loop_proposal":
+      return "bg-[var(--primary)]/15 text-[var(--primary)]";
   }
 }
 
@@ -107,15 +131,19 @@ export function ActionInbox() {
 
   const load = useCallback(async () => {
     try {
-      const [pending, relations] = await Promise.all([
+      const [pending, relations, proposals] = await Promise.all([
         loopsApi.listPendingHuman(),
         githubApi.listRelations().catch(() => ({ relations: [] })),
+        loopProposalsApi
+          .listProposals("pending_approval")
+          .catch(() => ({ proposals: [] as LoopProposal[] })),
       ]);
       const next = [
         ...pending.items.map(humanToItem),
         ...relations.relations
           .filter((relation) => relation.state === "pr_pending_approval")
           .map(relationToItem),
+        ...proposals.proposals.map(proposalToItem),
       ].sort(
         (a, b) =>
           a.urgency - b.urgency || a.timestamp.localeCompare(b.timestamp),
@@ -144,7 +172,16 @@ export function ActionInbox() {
       setBusy((current) => new Set(current).add(item.id));
       setError(null);
       try {
-        if (item.relation) {
+        if (item.proposal) {
+          if (action === "approve") {
+            await loopProposalsApi.approveProposal(item.proposal.proposal_id);
+          } else {
+            await loopProposalsApi.rejectProposal(
+              item.proposal.proposal_id,
+              "Rejected from Loop Center",
+            );
+          }
+        } else if (item.relation) {
           await githubApi.approvePr(item.relation.relation_id);
         } else if (item.runId) {
           if (action === "approve") {
@@ -236,6 +273,27 @@ export function ActionInbox() {
                   <div className="mt-1 break-all font-mono text-xs text-[var(--text-dimmed)]">
                     {item.subtitle}
                   </div>
+                  {item.proposal && (
+                    <div className="mt-2 flex flex-col gap-1 text-xs text-[var(--text-muted)]">
+                      {item.proposal.card.loop.handoff?.task && (
+                        <span className="break-words">
+                          Task: {item.proposal.card.loop.handoff.task}
+                        </span>
+                      )}
+                      <span>
+                        Budget: {item.proposal.card.loop.stop_rules.max_turns}{" "}
+                        turns /{" "}
+                        {item.proposal.card.loop.stop_rules.max_time_minutes}{" "}
+                        min
+                        {item.proposal.card.loop.handoff?.publish_mode
+                          ? ` · publish: ${item.proposal.card.loop.handoff.publish_mode}`
+                          : ""}
+                      </span>
+                      <span className="break-words italic">
+                        Reason: {item.proposal.reason}
+                      </span>
+                    </div>
+                  )}
                 </Link>
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                   {item.relation ? (

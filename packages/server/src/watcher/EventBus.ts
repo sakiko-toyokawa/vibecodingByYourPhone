@@ -12,6 +12,10 @@ import type {
   UrlProjectId,
 } from "@yep-anywhere/shared";
 import type {
+  LoopProposalRecord,
+  LoopProposalState,
+} from "../loop/proposal/loop-proposal-store.js";
+import type {
   RelationRecord,
   RelationState,
 } from "../loop/relation/relation-store.js";
@@ -424,6 +428,20 @@ export interface FeedbackReceivedEvent {
   timestamp: string;
 }
 
+/** Event emitted after every loop-proposal state-machine transition. */
+export interface LoopProposalChangedEvent {
+  type: "loop-proposal-changed";
+  proposal_id: string;
+  loop_id: string;
+  from_state: LoopProposalState | null;
+  to_state: LoopProposalState;
+  /** Optional state-machine event name that drove the transition. */
+  event?: string;
+  message?: string;
+  proposal: LoopProposalRecord;
+  timestamp: string;
+}
+
 /** Union of all event types that can be emitted through the bus */
 export type BusEvent =
   | FileChangeEvent
@@ -456,7 +474,8 @@ export type BusEvent =
   | VerificationStartedEvent
   | VerificationCompletedEvent
   | RelationStateChangedEvent
-  | FeedbackReceivedEvent;
+  | FeedbackReceivedEvent
+  | LoopProposalChangedEvent;
 
 export type EventHandler<T = BusEvent> = (event: T) => void;
 

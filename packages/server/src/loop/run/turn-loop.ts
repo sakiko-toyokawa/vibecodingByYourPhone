@@ -1374,6 +1374,17 @@ export async function runTurns(
         }
       }
 
+      // LOOP-PROPOSAL 閘門（P1）：仅卡上显式授权 can_propose_loops 的
+      // loop 才尝试解析提案块（默认不教也不收）；钳制、配额硬顶与
+      // rejected 落账都在 lifecycle 单写者内判定。
+      if (ctx.card.loop.can_propose_loops === true) {
+        await deps.loopProposalLifecycle?.registerLoopProposal(
+          loopId,
+          runId,
+          outcome.finalText,
+        );
+      }
+
       const handoffRef = await writeTurnHandoff(
         { runLedgerStore: deps.runLedgerStore },
         ctx,

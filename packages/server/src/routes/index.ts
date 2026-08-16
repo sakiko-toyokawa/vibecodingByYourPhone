@@ -11,6 +11,8 @@ import type {
 import type {
   ControlPlane,
   LoopCardStore,
+  LoopProposalLifecycleService,
+  LoopProposalStore,
   LoopRunService,
   MaintenanceTargetStore,
   ProposalStore,
@@ -49,6 +51,7 @@ import { createGlobalSessionsRoutes } from "./global-sessions.js";
 import { health } from "./health.js";
 import { createInboxRoutes } from "./inbox.js";
 import { createLocalImageRoutes } from "./local-image.js";
+import { createLoopProposalsRoutes } from "./loop-proposals.js";
 import { createLoopsRoutes } from "./loops.js";
 import { createMaintenanceRoutes } from "./maintenance.js";
 import { createNetworkBindingRoutes } from "./network-binding.js";
@@ -83,6 +86,8 @@ export interface RouteDependencies {
   relationStore?: RelationStore;
   relationLifecycle?: RelationLifecycleService;
   maintenanceTargetStore?: MaintenanceTargetStore;
+  loopProposalStore?: LoopProposalStore;
+  loopProposalLifecycle?: LoopProposalLifecycleService;
   githubCredentialStore: GitHubCredentialStore;
   githubToolProvisioner: GitHubToolProvisioner;
   githubClient: GitHubClient;
@@ -110,6 +115,8 @@ export function registerRoutes(
     relationStore,
     relationLifecycle,
     maintenanceTargetStore,
+    loopProposalStore,
+    loopProposalLifecycle,
     githubCredentialStore,
     githubToolProvisioner,
     githubClient,
@@ -450,6 +457,17 @@ export function registerRoutes(
         targetStore: maintenanceTargetStore,
         triggerQueueStore,
         drainPendingTriggers,
+      }),
+    );
+  }
+
+  // LOOP-PROPOSAL 閘門 API (P1-5): 提案列表 + approve/reject 人工闸门
+  if (loopProposalStore) {
+    app.route(
+      "/api/loop-proposals",
+      createLoopProposalsRoutes({
+        loopProposalStore,
+        loopProposalLifecycle,
       }),
     );
   }

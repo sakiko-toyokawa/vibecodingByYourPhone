@@ -1,6 +1,11 @@
 import type { RunDecisionAction } from "@yep-anywhere/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { type GitHubRelation, githubApi } from "../api/github";
 import {
   type InteractionDepsStatus,
@@ -16,6 +21,7 @@ import { WorkspaceStrategyBadge } from "../components/LoopWorkspaceHint";
 import { MaintenanceTargetCard } from "../components/MaintenanceTargetCard";
 import { PageHeader } from "../components/PageHeader";
 import { RunStreamOutput } from "../components/RunStreamOutput";
+import { useRemoteBasePath } from "../hooks/useRemoteBasePath";
 import { useRun } from "../hooks/useRun";
 import { useI18n } from "../i18n";
 import { useNavigationLayout } from "../layouts";
@@ -57,6 +63,7 @@ export function LoopDetailPage({
 }: LoopDetailPageProps = {}) {
   const { t } = useI18n();
   const { openSidebar, isWideScreen } = useNavigationLayout();
+  const basePath = useRemoteBasePath();
   const navigate = useNavigate();
   const { loopId } = useParams<{ loopId: string }>();
   const [searchParams] = useSearchParams();
@@ -97,6 +104,7 @@ export function LoopDetailPage({
   const [maintenanceTargets, setMaintenanceTargets] = useState<
     MaintenanceTarget[]
   >([]);
+  const [childLoops, setChildLoops] = useState<StoredLoop[]>([]);
   const [discarding, setDiscarding] = useState(false);
   const [decisionBusy, setDecisionBusy] = useState(false);
   const selectedRunIdRef = useRef<string | null>(null);
@@ -110,16 +118,29 @@ export function LoopDetailPage({
         { loop: storedLoop },
         { runs: runList },
         { targets: maintenanceList },
+        { loops: allLoops },
       ] = await Promise.all([
         loopsApi.getLoop(loopIdValue),
         loopsApi.listRuns(loopIdValue),
         maintenanceApi
           .listTargets(loopIdValue)
           .catch(() => ({ targets: [] as MaintenanceTarget[] })),
+        // 血缘可视化最小版（P1-6）：子 loop 列表，拉全量后按
+        // card.loop.parent_loop_id 过滤；listLoops 失败不拖垮整页。
+        loopsApi
+          .listLoops()
+          .catch(() => ({ loops: [] as StoredLoop[] })),
       ]);
       setLoop(storedLoop);
       setRuns(runList);
       setMaintenanceTargets(maintenanceList);
+      setChildLoops(
+        allLoops.filter(
+          (candidate) =>
+            candidate.id !== loopIdValue &&
+            candidate.card.loop.parent_loop_id === loopIdValue,
+        ),
+      );
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
@@ -579,6 +600,38 @@ export function LoopDetailPage({
                       target={target}
                       onChanged={() => void load()}
                     />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {childLoops.length > 0 && (
+              <section className="mb-6 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-secondary)] p-4">
+                <h2 className="m-0 mb-3 [font-size:var(--font-size-sm)] font-semibold text-[var(--text-primary)]">
+                  Child Loops
+                </h2>
+                <div className="flex flex-col gap-2">
+                  {childLoops.map((child) => (
+                    <Link
+                      key={child.id}
+                      to={`${basePath}/loops/${encodeURIComponent(child.id)}`}
+                      className="flex flex-wrap items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 no-underline transition-colors hover:border-[var(--border-hover)]"
+                    >
+                      <span className="font-mono text-sm text-[var(--text-primary)]">
+                        {child.id}
+                      </span>
+                      <span className="text-xs text-[var(--text-muted)]">
+                        {child.card.loop.trigger.type === "schedule" &&
+                        child.card.loop.trigger.cron
+                          ? child.card.loop.trigger.cron
+                          : child.card.loop.trigger.type}
+                      </span>
+                      {child.archived && (
+                        <span className="rounded-[var(--radius-sm)] bg-[var(--bg-hover)] px-1.5 py-0.5 text-xs text-[var(--text-muted)]">
+                          archived
+                        </span>
+                      )}
+                    </Link>
                   ))}
                 </div>
               </section>

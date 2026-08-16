@@ -20,6 +20,7 @@ import {
 } from "./logging/index.js";
 import {
   LoopCardStore,
+  LoopProposalStore,
   MaintenanceTargetStore,
   type RelationLifecycleService,
   type RelationPoller,
@@ -29,6 +30,7 @@ import type {
   ControlPlane,
   CronScheduler,
   LearningWorker,
+  LoopProposalLifecycleService,
   LoopRunService,
   ProposalPipeline,
   ProposalStore,
@@ -95,6 +97,10 @@ export interface ServicesContainer {
   relationStore?: RelationStore;
   relationLifecycle?: RelationLifecycleService;
   maintenanceTargetStore?: MaintenanceTargetStore;
+  // LOOP-PROPOSAL 閘門（store 在此注册; lifecycle 在 createApp 注册,
+  // 需要 app 级 learningEventStore）
+  loopProposalStore?: LoopProposalStore;
+  loopProposalLifecycle?: LoopProposalLifecycleService;
   relationPoller?: RelationPoller;
   triggerQueueStore?: TriggerQueueStore;
   drainPendingTriggers?: (loopId?: string) => Promise<void>;
@@ -342,6 +348,9 @@ export async function initializeServices(): Promise<ServicesContainer> {
     dataDir: config.dataDir,
     maintenanceTargetStore,
   });
+  const loopProposalStore = new LoopProposalStore({
+    dataDir: config.dataDir,
+  });
 
   // Initialize services (loads state from disk)
   await installService.initialize();
@@ -360,6 +369,7 @@ export async function initializeServices(): Promise<ServicesContainer> {
   await githubCredentialStore.initialize();
   await maintenanceTargetStore.initialize();
   await relationStore.initialize();
+  await loopProposalStore.initialize();
   await remoteSessionService.setDiskPersistenceEnabled(
     serverSettingsService.getSetting("persistRemoteSessionsToDisk"),
   );
@@ -453,6 +463,7 @@ export async function initializeServices(): Promise<ServicesContainer> {
     githubClient,
     relationStore,
     maintenanceTargetStore,
+    loopProposalStore,
   };
 
   // Register all services in the DI container

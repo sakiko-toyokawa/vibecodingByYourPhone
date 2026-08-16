@@ -235,6 +235,19 @@ export const LoopCardSchema = z.object({
       })
       .optional(),
     /**
+     * LOOP-PROPOSAL 閘門（loop-self-proposal-gate 計劃 P1）：顯式授權該
+     * loop 的 agent 在報告中輸出 LOOP-PROPOSAL 提案塊（提議創建子 loop，
+     * 人工批准後才落地）。缺省/缺字段 = 不能提案——能提案是顯式授權，
+     * 向後兼容：既有卡片無此字段一律視為關閉。
+     */
+    can_propose_loops: z.boolean().optional(),
+    /**
+     * 血緣：由 LOOP-PROPOSAL 閘門創建的子 loop 記錄其父 loop id。
+     * agent 建的 loop 默認不能再提議 loop（depth>1 拒絕），除非人類
+     * 在其卡上顯式開 can_propose_loops。
+     */
+    parent_loop_id: z.string().optional(),
+    /**
      * P5: 意圖理解 Agent 開關。開啟後合約構建順序為：
      * task_type 範本命中（免 agent、視為已確認）→ 否則意圖理解 Agent
      * 產生合約草案（confirmed_by_human=false，run 在首輪執行前泊入

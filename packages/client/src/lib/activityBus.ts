@@ -263,6 +263,18 @@ export interface FeedbackReceivedEvent {
   timestamp: string;
 }
 
+export interface LoopProposalChangedEvent {
+  type: "loop-proposal-changed";
+  proposal_id: string;
+  loop_id: string;
+  from_state: string | null;
+  to_state: string;
+  event?: string;
+  message?: string;
+  proposal: Record<string, unknown>;
+  timestamp: string;
+}
+
 // Map event names to their data types
 interface ActivityEventMap {
   "file-change": FileChangeEvent;
@@ -282,6 +294,7 @@ interface ActivityEventMap {
   "verification-completed": VerificationCompletedEvent;
   "relation-state-changed": RelationStateChangedEvent;
   "feedback-received": FeedbackReceivedEvent;
+  "loop-proposal-changed": LoopProposalChangedEvent;
   // Connection events
   "browser-tab-connected": BrowserTabConnectedEvent;
   "browser-tab-disconnected": BrowserTabDisconnectedEvent;
@@ -545,6 +558,7 @@ class ActivityBus {
       "verification-completed",
       "relation-state-changed",
       "feedback-received",
+      "loop-proposal-changed",
       "browser-tab-connected",
       "browser-tab-disconnected",
       "source-change",

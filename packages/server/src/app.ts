@@ -15,6 +15,7 @@ import {
   FailurePatternStore,
   LearningEventStore,
   LearningWorker,
+  LoopProposalLifecycleService,
   LoopRunService,
   ProposalPipeline,
   ProposalStore,
@@ -265,6 +266,18 @@ export function createApp(
       relationStore,
       eventBus: options.eventBus,
     });
+    // LOOP-PROPOSAL 閘門（P1-3）：提案單寫者。store 在 services-init
+    // 注册；learning 账/配额判定需要 app 级 learningEventStore。
+    const loopProposalStore = container.cradle.loopProposalStore;
+    if (!loopProposalStore) {
+      throw new Error("LoopProposalStore not initialized");
+    }
+    const loopProposalLifecycle = new LoopProposalLifecycleService({
+      proposalStore: loopProposalStore,
+      loopCardStore,
+      eventBus: options.eventBus,
+      learningEventStore,
+    });
     const loopRunService = new LoopRunService({
       supervisor,
       loopCardStore,
@@ -283,6 +296,7 @@ export function createApp(
       relationStore,
       relationLifecycle,
       maintenanceTargetStore,
+      loopProposalLifecycle,
       planner,
       loopWatchdog: {
         turnIdleTimeoutMs: options.loopTurnIdleTimeoutMs ?? 10 * 60 * 1000,
@@ -424,6 +438,7 @@ export function createApp(
     });
     registerValue("relationPoller", relationPoller);
     registerValue("relationLifecycle", relationLifecycle);
+    registerValue("loopProposalLifecycle", loopProposalLifecycle);
     const triggerDrainTimer = setInterval(() => {
       void drainPending().catch((error) =>
         console.warn("[LoopTrigger] queue drain failed:", error),
