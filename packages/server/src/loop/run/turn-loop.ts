@@ -1952,6 +1952,31 @@ export async function resumeAfterRestart(
       `[LoopRunService] run ${runState.run_id} for loop '${loopId}' requires restart confirmation: ${recoveryReason}`,
     );
     await controlPlane.requestRestartRecovery(loopId, recoveryReason);
+    // relation 同步：重啟恢復直接走 control-plane 進 needs_human，不經過
+    // executeRun 的掛起分支——不修這裡 relation 會假活停在 fixing
+    //（2026-08-15 生產殭屍：rtk#3550 relation 卡 fixing，run 早已掛起）。
+    const parkedRelation = deps.relationStore
+      ?.list()
+      .find(
+        (relation) =>
+          relation.loop_id === loopId && relation.state === "fixing",
+      );
+    if (parkedRelation && deps.relationStore) {
+      const lifecycle =
+        deps.relationLifecycle ??
+        new RelationLifecycleService({ relationStore: deps.relationStore });
+      await lifecycle.transition(
+        parkedRelation.relation_id,
+        "needs_human",
+        {
+          needs_human_reason: `run ${runState.run_id} parked by restart recovery: ${recoveryReason}`,
+        },
+        {
+          event: "run_needs_human",
+          message: `relation run ${runState.run_id} parked by restart recovery`,
+        },
+      );
+    }
     return;
   }
 

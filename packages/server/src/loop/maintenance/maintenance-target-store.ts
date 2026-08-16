@@ -85,7 +85,12 @@ export class MaintenanceTargetStore {
     this.ensureInitialized();
     const normalized = repository.trim().toLowerCase();
     return this.list().filter((target) => {
-      if (target.target_type !== "github_pr") {
+      // github_issue relation 也參與查重——同一個 issue 已有 loop 在跟踪時
+      // 要能擋住重複建 loop（此前只認 github_pr，issue 閉環是查重盲區）。
+      if (
+        target.target_type !== "github_pr" &&
+        target.target_type !== "github_issue"
+      ) {
         return false;
       }
       const adapter = (target.adapter_data ?? {}) as {
