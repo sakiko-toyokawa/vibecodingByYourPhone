@@ -4,6 +4,7 @@
  * and the service persists, logs, and emits relation events.
  */
 
+import type { GitHubClient } from "../../github/client.js";
 import type { IEventBus } from "../../watcher/index.js";
 import { RELATION_MAX_REPAIRS, RELATION_TRIGGER_TYPES } from "./constants.js";
 import {
@@ -23,6 +24,10 @@ export { RELATION_MAX_REPAIRS, RELATION_TRIGGER_TYPES };
 export interface RelationLifecycleDeps {
   relationStore: RelationStore;
   eventBus?: IEventBus;
+  githubClient?: Pick<
+    GitHubClient,
+    "findOpenPrByHead" | "findOpenIssueByTitle" | "getVerifiedIdentity"
+  >;
 }
 
 export interface RelationLogInput {
@@ -226,6 +231,32 @@ export class RelationLifecycleService {
     }
     const now = new Date().toISOString();
     const gitIdentity = await readGitIdentity(pendingPublish.cwd);
+    if (
+      this.deps.githubClient &&
+      typeof this.deps.githubClient.findOpenPrByHead === "function"
+    ) {
+      const openPr = await this.deps.githubClient
+        .findOpenPrByHead(pendingPublish.repository, pendingPublish.branch)
+        .catch(() => null);
+      if (openPr) {
+        return null;
+      }
+    }
+    let identityVerified: boolean | undefined;
+    if (
+      this.deps.githubClient &&
+      gitIdentity &&
+      typeof this.deps.githubClient.getVerifiedIdentity === "function"
+    ) {
+      try {
+        const verified = await this.deps.githubClient.getVerifiedIdentity();
+        identityVerified =
+          verified.emails.includes(gitIdentity.email) &&
+          gitIdentity.name === verified.login;
+      } catch {
+        identityVerified = false;
+      }
+    }
     const existing = this.deps.relationStore
       .list()
       .find(
@@ -268,6 +299,9 @@ export class RelationLifecycleService {
                 author_name: gitIdentity.name,
                 author_email: gitIdentity.email,
                 identity_source: "git_config",
+                ...(identityVerified !== undefined
+                  ? { identity_verified: identityVerified }
+                  : {}),
               }
             : {}),
           run_id: runId,
@@ -298,6 +332,18 @@ export class RelationLifecycleService {
     const proposal = extractIssueProposalPayload(finalText);
     if (!proposal) {
       return null;
+    }
+    if (
+      !proposal.action &&
+      this.deps.githubClient &&
+      typeof this.deps.githubClient.findOpenIssueByTitle === "function"
+    ) {
+      const openIssue = await this.deps.githubClient
+        .findOpenIssueByTitle(proposal.repository, proposal.title)
+        .catch(() => null);
+      if (openIssue) {
+        return null;
+      }
     }
     const now = new Date().toISOString();
     const existing = this.deps.relationStore

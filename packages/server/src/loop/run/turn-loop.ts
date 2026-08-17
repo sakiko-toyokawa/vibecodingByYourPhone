@@ -96,7 +96,10 @@ import type {
   GithubToolProvisioner,
   RunExecutionContext,
 } from "./types.js";
-import { validateRunWorkingState } from "./working-state-validation.js";
+import {
+  reconcileSubtaskStatusAgainstPlan,
+  validateRunWorkingState,
+} from "./working-state-validation.js";
 import {
   loopRuntime,
   resolveExecutableCard,
@@ -659,25 +662,39 @@ export async function runTurns(
           turn: ctx.turn,
           updated_at: new Date().toISOString(),
         };
-        const validation = await validateRunWorkingState(candidate);
+        const reconciled = ctx.taskPlan
+          ? reconcileSubtaskStatusAgainstPlan(
+              candidate,
+              ctx.taskPlan,
+              ctx.currentSubtaskIndex,
+            )
+          : candidate;
+        const validation = await validateRunWorkingState(reconciled);
+        const validationIssues = [...validation.issues];
+        if (reconciled !== candidate) {
+          validationIssues.push(
+            "executor claimed later subtasks as done; demoted to pending",
+          );
+        }
         if (validation.verified) {
-          ctx.workingState = candidate;
+          ctx.workingState = reconciled;
           await store.writeArtifact(
             runId,
             "working-state.json",
             `${JSON.stringify(ctx.workingState, null, 2)}\n`,
           );
-        } else {
+        }
+        if (validationIssues.length > 0) {
           console.warn(
-            `[LoopRunService] run ${runId} turn ${ctx.turn} reported unverified working state: ${validation.issues.join("; ")}`,
+            `[LoopRunService] run ${runId} turn ${ctx.turn} reported working state issues: ${validationIssues.join("; ")}`,
           );
           const validationArtifact = `${JSON.stringify(
             {
               run_id: runId,
               turn: ctx.turn,
               verified_at: new Date().toISOString(),
-              verified: false,
-              issues: validation.issues,
+              verified: validation.verified,
+              issues: validationIssues,
               selected_subject: validation.selected_subject,
             },
             null,
@@ -1253,7 +1270,11 @@ export async function runTurns(
       let blockerFingerprint: string | undefined;
       let repeatedBlockerCount: number | undefined;
       if (deps.controlPlane && ctx.contract && shouldAdvanceSubtask) {
-        finalStatus = "active";
+        const maxTurns = ctx.contract.budget.max_turns;
+        finalStatus =
+          maxTurns <= 0 || ctx.turn + 1 > maxTurns
+            ? "budget_limited"
+            : "active";
       } else if (deps.controlPlane && ctx.contract) {
         const diffSummary = verificationWorkspacePath
           ? ((await captureGitDiffStat(

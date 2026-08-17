@@ -271,6 +271,7 @@ export function createApp(
     const relationLifecycle = new RelationLifecycleService({
       relationStore,
       eventBus: options.eventBus,
+      githubClient: container.cradle.githubClient,
     });
     // LOOP-PROPOSAL 閘門（P1-3）：提案單寫者。store 在 services-init
     // 注册；learning 账/配额判定需要 app 级 learningEventStore。

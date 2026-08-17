@@ -398,6 +398,12 @@ test("subtask advance stops at max_turns (budget_limited, no overrun)", async ()
       2,
       "run state stays on the completed turn; the unstarted turn is not consumed",
     );
+    const latestLedger = await runLedgerStore.readEntry(runId);
+    assert.equal(
+      latestLedger?.final_status,
+      "budget_limited",
+      "budget-guarded advance must write a terminal ledger entry",
+    );
   } finally {
     await rm(dataDir, { recursive: true, force: true, maxRetries: 5 });
   }

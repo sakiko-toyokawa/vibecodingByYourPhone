@@ -1,7 +1,11 @@
 import { execFile } from "node:child_process";
 import * as fs from "node:fs/promises";
 import { promisify } from "node:util";
-import type { RunWorkingState, SelectedSubject } from "@yep-anywhere/shared";
+import type {
+  RunWorkingState,
+  SelectedSubject,
+  TaskPlan,
+} from "@yep-anywhere/shared";
 
 const execFileAsync = promisify(execFile);
 
@@ -15,6 +19,50 @@ export interface WorkingStateValidationResult {
 export interface WorkingStateValidationDeps {
   pathExists?: (path: string) => Promise<boolean>;
   gitRemote?: (path: string) => Promise<string | null>;
+}
+
+/**
+ * Reconcile executor-reported subtask status with the planner's authoritative
+ * one-turn-one-subtask contract. Later subtasks cannot be marked done by a
+ * prompt claim; the machine must demote them so the next turn still executes
+ * the real remaining work.
+ */
+export function reconcileSubtaskStatusAgainstPlan(
+  state: RunWorkingState,
+  taskPlan: TaskPlan,
+  currentSubtaskIndex: number,
+): RunWorkingState {
+  const expected = taskPlan.subtasks.map((subtask, index) => {
+    const reported = state.subtask_status.find((s) => s.id === subtask.id);
+    if (index < currentSubtaskIndex) {
+      return {
+        id: subtask.id,
+        status: "done" as const,
+        outputs: reported?.outputs ?? "subtask completed and verified",
+      };
+    }
+    if (index === currentSubtaskIndex) {
+      return {
+        id: subtask.id,
+        status: reported?.status ?? ("in_progress" as const),
+        ...(reported?.outputs ? { outputs: reported.outputs } : {}),
+      };
+    }
+    return { id: subtask.id, status: "pending" as const };
+  });
+
+  const changed =
+    expected.length !== state.subtask_status.length ||
+    expected.some((entry, index) => {
+      const reported = state.subtask_status[index];
+      return (
+        entry.id !== reported?.id ||
+        entry.status !== reported?.status ||
+        (entry.outputs ?? undefined) !== (reported?.outputs ?? undefined)
+      );
+    });
+
+  return changed ? { ...state, subtask_status: expected } : state;
 }
 
 function normalizeRepository(value: string): string {

@@ -66,6 +66,70 @@ test("GitHubClient searches issues with token isolated in environment", async ()
   assert.equal(issues[0]?.repository, "owner/repo");
 });
 
+test("GitHubClient finds an open PR by head branch", async () => {
+  const calls: string[][] = [];
+  const client = new GitHubClient({
+    ghPath: "/tools/gh",
+    tokenProvider: async () => "secret-token",
+    runGh: async (args) => {
+      calls.push(args);
+      return {
+        exitCode: 0,
+        stdout:
+          '[{"number":12,"title":"Fix bug","url":"https://github.com/owner/repo/pull/12"}]',
+        stderr: "",
+      };
+    },
+  });
+
+  const found = await client.findOpenPrByHead("owner/repo", "yep/7-bug");
+
+  assert.deepEqual(calls[0], [
+    "pr",
+    "list",
+    "--repo",
+    "owner/repo",
+    "--head",
+    "yep/7-bug",
+    "--state",
+    "open",
+    "--json",
+    "number,title,url",
+    "--limit",
+    "1",
+  ]);
+  assert.deepEqual(found, {
+    number: 12,
+    title: "Fix bug",
+    url: "https://github.com/owner/repo/pull/12",
+  });
+});
+
+test("GitHubClient finds an open issue by exact title", async () => {
+  const client = new GitHubClient({
+    ghPath: "/tools/gh",
+    tokenProvider: async () => "secret-token",
+    runGh: async (args) => {
+      assert.equal(args[0], "search");
+      assert.match(args[2] ?? "", /is:open/);
+      return {
+        exitCode: 0,
+        stdout:
+          '[{"repository":{"nameWithOwner":"owner/repo"},"number":7,"title":"Fix Bug  Now","url":"https://github.com/owner/repo/issues/7","labels":[]}]',
+        stderr: "",
+      };
+    },
+  });
+
+  const found = await client.findOpenIssueByTitle("owner/repo", "fix  bug now");
+
+  assert.deepEqual(found, {
+    number: 7,
+    title: "Fix Bug  Now",
+    url: "https://github.com/owner/repo/issues/7",
+  });
+});
+
 test("GitHubClient lists issue comments and check runs", async () => {
   const calls: string[][] = [];
   const client = new GitHubClient({

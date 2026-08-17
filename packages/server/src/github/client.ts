@@ -64,6 +64,12 @@ export interface GitHubPullRequestState {
   draft: boolean;
 }
 
+export interface OpenPrCandidate {
+  number: number;
+  title: string;
+  url: string;
+}
+
 export interface CommandResult {
   exitCode: number;
   stdout: string;
@@ -87,6 +93,10 @@ interface SearchIssueJson {
   title?: string;
   url?: string;
   labels?: Array<{ name?: string }>;
+}
+
+function normalizeSearchTitle(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 export class GitHubClient {
@@ -131,6 +141,62 @@ export class GitHubClient {
           item.title.length > 0 &&
           item.url.length > 0,
       );
+  }
+
+  /** Return the first open PR whose head branch already exists upstream. */
+  async findOpenPrByHead(
+    repository: string,
+    head: string,
+  ): Promise<OpenPrCandidate | null> {
+    const stdout = await this.runChecked([
+      "pr",
+      "list",
+      "--repo",
+      repository,
+      "--head",
+      head,
+      "--state",
+      "open",
+      "--json",
+      "number,title,url",
+      "--limit",
+      "1",
+    ]);
+    const parsed = JSON.parse(stdout || "[]") as Array<{
+      number?: number;
+      title?: string;
+      url?: string;
+    }>;
+    const first = parsed[0];
+    if (!first?.number || !first.title || !first.url) {
+      return null;
+    }
+    return {
+      number: first.number,
+      title: first.title,
+      url: first.url,
+    };
+  }
+
+  /** Return an open issue whose normalized title matches exactly. */
+  async findOpenIssueByTitle(
+    repository: string,
+    title: string,
+  ): Promise<OpenPrCandidate | null> {
+    const escaped = title.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const candidates = await this.searchIssues(
+      `repo:${repository} is:issue is:open "${escaped}"`,
+      { limit: 10 },
+    );
+    const wanted = normalizeSearchTitle(title);
+    const match = candidates.find(
+      (candidate) =>
+        candidate.repository.toLowerCase() === repository.toLowerCase() &&
+        normalizeSearchTitle(candidate.title) === wanted,
+    );
+    return match
+      ? { number: match.number, title: match.title, url: match.url }
+      : null;
   }
 
   async publishDraftPr(input: PublishDraftPrInput): Promise<string> {

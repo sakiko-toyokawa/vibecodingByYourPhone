@@ -90,7 +90,10 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
   const { credentialStore, toolProvisioner, githubClient } = deps;
   const lifecycle = deps.relationStore
     ? (deps.relationLifecycle ??
-      new RelationLifecycleService({ relationStore: deps.relationStore }))
+      new RelationLifecycleService({
+        relationStore: deps.relationStore,
+        githubClient,
+      }))
     : undefined;
   // 自己账号登录名（webhook 作者过滤用）；undefined = 未解析，null = 解析失败。
   let selfLoginCache: string | null | undefined;
@@ -378,6 +381,30 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
         409,
       );
     }
+    if (pending.identity_verified === false) {
+      return c.json(
+        {
+          error: "invalid_publish_payload",
+          message:
+            "pending_publish git identity is not verified for this GitHub account",
+        },
+        409,
+      );
+    }
+    if (typeof deps.githubClient.findOpenPrByHead === "function") {
+      const openPr = await deps.githubClient
+        .findOpenPrByHead(pending.repository, pending.branch)
+        .catch(() => null);
+      if (openPr) {
+        return c.json(
+          {
+            error: "duplicate_pr",
+            message: `Open PR #${openPr.number} already exists for branch '${pending.branch}': ${openPr.url}`,
+          },
+          409,
+        );
+      }
+    }
     if (deps.dataDir && !(await isValidPrPublishCwd(relation, deps.dataDir))) {
       return c.json(
         {
@@ -471,6 +498,23 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
         },
         409,
       );
+    }
+    if (
+      !proposal.action &&
+      typeof deps.githubClient.findOpenIssueByTitle === "function"
+    ) {
+      const openIssue = await deps.githubClient
+        .findOpenIssueByTitle(proposal.repository, proposal.title)
+        .catch(() => null);
+      if (openIssue) {
+        return c.json(
+          {
+            error: "duplicate_issue",
+            message: `Open issue #${openIssue.number} already exists with the same title: ${openIssue.url}`,
+          },
+          409,
+        );
+      }
     }
     try {
       // 查重后提案可能要求评论已有 issue 而非新建（agent 在提案里用

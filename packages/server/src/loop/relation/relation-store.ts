@@ -65,6 +65,7 @@ export interface RelationRecord {
     author_name?: string;
     author_email?: string;
     identity_source?: string;
+    identity_verified?: boolean;
     run_id?: string;
     created_at?: string;
   };

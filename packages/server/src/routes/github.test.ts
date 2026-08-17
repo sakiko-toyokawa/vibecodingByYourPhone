@@ -828,6 +828,53 @@ test("GitHub approve-pr publishes the pending draft and transitions to awaiting_
   assert.equal(capturedInput?.branch, "fix/12");
 });
 
+test("GitHub approve-pr rejects a duplicate open head PR", async () => {
+  const relation = {
+    relation_id: "rel-1",
+    loop_id: "loop-maintainer",
+    subject: {
+      type: "github_pr",
+      repository: "owner/repo",
+      branch: "fix/12",
+    },
+    state: "pr_pending_approval",
+    last_processed: {},
+    feedback_count: 0,
+    repair_count: 0,
+    pending_publish: {
+      repository: "owner/repo",
+      branch: "fix/12",
+      title: "Fix bug 12",
+      body: "Closes #12",
+      cwd: "E:/work/owner/repo",
+    },
+  };
+  const app = new Hono().route(
+    "/github",
+    createGitHubRoutes({
+      credentialStore: {} as GitHubCredentialStore,
+      toolProvisioner: {} as GitHubToolProvisioner,
+      githubClient: {
+        findOpenPrByHead: async () => ({
+          number: 12,
+          title: "Fix bug 12",
+          url: "https://github.com/owner/repo/pull/12",
+        }),
+      } as unknown as GitHubClient,
+      relationStore: {
+        findById: () => relation,
+      } as never,
+    }),
+  );
+
+  const response = await app.request("/github/relations/rel-1/approve-pr", {
+    method: "POST",
+  });
+
+  assert.equal(response.status, 409);
+  assert.equal((await json(response)).error, "duplicate_pr");
+});
+
 test("GitHub mark-ready rejects a relation that is not awaiting review", async () => {
   const relation = {
     relation_id: "rel-1",
