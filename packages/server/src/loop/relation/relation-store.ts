@@ -5,6 +5,7 @@ import type {
   MaintenanceTarget,
   MaintenanceTargetState,
 } from "../maintenance/types.js";
+import type { TargetAdapterRegistry } from "../targets/registry.js";
 import { RELATION_MAX_REPAIRS, RELATION_TRIGGER_TYPES } from "./constants.js";
 
 export const RELATION_STATES = [
@@ -106,6 +107,7 @@ interface LegacyRelationFile {
 export interface RelationStoreOptions {
   dataDir?: string;
   maintenanceTargetStore?: MaintenanceTargetStore;
+  targetAdapterRegistry?: TargetAdapterRegistry;
 }
 
 function defaultDataDir(): string {
@@ -157,7 +159,10 @@ function targetStateToRelationState(
   }
 }
 
-function relationToTarget(relation: RelationRecord): MaintenanceTarget {
+function relationToTarget(
+  relation: RelationRecord,
+  targetAdapterRegistry?: TargetAdapterRegistry,
+): MaintenanceTarget {
   const subjectId =
     relation.subject.type === "github_pr"
       ? relation.subject.pr_number
@@ -174,7 +179,11 @@ function relationToTarget(relation: RelationRecord): MaintenanceTarget {
       source: "github",
       subject_id: subjectId,
     },
-    state: relationStateToTargetState(relation.state),
+    state:
+      targetAdapterRegistry
+        ?.get(relation.subject.type)
+        ?.toTargetState(relation.state) ??
+      relationStateToTargetState(relation.state),
     feedback_cursor: relation.last_processed,
     feedback_count: relation.feedback_count,
     repair_count: relation.repair_count,
@@ -217,7 +226,10 @@ function relationToTarget(relation: RelationRecord): MaintenanceTarget {
   };
 }
 
-function targetToRelation(target: MaintenanceTarget): RelationRecord | null {
+function targetToRelation(
+  target: MaintenanceTarget,
+  targetAdapterRegistry?: TargetAdapterRegistry,
+): RelationRecord | null {
   if (
     target.target_type !== "github_pr" &&
     target.target_type !== "github_issue"
@@ -230,10 +242,13 @@ function targetToRelation(target: MaintenanceTarget): RelationRecord | null {
   if (!repository) {
     return null;
   }
-  const state = targetStateToRelationState(
-    target.state,
-    adapter.relation_state,
-  );
+  const state = (targetAdapterRegistry
+    ?.get(target.target_type)
+    ?.fromTargetState(target.state, adapter.relation_state) ??
+    targetStateToRelationState(
+      target.state,
+      adapter.relation_state,
+    )) as RelationState;
   const lastProcessed =
     adapter.last_processed && typeof adapter.last_processed === "object"
       ? (adapter.last_processed as RelationRecord["last_processed"])
@@ -305,6 +320,7 @@ function targetToRelation(target: MaintenanceTarget): RelationRecord | null {
 
 export class RelationStore {
   private readonly maintenanceTargetStore: MaintenanceTargetStore;
+  private readonly targetAdapterRegistry?: TargetAdapterRegistry;
   private readonly legacyFilePath: string;
   private initialized = false;
 
@@ -318,6 +334,7 @@ export class RelationStore {
     );
     this.maintenanceTargetStore =
       options.maintenanceTargetStore ?? new MaintenanceTargetStore({ dataDir });
+    this.targetAdapterRegistry = options.targetAdapterRegistry;
   }
 
   async initialize(): Promise<void> {
@@ -332,7 +349,7 @@ export class RelationStore {
   async upsert(relation: RelationRecord): Promise<RelationRecord> {
     this.ensureInitialized();
     const target = await this.maintenanceTargetStore.upsert(
-      relationToTarget(relation),
+      relationToTarget(relation, this.targetAdapterRegistry),
     );
     return targetToRelation(target) ?? relation;
   }
@@ -340,7 +357,7 @@ export class RelationStore {
   findById(relationId: string): RelationRecord | null {
     this.ensureInitialized();
     const target = this.maintenanceTargetStore.findById(relationId);
-    return target ? targetToRelation(target) : null;
+    return target ? targetToRelation(target, this.targetAdapterRegistry) : null;
   }
 
   // 同一 PR 可能被多个 loop 同时跟踪（生产实例：adk-python#6713 有两个
@@ -355,7 +372,7 @@ export class RelationStore {
           item.adapter_data?.repository === repository &&
           item.adapter_data?.pr_number === prNumber,
       )
-      .map((target) => targetToRelation(target))
+      .map((target) => targetToRelation(target, this.targetAdapterRegistry))
       .filter((relation): relation is RelationRecord => relation !== null);
   }
 
@@ -372,7 +389,7 @@ export class RelationStore {
           item.adapter_data?.repository === repository &&
           item.adapter_data?.issue_number === issueNumber,
       )
-      .map((target) => targetToRelation(target))
+      .map((target) => targetToRelation(target, this.targetAdapterRegistry))
       .filter((relation): relation is RelationRecord => relation !== null);
   }
 
@@ -385,7 +402,7 @@ export class RelationStore {
           target.target_type === "github_pr" ||
           target.target_type === "github_issue",
       )
-      .map((target) => targetToRelation(target))
+      .map((target) => targetToRelation(target, this.targetAdapterRegistry))
       .filter((relation): relation is RelationRecord => relation !== null)
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   }
@@ -400,7 +417,9 @@ export class RelationStore {
       return null;
     }
     const merged = { ...current, ...patch, state };
-    await this.maintenanceTargetStore.upsert(relationToTarget(merged));
+    await this.maintenanceTargetStore.upsert(
+      relationToTarget(merged, this.targetAdapterRegistry),
+    );
     return this.findById(relationId);
   }
 
@@ -423,7 +442,9 @@ export class RelationStore {
     try {
       const parsed = JSON.parse(content) as LegacyRelationFile;
       for (const relation of Object.values(parsed.relations ?? {})) {
-        await this.maintenanceTargetStore.upsert(relationToTarget(relation));
+        await this.maintenanceTargetStore.upsert(
+          relationToTarget(relation, this.targetAdapterRegistry),
+        );
       }
     } catch (error) {
       console.warn(

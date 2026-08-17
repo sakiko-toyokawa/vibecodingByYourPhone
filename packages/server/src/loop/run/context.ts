@@ -18,6 +18,7 @@ import { buildIntentContract } from "../contract/intent-contract.js";
 import type { ResumeSignal } from "../control-plane/control-plane.js";
 import type { ControlPlane } from "../control-plane/control-plane.js";
 import type { RunStateStore } from "../control-plane/run-state-store.js";
+import type { GateRegistry } from "../gates/registry.js";
 import type { MaintenanceTargetStore } from "../maintenance/maintenance-target-store.js";
 import type { MaintenanceTarget } from "../maintenance/types.js";
 import type { LoopProposalLifecycleService } from "../proposal/lifecycle-service.js";
@@ -31,6 +32,7 @@ import type { LoopCardStore } from "../state/loop-card-store.js";
 import type { ProposalStore } from "../state/proposal-store.js";
 import type { RunLedgerStore } from "../state/run-ledger-store.js";
 import { verificationArtifactName } from "../verification/verify-run.js";
+import type { WorkspaceResolverRegistry } from "../workspace/registry.js";
 import type {
   GithubCredentialStore,
   GithubToolProvisioner,
@@ -57,6 +59,8 @@ export interface RunContextDeps {
   maintenanceTargetStore?: MaintenanceTargetStore;
   /** LOOP-PROPOSAL 閘門單寫者；缺席時 run 完成不注册 loop 提案。 */
   loopProposalLifecycle?: LoopProposalLifecycleService;
+  gateRegistry?: GateRegistry;
+  workspaceResolverRegistry?: WorkspaceResolverRegistry;
 }
 
 /**

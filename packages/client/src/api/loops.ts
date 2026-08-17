@@ -119,6 +119,13 @@ export interface InteractionDepsStatus {
 const LOOP_LIST_LIMIT = 500;
 
 export const loopsApi = {
+  getCapabilities: () =>
+    fetchJSON<{
+      kinds: Record<
+        string,
+        { label?: string; class_name?: string; actions?: string[] }
+      >;
+    }>("/loops/capabilities"),
   listLoops: (limit = LOOP_LIST_LIMIT) =>
     fetchJSON<{ loops: StoredLoop[] }>(`/loops?limit=${limit}`),
 

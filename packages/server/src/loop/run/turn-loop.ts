@@ -193,7 +193,10 @@ export async function executeRun(
     const { card: executableCard, worktree } = await resolveExecutableCard(
       card,
       runId,
-      { dataDir: deps.dataDir },
+      {
+        dataDir: deps.dataDir,
+        workspaceResolverRegistry: deps.workspaceResolverRegistry,
+      },
     );
     ctx.card = executableCard;
     ctx.workspaceEvidence = worktree
@@ -328,6 +331,7 @@ export async function executeRun(
     }
     // 02 §3 budget_remaining: 首轮即合约全量 (used_* 均为 0)。
     runtimeContext.budgetRemaining = ctx.contract.budget;
+    runtimeContext.gateRegistry = deps.gateRegistry;
     // 阶段 3 装配消费：published / canary 的提案在此进入 RuntimeInput
     // （每次新 run 重新装配 → 发布后新 run 即生效，rollback 后回到旧行为）。
     ctx.input = assembleRuntimeInput(
@@ -1351,38 +1355,57 @@ export async function runTurns(
         finalStatus = "failed";
       }
 
-      if (
-        !ctx.relation &&
-        deps.relationStore &&
-        ctx.card.loop.discovery?.source === "github_prompt"
-      ) {
-        // PR 优先；没有 PR 块时兜底尝试 ISSUE-PROPOSAL。publish_mode 只影响
-        // prompt 教学，不应成为硬门槛——卡片漏配 publish_mode 时 agent 按
-        // 任务文本产出的 issue 提案也不能丢（2026-08-15 生产实例：
-        // codex-issue run 完成了但提案没注册）。
-        const published = await relationLifecycle?.registerGithubPrPublish(
-          loopId,
-          runId,
-          outcome.finalText,
-        );
-        if (!published) {
-          await relationLifecycle?.registerGithubIssueProposal(
+      // 闸门注册统一走 GateRegistry（adapter 抽離 S1）：PR/ISSUE 发布闸门
+      // 在同一互斥组（PR 命中后不再尝试 ISSUE）；LOOP-PROPOSAL 不在组内，
+      // 总是尝试。无 registry 的兜底路径保留重构前的全部守卫。
+      if (deps.gateRegistry) {
+        let consumedGroup: string | undefined;
+        for (const gate of deps.gateRegistry.forCard(ctx.card)) {
+          if (gate.exclusiveGroup && gate.exclusiveGroup === consumedGroup)
+            continue;
+          const consumed = await gate.onRunCompleted(
+            {
+              loopId,
+              runId,
+              card: ctx.card,
+              hasRelation: Boolean(ctx.relation),
+              deps: deps as unknown as Record<string, unknown>,
+            },
+            outcome.finalText,
+          );
+          if (consumed && gate.exclusiveGroup)
+            consumedGroup = gate.exclusiveGroup;
+        }
+      } else {
+        // 兜底（无 registry）：与重构前逐条等价——维护回合（带既有
+        // relation 的 run）不注册发布提案；PR 优先，没有 PR 块时兜底
+        // ISSUE-PROPOSAL。publish_mode 只影响 prompt 教学，不应成为硬
+        // 门槛（2026-08-15 生产实例：codex-issue run 完成了但提案没注册）。
+        if (
+          !ctx.relation &&
+          deps.relationStore &&
+          ctx.card.loop.discovery?.source === "github_prompt"
+        ) {
+          const published = await relationLifecycle?.registerGithubPrPublish(
+            loopId,
+            runId,
+            outcome.finalText,
+          );
+          if (!published) {
+            await relationLifecycle?.registerGithubIssueProposal(
+              loopId,
+              runId,
+              outcome.finalText,
+            );
+          }
+        }
+        if (ctx.card.loop.can_propose_loops === true) {
+          await deps.loopProposalLifecycle?.registerLoopProposal(
             loopId,
             runId,
             outcome.finalText,
           );
         }
-      }
-
-      // LOOP-PROPOSAL 閘門（P1）：仅卡上显式授权 can_propose_loops 的
-      // loop 才尝试解析提案块（默认不教也不收）；钳制、配额硬顶与
-      // rejected 落账都在 lifecycle 单写者内判定。
-      if (ctx.card.loop.can_propose_loops === true) {
-        await deps.loopProposalLifecycle?.registerLoopProposal(
-          loopId,
-          runId,
-          outcome.finalText,
-        );
       }
 
       const handoffRef = await writeTurnHandoff(

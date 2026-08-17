@@ -23,7 +23,13 @@ import {
   RelationPoller,
   RunLedgerStore,
   RunStateStore,
+  TargetAdapterRegistry,
   TriggerQueueStore,
+  WorkspaceResolverRegistry,
+  createBuiltinGateRegistry,
+  createGitHubWorkspaceResolver,
+  createGithubIssueTarget,
+  createGithubPrTarget,
   drainPendingTriggers,
   pruneStaleWorktrees,
 } from "./loop/index.js";
@@ -278,6 +284,19 @@ export function createApp(
       eventBus: options.eventBus,
       learningEventStore,
     });
+    const gateRegistry = createBuiltinGateRegistry(
+      relationLifecycle,
+      loopProposalLifecycle,
+    );
+    gateRegistry.freeze();
+    const targetAdapterRegistry = new TargetAdapterRegistry();
+    targetAdapterRegistry.register(createGithubIssueTarget());
+    targetAdapterRegistry.register(createGithubPrTarget());
+    targetAdapterRegistry.freeze();
+    registerValue("targetAdapterRegistry", targetAdapterRegistry);
+    const workspaceResolverRegistry = new WorkspaceResolverRegistry();
+    workspaceResolverRegistry.register(createGitHubWorkspaceResolver());
+    workspaceResolverRegistry.freeze();
     const loopRunService = new LoopRunService({
       supervisor,
       loopCardStore,
@@ -297,6 +316,8 @@ export function createApp(
       relationLifecycle,
       maintenanceTargetStore,
       loopProposalLifecycle,
+      gateRegistry,
+      workspaceResolverRegistry,
       planner,
       loopWatchdog: {
         turnIdleTimeoutMs: options.loopTurnIdleTimeoutMs ?? 10 * 60 * 1000,
@@ -429,6 +450,7 @@ export function createApp(
       githubClient: container.cradle.githubClient,
       triggerQueueStore,
       drainPendingTriggers: drainPending,
+      targetAdapterRegistry,
     });
     relationPoller.start(
       Number(process.env.RELATION_POLL_INTERVAL_MS) || 5 * 60 * 1000,

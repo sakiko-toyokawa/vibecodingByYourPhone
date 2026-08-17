@@ -12,6 +12,7 @@ import {
   RelationLifecycleService,
   type RelationRecord,
   type RelationStore,
+  type TargetAdapterRegistry,
   type TriggerQueueStore,
   isExternalFeedbackAuthor,
 } from "../loop/index.js";
@@ -28,6 +29,7 @@ export interface GitHubRoutesDeps {
   relationLifecycle?: RelationLifecycleService;
   triggerQueueStore?: TriggerQueueStore;
   drainPendingTriggers?: (loopId?: string) => Promise<void>;
+  targetAdapterRegistry?: TargetAdapterRegistry;
 }
 
 function errorMessage(error: unknown): string {
@@ -738,26 +740,47 @@ export function createGitHubRoutes(deps: GitHubRoutesDeps): Hono {
     // 同一 PR/issue 可能被多个 loop 同时跟踪（生产实例：adk-python#6713
     // 有两个 relation）——逐个走完整处理流程，不能只唤醒第一个。
     const results: Array<Record<string, unknown>> = [];
+    if (!lifecycle) {
+      return c.json({ error: "relation_trigger_unavailable" }, 503);
+    }
     for (const relation of relations) {
+      const adapter = deps.targetAdapterRegistry?.get(relation.subject.type);
       results.push(
-        await handleWebhookRelation(
-          lifecycle,
-          getSelfLogin,
-          deps.triggerQueueStore,
-          deps.drainPendingTriggers,
-          relation,
-          {
-            eventType,
-            delivery,
-            repository,
-            prNumber,
-            action,
-            pullRequest,
-            comment,
-            review,
-            sender,
-          },
-        ),
+        await (adapter
+          ? adapter.handleWebhook(relation, payload, {
+              lifecycle,
+              triggerQueueStore: deps.triggerQueueStore,
+              drainPendingTriggers: deps.drainPendingTriggers,
+              eventType,
+              delivery,
+              repository,
+              subjectNumber: prNumber,
+              action,
+              pullRequest,
+              comment,
+              review,
+              sender,
+              eventId: delivery,
+              selfLogin: await getSelfLogin(),
+            })
+          : handleWebhookRelation(
+              lifecycle,
+              getSelfLogin,
+              deps.triggerQueueStore,
+              deps.drainPendingTriggers,
+              relation,
+              {
+                eventType,
+                delivery,
+                repository,
+                prNumber,
+                action,
+                pullRequest,
+                comment,
+                review,
+                sender,
+              },
+            )),
       );
     }
     // 单 relation 保持原有扁平响应形状；多 relation 带 relation_id 分组返回。

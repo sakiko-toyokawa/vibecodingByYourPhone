@@ -69,6 +69,7 @@ import {
 } from "./control-plane/control-plane.js";
 import { retryBackoffMs } from "./control-plane/retry-backoff.js";
 import type { RunStateStore } from "./control-plane/run-state-store.js";
+import type { GateRegistry } from "./gates/registry.js";
 import type { MaintenanceTargetStore } from "./maintenance/maintenance-target-store.js";
 import {
   type PermissionEvent,
@@ -130,6 +131,7 @@ import {
   captureWorkspaceSnapshot,
   workspaceSnapshotChanged,
 } from "./verification/workspace-stability.js";
+import type { WorkspaceResolverRegistry } from "./workspace/registry.js";
 import {
   discardRunWorktree,
   mergeRunWorktree,
@@ -202,6 +204,8 @@ export interface LoopRunServiceDeps {
   maintenanceTargetStore?: MaintenanceTargetStore;
   /** LOOP-PROPOSAL 閘門單寫者（P1）；缺席時 run 完成不注册 loop 提案。 */
   loopProposalLifecycle?: LoopProposalLifecycleService;
+  gateRegistry?: GateRegistry;
+  workspaceResolverRegistry?: WorkspaceResolverRegistry;
   /** Planner Agent for multi-turn task decomposition (optional). */
   planner?: PlannerService;
   /** Watchdog / stagnation settings. */

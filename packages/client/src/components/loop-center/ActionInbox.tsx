@@ -92,31 +92,39 @@ function proposalToItem(proposal: LoopProposal): InboxItem {
   };
 }
 
-function kindLabel(kind: InboxKind): string {
-  switch (kind) {
-    case "sla":
-      return "SLA action";
-    case "needs_human":
-      return "Needs human";
-    case "relation":
-      return "PR approval";
-    case "loop_proposal":
-      return "Loop proposal";
-  }
+interface InboxKindMetadata {
+  label: string;
+  className: string;
+  link(item: InboxItem, basePath: string): string;
 }
 
-function kindClass(kind: InboxKind): string {
-  switch (kind) {
-    case "sla":
-      return "bg-[var(--error-color)]/15 text-[var(--error-color)]";
-    case "needs_human":
-      return "bg-[var(--warning-color)]/15 text-[var(--warning-color)]";
-    case "relation":
-      return "bg-[var(--accent-rust)]/15 text-[var(--accent-rust)]";
-    case "loop_proposal":
-      return "bg-[var(--primary)]/15 text-[var(--primary)]";
-  }
-}
+const defaultLink = (item: InboxItem, basePath: string): string =>
+  item.runId
+    ? `${basePath}/runs/${encodeURIComponent(item.runId)}`
+    : `${basePath}/loops/${encodeURIComponent(item.loopId)}`;
+
+const INBOX_KIND_METADATA = {
+  sla: {
+    label: "SLA action",
+    className: "bg-[var(--error-color)]/15 text-[var(--error-color)]",
+    link: defaultLink,
+  },
+  needs_human: {
+    label: "Needs human",
+    className: "bg-[var(--warning-color)]/15 text-[var(--warning-color)]",
+    link: defaultLink,
+  },
+  relation: {
+    label: "PR approval",
+    className: "bg-[var(--accent-rust)]/15 text-[var(--accent-rust)]",
+    link: defaultLink,
+  },
+  loop_proposal: {
+    label: "Loop proposal",
+    className: "bg-[var(--primary)]/15 text-[var(--primary)]",
+    link: defaultLink,
+  },
+} satisfies Record<InboxKind, InboxKindMetadata>;
 
 /**
  * Cross-loop action inbox for the Loop Center. It merges human-decision runs,
@@ -128,6 +136,9 @@ export function ActionInbox() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<Set<string>>(new Set());
+  const [kindOverrides, setKindOverrides] = useState<
+    Record<string, { label?: string; class_name?: string }>
+  >({});
 
   const load = useCallback(async () => {
     try {
@@ -138,6 +149,19 @@ export function ActionInbox() {
           .listProposals("pending_approval")
           .catch(() => ({ proposals: [] as LoopProposal[] })),
       ]);
+      void loopsApi
+        .getCapabilities()
+        .then((capabilities) => {
+          setKindOverrides(
+            Object.fromEntries(
+              Object.entries(capabilities.kinds).map(([kind, metadata]) => [
+                kind,
+                metadata,
+              ]),
+            ),
+          );
+        })
+        .catch(() => undefined);
       const next = [
         ...pending.items.map(humanToItem),
         ...relations.relations
@@ -247,9 +271,12 @@ export function ActionInbox() {
       ) : (
         <div className="grid gap-2">
           {visible.map((item) => {
-            const target = item.runId
-              ? `${basePath}/runs/${encodeURIComponent(item.runId)}`
-              : `${basePath}/loops/${encodeURIComponent(item.loopId)}`;
+            const override = kindOverrides[item.kind];
+            const metadata = {
+              ...INBOX_KIND_METADATA[item.kind],
+              ...(override?.label ? { label: override.label } : {}),
+            };
+            const target = metadata.link(item, basePath);
             const isBusy = busy.has(item.id);
             return (
               <div
@@ -259,9 +286,9 @@ export function ActionInbox() {
                 <Link to={target} className="min-w-0 flex-1 no-underline">
                   <div className="flex flex-wrap items-center gap-2">
                     <span
-                      className={`rounded-[var(--radius-sm)] px-2 py-0.5 text-xs font-medium ${kindClass(item.kind)}`}
+                      className={`rounded-[var(--radius-sm)] px-2 py-0.5 text-xs font-medium ${metadata.className}`}
                     >
-                      {kindLabel(item.kind)}
+                      {metadata.label}
                     </span>
                     <span className="text-xs text-[var(--text-muted)]">
                       {new Date(item.timestamp).toLocaleString()}

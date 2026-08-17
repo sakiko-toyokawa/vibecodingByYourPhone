@@ -255,6 +255,33 @@ export function createLoopsRoutes(deps: LoopsRoutesDeps): Hono {
     });
   });
 
+  app.get("/capabilities", (c) =>
+    c.json({
+      kinds: {
+        sla: {
+          label: "SLA action",
+          class_name: "error",
+          actions: ["approve", "discard"],
+        },
+        needs_human: {
+          label: "Needs human",
+          class_name: "warning",
+          actions: ["approve", "discard"],
+        },
+        relation: {
+          label: "PR approval",
+          class_name: "relation",
+          actions: ["approve", "discard"],
+        },
+        loop_proposal: {
+          label: "Loop proposal",
+          class_name: "primary",
+          actions: ["approve", "discard"],
+        },
+      },
+    }),
+  );
+
   /**
    * GET /api/loops/coverage
    * Subject-anchor lookup for GitHub loops: returns existing maintenance

@@ -214,3 +214,24 @@ export function clampProposedCard(
   };
   return { ok: true, card: clamped, violations: [] };
 }
+
+/**
+ * LOOP-PROPOSAL 閘門教學（P1-7）：仅对卡上显式授权 can_propose_loops 的
+ * loop 注入提案块格式说明（默认不教——提不了案是默认态）。
+ * registry 路径（gates/builtins）与非 registry 兜底路径（runtime-input）
+ * 共用这一份事实来源——标记语法与 JSON 示例必须始终在此维护。
+ */
+export function loopProposalPromptLines(): string[] {
+  return [
+    "Loop 提案通道（本 loop 已获 can_propose_loops 授权）",
+    "",
+    "- 当你发现值得长期专项跟进、但超出本 loop 任务范围的问题时，可以提议创建一个新 loop；不要自行扩大本 loop 的任务范围。",
+    "- 你只能提议，不能创建：提案经人工批准后才会落地；未批准前不要按提案内容行动。",
+    "- 提案卡的约束（钳制层强制，违规即丢弃）：trigger.type 只能是 schedule(cron) 或 manual；workspace 由 server 管理（不要填本地路径）；approval_mode 不得宽于本 loop；stop_rules 有全局封顶。",
+    "- 每个 run 最多输出一个提案块；没有值得提案的事项时不要输出。",
+    "- 在报告末尾输出提案块：",
+    LOOP_PROPOSAL_BEGIN,
+    '{ "card": { "loop": { "id": "<kebab-case id>", "trigger": { "type": "schedule", "cron": "<cron expr>" }, "workspace": { "strategy": "direct" }, "verification": { "required": ["static"] }, "persistence": { "state_file": ".loop/STATE.md" }, "stop_rules": { "max_turns": <n>, "max_time_minutes": <n>, "max_retries": <n> }, "handoff": { "task": "<任务描述>" } } }, "reason": "<为什么需要这个 loop>" }',
+    LOOP_PROPOSAL_END,
+  ];
+}

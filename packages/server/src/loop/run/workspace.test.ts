@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { LoopCard } from "@yep-anywhere/shared";
-import { resolveExecutableCard } from "./workspace.js";
+import { createGitHubWorkspaceResolver } from "../adapters/github/workspace.js";
+import { WorkspaceResolverRegistry } from "../workspace/registry.js";
+import {
+  displayGitHubPromptWorkspacePath,
+  resolveExecutableCard,
+} from "./workspace.js";
 
 /** managed:// 通用工作区（LOOP-PROPOSAL 閘門落地的子 loop 走的分支）。 */
 function makeManagedCard(workspacePath: string): LoopCard {
@@ -54,6 +59,29 @@ test("resolveExecutableCard rejects managed:// paths escaping the data dir", asy
         },
       ),
       /escapes the server data directory/,
+    );
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("resolveExecutableCard resolves github_prompt through the registered resolver", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "yep-github-workspace-"));
+  const registry = new WorkspaceResolverRegistry();
+  registry.register(createGitHubWorkspaceResolver());
+  registry.freeze();
+  const card = makeManagedCard(
+    displayGitHubPromptWorkspacePath("managed-loop"),
+  );
+  card.loop.discovery = { source: "github_prompt" };
+  try {
+    const result = await resolveExecutableCard(card, "run-1", {
+      dataDir,
+      workspaceResolverRegistry: registry,
+    });
+    assert.equal(
+      result.card.loop.workspace.path,
+      join(dataDir, "github-workspaces", "prompt-loops", "managed-loop"),
     );
   } finally {
     await rm(dataDir, { recursive: true, force: true });

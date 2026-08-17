@@ -9,6 +9,7 @@ import path from "node:path";
 import type { LoopCard } from "@yep-anywhere/shared";
 import { AssemblyError } from "../assembly/runtime-input.js";
 import type { RuntimeAssemblyContext } from "../assembly/runtime-input.js";
+import type { WorkspaceResolverRegistry } from "../workspace/registry.js";
 import { type RunWorktree, ensureRunWorktree } from "../worktree/worktree.js";
 import type { GithubCredentialStore, GithubToolProvisioner } from "./types.js";
 
@@ -56,43 +57,25 @@ export async function resolveExecutableCard(
   runId: string,
   deps: {
     dataDir?: string;
+    workspaceResolverRegistry?: WorkspaceResolverRegistry;
   },
 ): Promise<ResolveExecutableCardResult> {
-  if (isGitHubPromptLoop(card)) {
+  const resolver = deps.workspaceResolverRegistry?.find(card);
+  if (resolver) {
     if (!deps.dataDir) {
       throw new AssemblyError(
-        "GitHub prompt loop cannot start: server data directory is not configured",
+        "Workspace resolver requires a configured server data directory",
       );
     }
-    const expectedWorkspacePath = displayGitHubPromptWorkspacePath(
-      card.loop.id,
-    );
-    if (card.loop.workspace.path !== expectedWorkspacePath) {
-      throw new AssemblyError(
-        `GitHub prompt loop cannot start: workspace.path must be '${expectedWorkspacePath}'`,
-      );
-    }
-    const workspacePath = githubPromptWorkspacePath(deps.dataDir, card.loop.id);
-    await mkdir(workspacePath, { recursive: true });
-    return {
-      card: {
-        ...card,
-        loop: {
-          ...card.loop,
-          workspace: {
-            ...card.loop.workspace,
-            strategy: "direct",
-            path: workspacePath,
-          },
-        },
-      },
-      worktree: null,
-    };
+    const resolved = await resolver.resolve(card, {
+      dataDir: deps.dataDir,
+      runId,
+    });
+    if (resolved.handled) return { card: resolved.card, worktree: null };
   }
   const declaredPath = card.loop.workspace.path;
   // LOOP-PROPOSAL 閘門落地的子 loop（P1-2 钳制层强制 managed:// 前缀）：
   // 通用 server 管理工作区，解析到 dataDir 下的同名相对目录。
-  // github_prompt 分支在上面已先行处理（路径口径更严）。
   if (declaredPath?.startsWith("managed://")) {
     if (!deps.dataDir) {
       throw new AssemblyError(

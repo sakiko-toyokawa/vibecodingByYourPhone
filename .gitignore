@@ -68,8 +68,9 @@ start.sh
 # Desktop sidecar binaries (downloaded automatically by prepare-sidecar.cjs)
 packages/desktop/src-tauri/binaries/
 
-# Workspace temp files
-workspace/
+# Workspace temp files（仅仓库根目录；嵌套的 workspace/ 源码目录不受影响，
+# 如 packages/server/src/loop/workspace/）
+/workspace/
 
 # Loop human-readable state projection (04-存储约定: 事实源在 ~/.yep-anywhere/loops/, 此目录由 control-plane 重写, 不入库)
 .loop/

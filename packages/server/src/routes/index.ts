@@ -447,6 +447,7 @@ export function registerRoutes(
       relationLifecycle,
       triggerQueueStore,
       drainPendingTriggers,
+      targetAdapterRegistry: container.cradle.targetAdapterRegistry,
     }),
   );
 

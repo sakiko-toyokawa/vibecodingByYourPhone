@@ -25,6 +25,7 @@ import {
   type RelationLifecycleService,
   type RelationPoller,
   RelationStore,
+  type TargetAdapterRegistry,
 } from "./loop/index.js";
 import type {
   ControlPlane,
@@ -75,6 +76,7 @@ import { createEventBus } from "./watcher/createEventBus.js";
 import { FileWatcher, SourceWatcher } from "./watcher/index.js";
 
 export interface ServicesContainer {
+  targetAdapterRegistry?: TargetAdapterRegistry;
   config: ReturnType<typeof loadConfig>;
   eventBus: IEventBus;
   fileWatchers: FileWatcher[];
